@@ -27,19 +27,7 @@ const CORE_GLOBALS = {
     'vue-router': 'VueRouter',
     vuex: 'Vuex',
     axios: 'axios',
-    'maplibre-gl': 'maplibregl',
-    ol: 'ol',
-    'ol/source': 'ol.source',
-    'ol/layer': 'ol.layer',
-    'ol/proj': 'ol.proj',
-    'ol/proj.js': 'ol.proj',
-    'ol/geom': 'ol.geom',
-    'ol/geom/Point.js': 'ol.geom.Point',
-    'ol/style': 'ol.style',
-    'ol/style.js': 'ol.style',
-    'ol/interaction': 'ol.interaction',
-    'ol/Feature': 'ol.Feature',
-    'ol/Feature.js': 'ol.Feature'
+    'maplibre-gl': 'maplibregl'
     // Heroicons is deliberately NOT externalized: core only needs it for a handful of nav icons
     // (loaded lazily by name, see resolveExtensionIcon.ts), so eagerly loading the entire ~391KB
     // library on every page just to share it as a global was pure waste. Extensions add
@@ -94,6 +82,7 @@ export function createExtensionViteConfig({ extensionDir, name, extraExternals =
         resolve: {
             alias: [
                 { find: '@', replacement: path.resolve(extensionDir, 'src') },
+                { find: '@geovault/extension-sdk', replacement: path.resolve(platformRoot, '../packages/extension-sdk/src/index.ts') },
                 // `platform/components/...` (externalized shared-part globals above) and
                 // `platform/assets/css/...` (design-token CSS variables, safe to inline - unlike
                 // JS there's no stale-singleton risk) only, deliberately. Anything under
@@ -113,7 +102,7 @@ export function createExtensionViteConfig({ extensionDir, name, extraExternals =
             minify: process.env.GEOVAULT_EXTENSION_DEV ? false : 'esbuild',
             sourcemap: !!process.env.GEOVAULT_EXTENSION_DEV,
             lib: {
-                entry: path.resolve(extensionDir, 'src/main.js'),
+                entry: path.resolve(extensionDir, 'src/main.ts'),
                 name,
                 fileName: (format) => `index.${format}.js`,
                 cssFileName: 'index',

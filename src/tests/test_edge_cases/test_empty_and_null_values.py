@@ -16,8 +16,9 @@ from geo_lib.processing.import_operations.styling import apply_bulk_operations
 from geo_lib.validation.geometry_validation import (
     validate_geometry,
     validate_coordinates_values,
-    GeometryValidationError
+    GeometryValidationError,
 )
+from tests.test_utils.import_queue import draft_geojson
 
 User = get_user_model()
 
@@ -103,12 +104,11 @@ class TestEmptyArrays:
         import_item = ImportQueue.objects.create(
             user=user,
             original_filename='empty.kml',
-            raw_file='<kml><Document></Document></kml>',
-            geofeatures=[]  # Empty features list
+            raw_file='<kml><Document></Document></kml>',  # Empty features list
         )
         
         assert import_item.id is not None
-        assert len(import_item.geofeatures) == 0
+        assert len(draft_geojson(import_item)) == 0
 
     def test_user_settings_with_empty_hidden_features(self, user):
         """Test UserSettings with empty hidden_features array."""

@@ -5,7 +5,8 @@ from django.db import connection
 from django.db.models import Count, Q
 from django.http import JsonResponse
 
-from api.models import FeatureStore, ImportQueue, TagShare, CollectionShare
+from api.models import FeatureStore, ImportQueue
+from api.sharing.models import ShareLink
 from geo_lib.logging.console import get_tagged_logger
 from website.auth_decorators import api_or_login_required_401
 from users.models import UserProfile
@@ -55,19 +56,11 @@ def list_all_users(request):
             .values_list('user_id', 'count')
         )
 
-        # Get share counts (TagShare + CollectionShare) for all users
-        tag_share_counts = dict(
-            TagShare.objects.filter(user_id__in=user_ids)
-            .values('user_id')
+        share_counts = dict(
+            ShareLink.objects.filter(owner_id__in=user_ids)
+            .values('owner_id')
             .annotate(count=Count('id'))
-            .values_list('user_id', 'count')
-        )
-
-        collection_share_counts = dict(
-            CollectionShare.objects.filter(user_id__in=user_ids)
-            .values('user_id')
-            .annotate(count=Count('id'))
-            .values_list('user_id', 'count')
+            .values_list('owner_id', 'count')
         )
 
         # Pre-fetch user profiles for last_activity
@@ -107,9 +100,7 @@ def list_all_users(request):
         users_data = []
         for user in users:
             # Calculate total share count
-            tag_shares = tag_share_counts.get(user.id, 0)
-            collection_shares = collection_share_counts.get(user.id, 0)
-            total_shares = tag_shares + collection_shares
+            total_shares = share_counts.get(user.id, 0)
 
             # Get last activity from profile, fallback to last_login if profile doesn't exist
             profile = user_profiles.get(user.id)

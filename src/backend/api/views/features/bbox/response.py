@@ -2,6 +2,8 @@
 import time
 from typing import Dict, List
 
+from api.utils.format_encoding import EMPTY_FEATURE_COLLECTION
+from geo_lib.perf.query_budget import QueryBudget
 from website.settings_utils import get_required_setting
 
 
@@ -19,11 +21,9 @@ def _build_bbox_response(features: List[Dict], total_count: int, zoom_level: int
     Returns:
         Dictionary ready to be converted to a success response
     """
-    # Get the configured limit for comparison
-    max_features = get_required_setting('MAX_FEATURES_PER_REQUEST')
+    max_features = QueryBudget(get_required_setting('MAX_FEATURES_PER_REQUEST')).max_features
 
-    # Create GeoJSON FeatureCollection
-    geojson_data = {
+    geojson_data = EMPTY_FEATURE_COLLECTION if not features else {
         "type": "FeatureCollection",
         "features": features
     }

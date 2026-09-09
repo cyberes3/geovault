@@ -6,6 +6,9 @@ Handles icon stripping and bulk styling operations for features.
 import copy
 from typing import Dict, Any, List
 
+from geo_lib.tags.protected import TagValidationError
+from geo_lib.tags.tag_set import TagSet
+from geo_lib.types.feature_properties import ICON_READ_ALIASES
 from geo_lib.validation.styling_validation import (
     is_valid_hex_color,
     is_valid_icon_url,
@@ -30,17 +33,7 @@ def strip_icon_properties(feature: dict) -> dict:
     if not isinstance(feature, dict) or 'properties' not in feature:
         return feature
 
-    # Common property names that might contain icon hrefs
-    icon_property_names = [
-        'marker-symbol',
-        'icon',
-        'icon-href',
-        'iconUrl',
-        'icon_url',
-        'marker-icon',
-        'symbol',
-        'styleUrl',  # KML style URLs might reference icons
-    ]
+    icon_property_names = list(ICON_READ_ALIASES) + ['styleUrl']
 
     # Remove icon properties
     for prop_name in icon_property_names:
@@ -95,18 +88,19 @@ def apply_bulk_operations(features: List[Dict[str, Any]], bulk_ops: Dict[str, An
         if 'properties' not in modified_feature:
             modified_feature['properties'] = {}
 
-        # Apply tags (merge with existing tags, avoiding duplicates)
         if bulk_ops.get('tags') and len(bulk_ops['tags']) > 0:
-            if 'tags' not in modified_feature['properties']:
-                modified_feature['properties']['tags'] = []
-
-            # Merge tags, avoiding duplicates
-            existing_tags = set(tag.lower() for tag in modified_feature['properties']['tags'])
-            for tag in bulk_ops['tags']:
-                lower_tag = tag.lower()
-                if lower_tag not in existing_tags:
-                    modified_feature['properties']['tags'].append(lower_tag)
-                    existing_tags.add(lower_tag)
+            existing = modified_feature['properties'].get('tags', [])
+            if not isinstance(existing, list):
+                existing = []
+            try:
+                merged = TagSet.normalize_user_tags(
+                    [*existing, *bulk_ops['tags']],
+                    drop_protected=True,
+                    reject_protected=False,
+                )
+            except TagValidationError:
+                merged = tuple(existing)
+            modified_feature['properties']['tags'] = list(merged)
 
         geometry_type = modified_feature.get('geometry', {}).get('type')
 
@@ -129,11 +123,9 @@ def apply_bulk_operations(features: List[Dict[str, Any]], bulk_ops: Dict[str, An
                     # Explicitly remove icon properties (use default icon)
                     modified_feature = strip_icon_properties(modified_feature)
                 elif is_valid_icon_url(icon_value):
-                    # Keep a single canonical property plus common aliases for compatibility
+                    for alias in ICON_READ_ALIASES:
+                        modified_feature['properties'].pop(alias, None)
                     modified_feature['properties']['icon'] = icon_value
-                    modified_feature['properties']['icon_url'] = icon_value
-                    modified_feature['properties']['iconUrl'] = icon_value
-                    modified_feature['properties']['icon-href'] = icon_value
 
         # Apply line styling (only if value is not None)
         # Applies to both LineString and MultiLineString

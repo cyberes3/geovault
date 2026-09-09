@@ -3,10 +3,9 @@ API views for feature creation.
 """
 from typing import Optional
 
-from django.contrib.gis.geos import Point
 from django.views.decorators.http import require_http_methods
 
-from api.models import FeatureStore
+from api.services.feature_service import FeatureService, FeatureValidationError
 from api.utils.responses import error_response, success_response
 from api.validation.decorators import validate_payload
 from api.views.features.payload import QuickPointCreatePayload
@@ -16,7 +15,7 @@ from geo_lib.logging.console import get_tagged_logger
 from geo_lib.processing.elevation_service import _fetch_elevation_batch_with_retry
 from geo_lib.processing.logging import ImportLog
 from geo_lib.processing.tagging.generate import generate_auto_tags
-from geo_lib.processing.tagging.const_strings import filter_protected_tags, prepare_user_tags, CONST_INTERNAL_TAGS
+from geo_lib.tags.tag_writer import SystemTagWriter
 from geo_lib.types.feature import PointFeature
 from geo_lib.validation.geojson.geojson_whitelist import validate_and_normalize_geojson_feature
 from geo_lib.validation.geometry_validation import GeometryValidationError
@@ -53,9 +52,10 @@ def create_quick_point(request, validated_data):
     marker_color = validated_data.get('marker_color', '#ff0000')
     icon = validated_data.get('icon')
 
-    # Filter out system tags from user input (defensive)
-    user_tags = filter_protected_tags(tags, CONST_INTERNAL_TAGS)
-    user_tags = prepare_user_tags(user_tags)
+    try:
+        user_tags = FeatureService.validate_user_tags(tags)
+    except FeatureValidationError as exc:
+        return error_response(str(exc), 400)
 
     # Fetch elevation data
     elevation = _fetch_elevation_for_point(longitude, latitude)
@@ -103,30 +103,18 @@ def create_quick_point(request, validated_data):
         normalized_feature['properties'] = {}
     normalized_feature['properties']['geojson_hash'] = geojson_hash
 
-    # Generate system tags using PointFeature type (skip reverse_geocoding for async processing)
     point_feature = PointFeature(**normalized_feature)
     system_tags = generate_auto_tags(point_feature, import_log=ImportLog(), filename='quick-point', skip_reverse_geocoding=True)
-
-    # Add 'quick-point' system tag to identify features created via this endpoint
-    if 'quick-point' not in system_tags:
-        system_tags.append('quick-point')
-
-    # Add system tags to properties
-    normalized_feature['properties']['system_tags'] = system_tags
-
-    # Remove geojson_hash from properties (it's stored separately in FeatureStore)
     del normalized_feature['properties']['geojson_hash']
 
-    # Create geometry for spatial queries
-    geometry = Point(longitude, latitude, elevation)
-
-    # Save to database
-    feature_store = FeatureStore.objects.create(
-        user=request.user,
-        geojson=normalized_feature,
-        geometry=geometry,
-        geojson_hash=geojson_hash
+    feature_store = FeatureService.create(
+        request.user,
+        normalized_feature,
+        geojson_hash=geojson_hash,
     )
+    SystemTagWriter.write_creation_tags(feature_store, system_tags, extra=['quick-point'])
+    feature_store.refresh_from_db()
+    normalized_feature = feature_store.geojson
 
     # Start background reverse geocoding (non-blocking)
     reverse_geocode_feature_async(feature_store.id)

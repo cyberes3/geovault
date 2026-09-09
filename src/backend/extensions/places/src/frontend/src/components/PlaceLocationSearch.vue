@@ -54,7 +54,7 @@
 import { computed } from 'vue';
 import { MagnifyingGlassIcon } from '@heroicons/vue/24/outline';
 import Loader from 'platform/components/parts/Loader.vue';
-import type { GeocodingResult } from '@/types/gv-core';
+import type { GeocodingResult } from '@geovault/extension-sdk';
 
 const props = withDefaults(defineProps<{
   searchQuery?: string;

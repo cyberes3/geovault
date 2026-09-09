@@ -152,7 +152,7 @@
 
 <script lang="ts">
 import { defineComponent, type PropType } from 'vue'
-import { getFeaturesByTag, getAllFeatures } from "@/api/services/featuresApi";
+import { getAllFeatures, getTagCatalog } from "@/api/services/featuresApi";
 import { saveCollection, type Collection } from "@/api/services/collectionsApi";
 import { getApiErrorMessage } from "@/utils/apiError";
 import BaseModal from '@/components/parts/BaseModal.vue'
@@ -161,18 +161,7 @@ import Loader from "@/components/parts/Loader.vue";
 import SearchableCheckboxList from '@/components/parts/SearchableCheckboxList.vue';
 import { MagnifyingGlassIcon } from '@heroicons/vue/24/outline';
 import { sortTagsByPriority, sortUserTagsAlphabetically, isSystemTag } from "@/utils/tagUtils";
-import type { GeoJsonFeature } from '@/types/geospatial';
-
-interface FeaturesByTagResponse {
-  user_tags?: Record<string, unknown>;
-  system_tags?: Record<string, unknown>;
-}
-
-interface AllFeaturesResponse {
-  data?: {
-    features?: GeoJsonFeature[];
-  };
-}
+import type { FeatureListProjection } from '@/contracts/feature';
 
 interface CollectionFormData {
   name: string;
@@ -211,7 +200,7 @@ export default defineComponent({
       } as CollectionFormData,
       tagSearchQuery: '',
       availableTags: [] as string[],
-      availableFeatures: [] as GeoJsonFeature[],
+      availableFeatures: [] as FeatureListProjection[],
       loadingTags: false,
       loadingFeatures: false,
       saving: false,
@@ -248,10 +237,10 @@ export default defineComponent({
   },
   methods: {
     getFeatureId(feature: unknown): string {
-      return String((feature as GeoJsonFeature).properties.database_id);
+      return String((feature as FeatureListProjection).id);
     },
     getFeatureLabel(feature: unknown): string {
-      return ((feature as GeoJsonFeature).properties.name as string | undefined) || 'Unnamed Feature';
+      return (feature as FeatureListProjection).name || 'Unnamed Feature';
     },
     onTagCheckboxChange(tag: string, checked: boolean) {
       const index = this.formData.tags.indexOf(tag);
@@ -262,20 +251,16 @@ export default defineComponent({
       }
     },
     featureFilterFn(query: string, feature: unknown): boolean {
-      const f = feature as GeoJsonFeature;
+      const f = feature as FeatureListProjection;
       const q = query.toLowerCase();
-      const name = ((f.properties.name as string | undefined) ?? '').toLowerCase();
-      const description = ((f.properties.description as string | undefined) ?? '').toLowerCase();
-      return name.includes(q) || description.includes(q);
+      return (f.name || '').toLowerCase().includes(q);
     },
     async fetchTags() {
       this.loadingTags = true;
       try {
-        const data = await getFeaturesByTag() as FeaturesByTagResponse;
-
-        // Get user tags and system tags separately
-        const userTags = data.user_tags ? Object.keys(data.user_tags) : [];
-        const systemTags = data.system_tags ? Object.keys(data.system_tags) : [];
+        const page = await getTagCatalog({ page_size: '100' });
+        const userTags = page.items.filter((item) => item.kind === 'user').map((item) => item.name);
+        const systemTags = page.items.filter((item) => item.kind === 'system').map((item) => item.name);
 
         // Sort user tags alphabetically, system tags by priority
         const sortedUserTags = sortUserTagsAlphabetically(userTags);
@@ -293,8 +278,16 @@ export default defineComponent({
     async fetchFeatures() {
       this.loadingFeatures = true;
       try {
-        const data = await getAllFeatures() as AllFeaturesResponse;
-        this.availableFeatures = data.data?.features ?? [];
+        const items: FeatureListProjection[] = [];
+        let page = 1;
+        let totalPages = 1;
+        do {
+          const result = await getAllFeatures({ page: String(page), page_size: '100' });
+          items.push(...result.items);
+          totalPages = result.total_pages;
+          page += 1;
+        } while (page <= totalPages);
+        this.availableFeatures = items;
       } catch (error) {
         console.error('Error fetching features:', error);
         this.availableFeatures = [];

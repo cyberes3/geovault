@@ -147,7 +147,6 @@ interface RootGetters {
 /** Fields `beforeRouteEnter`'s `next(vm => ...)` callback needs on this component's instance. */
 interface ImportHomePageInstance {
   refreshTables: () => Promise<void>;
-  startAutoRefresh: () => void;
 }
 
 export default defineComponent({
@@ -164,7 +163,6 @@ export default defineComponent({
     return {
       importTableIsLoading: true,
       hasImportTableLoaded: false,
-      refreshInterval: null as ReturnType<typeof setInterval> | null,
       isRefreshing: false,
       isLoadingHistoryPage: false,
     }
@@ -200,24 +198,6 @@ export default defineComponent({
         this.importTableIsLoading = false
       }
       this.hasImportTableLoaded = true
-    },
-    startAutoRefresh(): void {
-      // Clear any existing interval
-      this.stopAutoRefresh()
-
-      // Start auto-refresh every 5 seconds for import table only
-      // Import history is now handled by WebSocket
-      this.refreshInterval = setInterval(() => {
-        // Don't call fetchImportTable during auto-refresh to avoid duplicate API calls
-        // The ImportTable component will handle its own auto-refresh
-        // History is now handled by WebSocket
-      }, 5000)
-    },
-    stopAutoRefresh(): void {
-      if (this.refreshInterval) {
-        clearInterval(this.refreshInterval)
-        this.refreshInterval = null
-      }
     },
     async refreshTables(): Promise<void> {
       // Force immediate refresh of import table with loading indicators
@@ -276,39 +256,16 @@ export default defineComponent({
     // Don't fetch data here - let the route guards handle it
     // This prevents duplicate API calls during navigation
   },
-  mounted() {
-    // Start auto-refresh for both tables
-    this.startAutoRefresh()
-  },
-  beforeUnmount() {
-    // Stop auto-refresh when component is about to be destroyed
-    this.stopAutoRefresh()
-  },
   beforeRouteEnter(_to: RouteLocationNormalized, _from: RouteLocationNormalized, next: NavigationGuardNext) {
     next(async (vm) => {
       const instance = vm as unknown as ImportHomePageInstance
-      // Always refresh data when entering the route
-      // This handles both navigation from other routes and direct access
       await instance.refreshTables()
-      // Start auto-refresh when entering the route
-      instance.startAutoRefresh()
     })
   },
   async beforeRouteUpdate(_to: RouteLocationNormalized, from: RouteLocationNormalized, next: NavigationGuardNext) {
-    // Refresh data immediately when updating from a different route
     if (from.name && from.name !== 'Import') {
       await this.refreshTables()
-      this.startAutoRefresh()
-      next()
-    } else {
-      // Start auto-refresh when updating to the same route
-      this.startAutoRefresh()
-      next()
     }
-  },
-  beforeRouteLeave(_to: RouteLocationNormalized, _from: RouteLocationNormalized, next: NavigationGuardNext) {
-    // Stop auto-refresh when leaving the route
-    this.stopAutoRefresh()
     next()
   },
 })

@@ -12,7 +12,7 @@ import {
   isStyleBasedSource,
   type TileSourceSelectOption
 } from '@/utils/placesBasemap';
-import type { TileSource } from '@/types/gv-core';
+import type { TileSource } from '@geovault/extension-sdk';
 import type {
   MaplibreGeoJSONFeature,
   MaplibreGlNamespace,

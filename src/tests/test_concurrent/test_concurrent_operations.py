@@ -7,11 +7,14 @@ using threading, advisory locks, and database transactions.
 import pytest
 import threading
 import time
+import uuid
 from django.contrib.auth import get_user_model
 from django.contrib.gis.geos import Point
 from django.db import transaction, close_old_connections
 
-from api.models import FeatureStore, ImportQueue, Collection, CollectionShare
+from api.models import FeatureStore, ImportQueue, Collection
+from api.sharing.models import ShareLink
+from geo_lib.sharing.constants import AUDIENCE_WORLD, DOMAIN_MAP, KIND_COLLECTION
 from geo_lib.feature_id import generate_geojson_hash
 from geo_lib.utils.advisory_locks import advisory_lock
 
@@ -52,7 +55,6 @@ class TestConcurrentFileUploads:
                             original_filename=f"test_file_{worker_id}.kml",
                             raw_file="<kml>test content</kml>",
                             file_hash=test_hash,
-                            geofeatures=[]
                         )
                         results.append(f"worker_{worker_id}_saved_new")
             except Exception as e:
@@ -100,7 +102,6 @@ class TestConcurrentFileUploads:
                     original_filename=f"test_file_{worker_id}.kml",
                     raw_file=f"<kml>test content {worker_id}</kml>",
                     file_hash=test_hash,
-                    geofeatures=[]
                 )
                 results.append(f"worker_{worker_id}_success")
             except Exception as e:
@@ -441,22 +442,16 @@ class TestConcurrentCollectionOperations:
                 # Ensure database connection is available in this thread
                 close_old_connections()
                 # Check if already shared (using 'user' field, not 'shared_with')
-                existing = CollectionShare.objects.filter(
-                    collection_id=collection_id,
-                    user=share_user
-                ).first()
-                
-                if not existing:
-                    CollectionShare.objects.create(
-                        share_id=f"share_{collection_id}_{share_user.id}",
-                        collection_id=collection_id,
-                        user=share_user,
-                        include_tags=False,
-                        allow_downloads=False
-                    )
-                    results.append(f"worker_{worker_id}_shared")
-                else:
-                    results.append(f"worker_{worker_id}_already_shared")
+                ShareLink.objects.create(
+                    token=str(uuid.uuid4()),
+                    owner=owner,
+                    domain=DOMAIN_MAP,
+                    subject_kind=KIND_COLLECTION,
+                    subject_ref=str(collection_id),
+                    audience=AUDIENCE_WORLD,
+                    capabilities={'include_tags': False, 'allow_downloads': False},
+                )
+                results.append(f"worker_{worker_id}_shared")
             except Exception as e:
                 errors.append(f"worker_{worker_id}: {str(e)}")
         
@@ -475,7 +470,7 @@ class TestConcurrentCollectionOperations:
         assert len(errors) == 0, f"Errors occurred: {errors}"
         
         # Verify shares were created
-        shares = CollectionShare.objects.filter(collection_id=collection_id)
+        shares = ShareLink.objects.filter(subject_kind=KIND_COLLECTION, subject_ref=str(collection_id))
         assert shares.count() == len(concurrent_users)
 
 
@@ -565,7 +560,6 @@ class TestConcurrentImportProcessing:
                 original_filename=f"test_file_{i}.kml",
                 raw_file=f"<kml>content {i}</kml>",
                 file_hash=f"hash_{i}",
-                geofeatures=[]
             )
             import_items.append(item.id)
         

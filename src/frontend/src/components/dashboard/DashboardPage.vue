@@ -296,7 +296,7 @@ export default defineComponent({
       return this.appReleases?.tracker_url ? '/api/apps/download/tracker/' : this.releasesPageUrl;
     },
     pwaMintEnabled(): boolean {
-      return this.extensions.some(ext => ext.name === 'pwa_mint');
+      return this.extensions.some(ext => ext.dashboard_widget === 'pwa_apk');
     },
     isDesktop(): boolean {
       return !/Mobile|Android/i.test(navigator.userAgent);

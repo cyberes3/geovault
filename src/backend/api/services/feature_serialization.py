@@ -31,11 +31,22 @@ def geojson_feature_from_parts(
         return None
 
     properties = dict(geojson_data.get('properties') or {})
+
+    if public_safe:
+        properties.pop('database_id', None)
+        properties.pop('geojson_hash', None)
+        if include_tags:
+            properties.pop('system_tags', None)
+        else:
+            strip_private_tags(properties)
+        properties['feature_ref'] = feature_id
+        return {
+            "type": "Feature",
+            "geometry": geojson_data.get('geometry'),
+            "properties": properties,
+        }
+
     properties['database_id'] = feature_id
-
-    if public_safe and not include_tags:
-        strip_private_tags(properties)
-
     return {
         "type": "Feature",
         "geometry": geojson_data.get('geometry'),

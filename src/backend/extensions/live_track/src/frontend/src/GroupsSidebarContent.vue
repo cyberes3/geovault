@@ -90,7 +90,7 @@ import { ArrowPathIcon, PencilIcon } from '@heroicons/vue/24/outline';
 import BaseButton from 'platform/components/parts/BaseButton.vue';
 import GroupModal from './GroupModal.vue';
 import type { LiveTrack, LiveTrackGroup } from './types/track';
-import type { ExtensionApi } from './types/extension-api';
+import type { ExtensionApi } from '@geovault/extension-sdk';
 
 type SidebarView = 'list' | 'create' | 'edit';
 

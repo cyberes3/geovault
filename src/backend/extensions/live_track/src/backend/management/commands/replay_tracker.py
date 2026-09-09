@@ -15,8 +15,11 @@ from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
+from api.sharing.grants import ShareGrantService
+from geo_lib.sharing.constants import KIND_LIVE_TRACK
+
 from ...helpers import generate_hauk_password
-from ...ingress_views import append_point_to_track
+from ...writer import append_point_to_track
 
 User = get_user_model()
 
@@ -139,7 +142,7 @@ class Command(BaseCommand):
         timestamp_str = timezone.now().strftime("%Y-%m-%d %H:%M:%S")
         new_name = f"{original_name} {timestamp_str}"
 
-        # The source tracker's share state (visibility, share flags, LiveTrackShare rows,
+        # The source tracker's share state (visibility, share flags, grants,
         # world/internal share links, subscribers) is never copied; sharing for the new
         # tracker is driven solely by --share-with.
         track = LiveTrack.objects.create(
@@ -152,16 +155,11 @@ class Command(BaseCommand):
             visibility="shared" if share_with_users else "private",
             share_params_with_recipients=bool(share_with_users),
             share_params_with_world=False,
-            geometry={"type": "LineString", "coordinates": []},
-            point_params=[],
         )
         self.stdout.write(self.style.SUCCESS(f"Created tracker: {track.name} ({track.id})"))
 
         if share_with_users:
-            LiveTrackShare = apps.get_model("live_track", "LiveTrackShare")
-            LiveTrackShare.objects.bulk_create(
-                [LiveTrackShare(track=track, shared_with=share_user) for share_user in share_with_users]
-            )
+            ShareGrantService.set_grantees(KIND_LIVE_TRACK, track.id, share_with_users)
             self.stdout.write(
                 self.style.SUCCESS(
                     f"Shared with: {', '.join(u.email for u in share_with_users)}"

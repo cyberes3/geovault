@@ -39,10 +39,10 @@ Single-point lookup at `lat`, `lon`.
 - **Query:** `lat` (required), `lon` (required), `lake-radius-miles` (optional, default `1` — lake shoreline search
   radius in miles), `ocean-radius-miles` (optional, default `1` — ocean shoreline search radius in miles),
   `city-radius-miles` (optional, default `3` — search radius in miles for nearest place node when admin has no city; use
-  `0` to disable).
+  `0` to disable), `waterway-radius-miles` (optional, default 300 ft).
 - **Response:** One object with `admin_hierarchy`, `protected_areas` (up to 5), `lakes` (up to 5: on water or
-  shore within `lake-radius-miles`), and `ocean` (name when on or within `ocean-radius-miles` of ocean; null if no ocean
-  data or no match).
+  shore within `lake-radius-miles`), `ocean` (name when on or within `ocean-radius-miles` of ocean), optional
+  `ski_resort`, and optional `waterway`.
 
 **Example:** `GET /query?lat=40.34&lon=-105.68`
 
@@ -51,10 +51,10 @@ Single-point lookup at `lat`, `lon`.
 Batch lookup for multiple points.
 
 - **Body:** `{"points": [[lat, lon], ...]}`. Optional keys: `lake-radius-miles` (default `1`), `ocean-radius-miles` (
-  default `1`), `city-radius-miles` (default `3`; use `0` to disable nearest-place city lookup).
+  default `1`), `city-radius-miles` (default `3`; use `0` to disable nearest-place city lookup),
+  `waterway-radius-miles` (default 300 ft). Query-string values override body keys.
 - **Response:** `{"results": [ ... ]}` — one object per point in the same order, each with `admin_hierarchy`,
-  `protected_areas` (up to 5), `lakes` (up to 5), and `ocean`. More efficient than many GETs (up to five DB
-  round-trips in parallel).
+  `protected_areas` (up to 5), `lakes` (up to 5), and `ocean`. One UNION ALL query for the whole batch.
 
 ### `GET /health`
 
@@ -92,7 +92,7 @@ flask --app app run --host 0.0.0.0 --port 5001
 | `AREAS_SERVER_MAX_BATCH_SIZE`       | Max points per batch request (default: 100).                                                                                                                                    |
 | `AREAS_SERVER_CACHE_TTL`            | Response cache TTL in seconds for single-point GET (default: 86400 = 1 day). 0 = cache off.                                                                                     |
 | `AREAS_SERVER_CACHE_COORD_DECIMALS` | Decimal places for cache key (default: 4).                                                                                                                                      |
-| `AREAS_SERVER_REDIS_URL`            | Redis URL for response cache, shared across Gunicorn workers (default: `redis://127.0.0.1:6379/3`). Use a separate DB from the core server (e.g. core uses 1, 2; areas uses 3). |
+| `AREAS_SERVER_REDIS_URL`            | Redis URL for response cache, shared across Gunicorn workers (default: `redis://127.0.0.1:6379/3`). Use a separate DB from the core server (e.g. core uses 2; areas uses 3). |
 | `AREAS_SERVER_POOL_MAX_SIZE`        | PostgreSQL connection pool max size. Default 10 allows about 2–3 concurrent requests (default: 10).                                                                             |
 | `AREAS_SERVER_WORK_MEM`             | Session `work_mem` for PostGIS queries (sorts, distance). Default `128MB`; increase if queries are still slow.                                                                  |
 

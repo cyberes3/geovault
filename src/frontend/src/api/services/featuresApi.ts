@@ -1,5 +1,8 @@
 import { AxiosHeaders } from 'axios';
 import { httpClient } from '../httpClient';
+import type { ListPage } from '@/contracts/envelope';
+import type { FeatureListProjection } from '@/contracts/feature';
+import type { TagCatalogEntry, TagFeatureRef } from '@/contracts/tag';
 import { normalizeBboxError, parseBboxAxiosResponse, type BboxResponseData } from '@/utils/format/geobuf';
 
 export interface FeatureMetadataUpdate {
@@ -18,30 +21,62 @@ export interface BboxFeaturesParams {
     signal?: AbortSignal;
 }
 
-/** GET /api/features/by-tag/ - all features grouped by tag; accepts optional search params. */
-export async function getFeaturesByTag(params?: Record<string, string>): Promise<unknown> {
-    const response = await httpClient.get<unknown>('/api/features/by-tag/', { params });
+/** GET /api/tags/ — paginated catalog + counts. */
+export async function getTagCatalog(params?: Record<string, string>): Promise<ListPage<TagCatalogEntry>> {
+    const response = await httpClient.get<ListPage<TagCatalogEntry>>('/api/tags/', { params });
     return response.data;
 }
 
-/** GET /api/features/all/ */
-export async function getAllFeatures(): Promise<unknown> {
-    const response = await httpClient.get<unknown>('/api/features/all/');
+/** GET /api/tags/names/ */
+export async function getUserTags(prefix = ''): Promise<string[]> {
+    const response = await httpClient.get<{ items: string[] }>('/api/tags/names/', {
+        params: prefix ? { prefix } : undefined,
+    });
+    return response.data.items;
+}
+
+/** GET /api/tags/:name/features/ */
+export async function getTagFeatures(name: string, params?: Record<string, string>): Promise<ListPage<TagFeatureRef>> {
+    const response = await httpClient.get<ListPage<TagFeatureRef>>(
+        `/api/tags/${encodeURIComponent(name)}/features/`,
+        { params },
+    );
     return response.data;
 }
 
-/** GET /api/features/user-tags/ */
-export async function getUserTags(): Promise<string[]> {
-    const response = await httpClient.get<string[]>('/api/features/user-tags/');
+/** PATCH /api/tags/:name/ */
+export async function renameTag(name: string, newName: string): Promise<unknown> {
+    const response = await httpClient.patch<unknown>(`/api/tags/${encodeURIComponent(name)}/`, { new_name: newName });
     return response.data;
 }
 
-/** GET /api/features/filter-by-tags/ */
-export async function filterFeaturesByTags(tags: string[], matchMode: 'AND' | 'OR' = 'AND'): Promise<unknown> {
-    const params = new URLSearchParams();
-    tags.forEach((tag) => { params.append('tags', tag); });
-    params.append('match_mode', matchMode);
-    const response = await httpClient.get<unknown>(`/api/features/filter-by-tags/?${params.toString()}`);
+/** DELETE /api/tags/:name/ */
+export async function deleteTag(name: string, deleteFeatures = false): Promise<unknown> {
+    const response = await httpClient.delete<unknown>(`/api/tags/${encodeURIComponent(name)}/`, {
+        params: deleteFeatures ? { delete_features: 'true' } : undefined,
+    });
+    return response.data;
+}
+
+/** PUT /api/features/:id/tags/ */
+export async function replaceFeatureTags(featureId: string | number, tags: string[]): Promise<unknown> {
+    const response = await httpClient.put<unknown>(`/api/features/${featureId}/tags/`, { tags });
+    return response.data;
+}
+
+/** GET /api/features/all/ — ListProjection catalog (id, name, geometry_type). */
+export async function getAllFeatures(params?: Record<string, string>): Promise<ListPage<FeatureListProjection>> {
+    const response = await httpClient.get<ListPage<FeatureListProjection>>('/api/features/all/', { params });
+    return response.data;
+}
+
+/** GET /api/features/search/ */
+export async function searchFeatures(query: string): Promise<{
+    data: { type: string; features: unknown[] };
+    feature_count: number;
+    query: string;
+}> {
+    const response = await httpClient.get('/api/features/search/', { params: { query } });
     return response.data;
 }
 
@@ -68,15 +103,14 @@ export async function bulkUpdateFeatureMetadata(updates: FeatureMetadataUpdate[]
     return response.data;
 }
 
-/** POST /api/features/bulk-delete-by-tag/ */
+/** DELETE /api/tags/:name/?delete_features=true */
 export async function bulkDeleteFeaturesByTag(tag: string): Promise<unknown> {
-    const response = await httpClient.post<unknown>('/api/features/bulk-delete-by-tag/', { tag });
-    return response.data;
+    return deleteTag(tag, true);
 }
 
 /** POST /api/features/bulk-operations/by-tag/:tag/ */
 export async function applyBulkOperationsToTag(tag: string, bulkOperations: Record<string, unknown>): Promise<unknown> {
-    const response = await httpClient.post<unknown>(`/api/features/bulk-operations/by-tag/${encodeURIComponent(tag)}/`, bulkOperations);
+    const response = await httpClient.post<unknown>(`/api/features/bulk-operations/by-tag/${encodeURIComponent(tag)}/`, { bulk_operations: bulkOperations });
     return response.data;
 }
 

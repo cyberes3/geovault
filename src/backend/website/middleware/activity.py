@@ -1,8 +1,8 @@
 """Tracks authenticated users' last-activity timestamp, throttled via the cache framework."""
 from django.contrib.auth.models import AnonymousUser
-from django.core.cache import cache
 
 from geo_lib.logging.console import get_tagged_logger
+from geo_lib.perf.shared_cache import get_shared_cache
 from geo_lib.utils.ip_utils import get_user_identifier
 from users.models import UserProfile
 
@@ -38,7 +38,7 @@ class ActivityTrackingMiddleware:
                 # Throttle activity updates to reduce database load: only update if the cache
                 # key for this user has expired (>= ACTIVITY_TRACKING_THROTTLE_SECONDS old).
                 cache_key = f"{_ACTIVITY_TRACKING_CACHE_KEY_PREFIX}{request.user.id}"
-                if cache.add(cache_key, True, timeout=ACTIVITY_TRACKING_THROTTLE_SECONDS):
+                if get_shared_cache().add(cache_key, True, timeout=ACTIVITY_TRACKING_THROTTLE_SECONDS):
                     profile, _ = UserProfile.get_or_create_profile(request.user)
                     profile.update_activity()
             except Exception as e:

@@ -183,7 +183,7 @@
 </template>
 
 <script lang="ts">
-import { defineComponent, ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue';
+import { defineComponent, ref, computed, watch, onMounted, onDeactivated, onBeforeUnmount, nextTick } from 'vue';
 import { ShareIcon, Square3Stack3DIcon, XMarkIcon, HomeIcon, Bars3Icon } from '@heroicons/vue/24/outline';
 import Loader from 'platform/components/parts/Loader.vue';
 import LatestParamsModal from './LatestParamsModal.vue';
@@ -197,12 +197,13 @@ import { setupMapFollowListeners } from './mapFollowLock';
 import { ensureArrowImage } from './trackArrowMap';
 import { trackToParamsModalShape } from './trackParamsShape';
 import { normalizeTrackForMemory } from './trackNormalization';
+import { PublicTrackSession } from './liveTrackSession';
 import { getRasterSourceSpec, getRasterLayerMaxZoom, replaceRasterBaseLayer } from './mapTileUtils';
 import { useTileSources } from './useTileSources';
-import { SHARE_SOURCE_MODES, isShareNotAvailableStatus, shareDataUrlForInfo, shareInfoUrl } from './shareDiscoveryUrls';
+import { isShareNotAvailableStatus, fetchShareJson } from './shareDiscoveryUrls';
 import type { LiveTrack } from './types/track';
 import type { MobileMapDrawerExposed } from './types/mobile-drawer';
-import type { TileSource } from './types/gv-core';
+import type { TileSource } from '@geovault/extension-sdk';
 import type { Map as MapLibreMap } from 'maplibre-gl';
 
 const { setupCopyMapCoordinatesOnContextMenu, useDocumentTitle } = window.gv_core;
@@ -239,33 +240,12 @@ type WorldSharePayload = LiveTrack & {
   group_name?: string;
 };
 
-interface ShareFetchResult {
-  ok: boolean;
-  status: number;
-  data: unknown;
-}
-
-interface ResolvedShareSource {
-  sourceMode: string;
-  dataUrl: string;
-  info: WorldShareInfo;
-  data: unknown;
-}
-
 function getShareIdFromUrl(): string | null {
   const hash = typeof window !== 'undefined' ? window.location.hash : '';
   const q = hash.indexOf('?');
   if (q === -1) return null;
   const params = new URLSearchParams(hash.slice(q));
   return params.get('id');
-}
-
-async function fetchShareJson(url: string): Promise<ShareFetchResult> {
-  const response = await fetch(url);
-  if (!response.ok) {
-    return { ok: false, status: response.status, data: null };
-  }
-  return { ok: true, status: response.status, data: await response.json() };
 }
 
 async function fetchParamLabels(): Promise<Record<string, string>> {
@@ -276,29 +256,6 @@ async function fetchParamLabels(): Promise<Record<string, string>> {
   }
   const data = (await response.json()) as { param_labels?: unknown };
   return data.param_labels && typeof data.param_labels === 'object' ? (data.param_labels as Record<string, string>) : {};
-}
-
-async function resolveShareSource(shareId: string): Promise<ResolvedShareSource | null> {
-  const infoResult = await fetchShareJson(shareInfoUrl(shareId));
-  if (!infoResult.ok) {
-    if (isShareNotAvailableStatus(infoResult.status)) return null;
-    throw new Error('Failed to load share');
-  }
-
-  const info = infoResult.data as WorldShareInfo;
-  const dataUrl = shareDataUrlForInfo(shareId, info);
-  const dataResult = await fetchShareJson(dataUrl);
-  if (!dataResult.ok) {
-    if (isShareNotAvailableStatus(dataResult.status)) throw new Error('Invalid share link');
-    throw new Error('Failed to load share');
-  }
-
-  return {
-    sourceMode: info.share_access || SHARE_SOURCE_MODES.WORLD,
-    dataUrl,
-    info,
-    data: dataResult.data
-  };
 }
 
 export default defineComponent({
@@ -329,7 +286,7 @@ export default defineComponent({
     const shareDataUrl = ref('');
     const paramLabels = ref<Record<string, string>>({});
     let map: MapLibreMap | null = null;
-    let pollTimerId: ReturnType<typeof setInterval> | null = null;
+    const publicSession = new PublicTrackSession();
 
     const isMobileView = ref(
       typeof window !== 'undefined' ? window.matchMedia('(max-width: 639px)').matches : false
@@ -763,11 +720,18 @@ export default defineComponent({
       });
     }
 
-    async function pollShareData(): Promise<void> {
-      if (!shareIdRef.value || !shareDataUrl.value) return;
+    async function pollShareData(): Promise<'ok' | 'invalid'> {
+      if (!shareIdRef.value || !publicSession.dataUrl) return 'ok';
       try {
-        const result = await fetchShareJson(shareDataUrl.value);
-        if (!result.ok) return;
+        const result = await fetchShareJson(publicSession.dataUrl);
+        if (!result.ok) {
+          if (result.status === 404 || isShareNotAvailableStatus(result.status)) {
+            error.value = 'Invalid share link';
+            loading.value = false;
+            return 'invalid';
+          }
+          return 'ok';
+        }
         const data = result.data as WorldSharePayload;
         if (data.share_type === 'live_track_group' && Array.isArray(data.tracks)) {
           groupTracks.value = data.tracks.map((t) => normalizeTrackForMemory(t));
@@ -776,8 +740,9 @@ export default defineComponent({
         }
         await updateMapData();
         if (followLocked.value && map && selectedTrack.value) centerOnSelectedTrack();
+        return 'ok';
       } catch {
-        // ignore poll errors
+        return 'ok';
       }
     }
 
@@ -795,20 +760,20 @@ export default defineComponent({
       shareIdRef.value = shareId;
       try {
         const [resolved, , paramLabelData] = await Promise.all([
-          resolveShareSource(shareId),
+          publicSession.ensureSource(shareId),
           fetchTileSources(),
           fetchParamLabels()
         ]);
         paramLabels.value = paramLabelData;
         if (!resolved) {
-          error.value = 'Invalid share link';
+          error.value = publicSession.error || 'Invalid share link';
           loading.value = false;
           return;
         }
-        sourceMode.value = resolved.sourceMode;
-        shareDataUrl.value = resolved.dataUrl;
-        const info = resolved.info;
-        const data = resolved.data as WorldSharePayload;
+        sourceMode.value = publicSession.sourceMode;
+        shareDataUrl.value = publicSession.dataUrl;
+        const info = (publicSession.share.info ?? {}) as WorldShareInfo;
+        const data = publicSession.payload as WorldSharePayload;
         if (info.share_type === 'live_track_group') {
           groupName.value = info.group_name || data.group_name || 'Shared group';
           const tracks = Array.isArray(data.tracks) ? data.tracks : [];
@@ -834,7 +799,10 @@ export default defineComponent({
         mapInitializing.value = false;
 
         if (!error.value && shareIdRef.value) {
-          pollTimerId = setInterval(() => { void pollShareData(); }, POLL_INTERVAL_MS);
+          publicSession.watchPoll(pollShareData, POLL_INTERVAL_MS, () => {
+            error.value = publicSession.error || 'Invalid share link';
+            loading.value = false;
+          });
         }
       } catch (e) {
         error.value = e instanceof Error && e.message === 'Invalid share link' ? 'Invalid share link' : 'Failed to load share';
@@ -995,7 +963,7 @@ export default defineComponent({
       });
     }
 
-    onBeforeUnmount(() => {
+    function teardownWorldShare(): void {
       if (typeof window !== 'undefined') {
         window.removeEventListener('resize', updateWindowHeight);
       }
@@ -1007,14 +975,19 @@ export default defineComponent({
         window.matchMedia('(max-width: 639px)').removeEventListener('change', mobileQueryListener);
         mobileQueryListener = null;
       }
-      if (pollTimerId) {
-        clearInterval(pollTimerId);
-        pollTimerId = null;
-      }
+      publicSession.stopPoll();
       if (map) {
         map.remove();
         map = null;
       }
+    }
+
+    onDeactivated(() => {
+      publicSession.deactivate(teardownWorldShare);
+    });
+
+    onBeforeUnmount(() => {
+      publicSession.deactivate(teardownWorldShare);
     });
 
     return {

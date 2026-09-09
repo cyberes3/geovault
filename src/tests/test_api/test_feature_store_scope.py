@@ -12,6 +12,7 @@ from django.contrib.gis.geos import Point
 from django.test import TestCase
 
 from api.models import FeatureStore
+from api.services.feature_service import FeatureService
 from geo_lib.feature_id import generate_geojson_hash
 
 _SCOPE = 'places'
@@ -22,7 +23,7 @@ def _feature_geojson(name: str, tags=None) -> dict:
         'type': 'Feature',
         'geometry': {
             'type': 'Point',
-            'coordinates': [-122.4194, 37.7749, 0.0],
+            'coordinates': [1.0, 2.0, 0.0],
         },
         'properties': {
             'name': name,
@@ -41,17 +42,17 @@ class TestFeatureStoreQuerySet(TestCase):
 
         main_geojson = _feature_geojson('Main')
         self.main_feature = FeatureStore.objects.create(
-            user=self.user, geojson=main_geojson, geometry=Point(-122.4194, 37.7749, 0.0),
+            user=self.user, geojson=main_geojson, geometry=Point(1.0, 2.0, 0.0),
             geojson_hash=generate_geojson_hash(main_geojson),
         )
         scoped_geojson = _feature_geojson('Scoped')
         self.scoped_feature = FeatureStore.objects.create(
-            user=self.user, geojson=scoped_geojson, geometry=Point(-122.4194, 37.7749, 0.0),
+            user=self.user, geojson=scoped_geojson, geometry=Point(1.0, 2.0, 0.0),
             geojson_hash=generate_geojson_hash(scoped_geojson), scope=_SCOPE,
         )
         other_geojson = _feature_geojson('Other users main')
         self.other_user_feature = FeatureStore.objects.create(
-            user=self.other_user, geojson=other_geojson, geometry=Point(-122.4194, 37.7749, 0.0),
+            user=self.other_user, geojson=other_geojson, geometry=Point(1.0, 2.0, 0.0),
             geojson_hash=generate_geojson_hash(other_geojson),
         )
 
@@ -83,17 +84,15 @@ class TestFeatureScopeIsolationEndpoints(TestCase):
         self.client.force_login(self.user)
 
         main_geojson = _feature_geojson('Main Feature', tags=['shared-tag'])
-        self.main_feature = FeatureStore.objects.create(
-            user=self.user, geojson=main_geojson, geometry=Point(-122.4194, 37.7749, 0.0),
-            geojson_hash=generate_geojson_hash(main_geojson),
+        self.main_feature = FeatureService.create(
+            self.user, main_geojson, geojson_hash=generate_geojson_hash(main_geojson),
         )
 
         # Same tag as the main feature, but scoped -- must stay invisible to every
         # main-map endpoint tested below.
         scoped_geojson = _feature_geojson('Scoped Feature', tags=['shared-tag', 'scoped-only-tag'])
-        self.scoped_feature = FeatureStore.objects.create(
-            user=self.user, geojson=scoped_geojson, geometry=Point(-122.4194, 37.7749, 0.0),
-            geojson_hash=generate_geojson_hash(scoped_geojson), scope=_SCOPE,
+        self.scoped_feature = FeatureService.create(
+            self.user, scoped_geojson, geojson_hash=generate_geojson_hash(scoped_geojson), scope=_SCOPE,
         )
 
     def test_get_feature_404s_for_scoped_feature(self):
@@ -110,11 +109,7 @@ class TestFeatureScopeIsolationEndpoints(TestCase):
         self.assertEqual(response.status_code, 404)
 
     def test_bulk_delete_by_tag_never_deletes_scoped_feature(self):
-        response = self.client.post(
-            '/api/features/bulk-delete-by-tag/',
-            data=json.dumps({'tag': 'shared-tag'}),
-            content_type='application/json',
-        )
+        response = self.client.delete('/api/tags/shared-tag/?delete_features=true')
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
         self.assertEqual(data['deleted_count'], 1)
@@ -147,12 +142,13 @@ class TestFeatureScopeIsolationEndpoints(TestCase):
         self.assertEqual(data['updated_count'], 0)
 
     def test_get_feature_share_404s_for_scoped_feature(self):
-        response = self.client.get(f'/api/sharing/features/{self.scoped_feature.id}/')
-        self.assertEqual(response.status_code, 404)
+        response = self.client.get(f'/api/shares/?feature_id={self.scoped_feature.id}')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(json.loads(response.content)['items'], [])
 
     def test_create_feature_share_404s_for_scoped_feature(self):
         response = self.client.post(
-            '/api/sharing/create/',
+            '/api/shares/',
             data=json.dumps({'share_type': 'feature', 'feature_id': self.scoped_feature.id}),
             content_type='application/json',
         )
@@ -160,7 +156,7 @@ class TestFeatureScopeIsolationEndpoints(TestCase):
 
     def test_create_tag_share_rejects_tag_that_only_matches_scoped_feature(self):
         response = self.client.post(
-            '/api/sharing/create/',
+            '/api/shares/',
             data=json.dumps({'share_type': 'tag', 'tag': 'scoped-only-tag'}),
             content_type='application/json',
         )
@@ -168,7 +164,7 @@ class TestFeatureScopeIsolationEndpoints(TestCase):
 
     def test_create_tag_share_succeeds_for_tag_also_on_main_map_feature(self):
         response = self.client.post(
-            '/api/sharing/create/',
+            '/api/shares/',
             data=json.dumps({'share_type': 'tag', 'tag': 'shared-tag'}),
             content_type='application/json',
         )
@@ -186,7 +182,7 @@ class TestFeatureScopeIsolationEndpoints(TestCase):
         response = self.client.get('/api/features/all/')
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
-        ids = {f['properties']['database_id'] for f in data['data']['features']}
+        ids = {item['id'] for item in data['items']}
         self.assertIn(self.main_feature.id, ids)
         self.assertNotIn(self.scoped_feature.id, ids)
 

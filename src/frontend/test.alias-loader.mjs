@@ -12,6 +12,19 @@ import { URL, pathToFileURL } from 'node:url';
 const srcDir = pathToFileURL(new URL('./src/', import.meta.url).pathname).href;
 
 async function resolveWithExtensionGuessing(specifier, context, nextResolve) {
+    const pathPart = specifier.split('?')[0];
+    if (/\.(ts|mjs|cjs|vue|json)$/.test(pathPart)) {
+        return nextResolve(specifier, context);
+    }
+    // TypeScript ESM: `import './foo.js'` resolves to `foo.ts` on disk.
+    if (pathPart.endsWith('.js')) {
+        try {
+            return await nextResolve(specifier, context);
+        } catch {
+            const tsSpecifier = specifier.replace(/\.js(\?|$)/, '.ts$1');
+            return nextResolve(tsSpecifier, context);
+        }
+    }
     for (const ext of ['', '.ts', '.js']) {
         try {
             return await nextResolve(specifier + ext, context);

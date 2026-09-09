@@ -8,7 +8,7 @@ query_areas_server_batch (batch) to return those fixture responses so tests do n
 from unittest.mock import patch
 
 import pytest
-from django.core.cache import cache, caches
+from django.core.cache import cache
 from django.test import TestCase
 
 from geo_lib.reverse_geocoding.areas_server_models import (
@@ -18,7 +18,6 @@ from geo_lib.reverse_geocoding.areas_server_models import (
     NearbyLake,
     Waterway,
 )
-from geo_lib.reverse_geocoding.cache import _get_cache_key, _REVERSE_GEOCODING_CACHE
 from geo_lib.reverse_geocoding.location_tags import (
     batch_reverse_geocode_coordinates,
     reverse_geocode_coordinates,
@@ -63,36 +62,15 @@ class TestHaversineDistance(TestCase):
         self.assertAlmostEqual(distance, 213, delta=5)
 
 
-@pytest.mark.django_db
-class TestCacheKey(TestCase):
-    """Test cache key generation."""
+def test_areas_server_client_forwards_ocean_and_waterway_radius():
+    """Areas client forwards ocean and waterway radii to the areas server."""
+    from geo_lib.reverse_geocoding.areas_server_client import _get_areas_server_params
 
-    def test_cache_key_format(self):
-        """Test cache key has correct format."""
-        key = _get_cache_key(40.123456, -105.789012)
-        self.assertTrue(key.startswith("reverse_geocode:"))
-        self.assertIn("40.123", key)
-        self.assertIn("-105.789", key)
-
-    def test_cache_key_rounding(self):
-        """Test cache key rounds coordinates to 3 decimal places."""
-        key1 = _get_cache_key(40.1234, -105.7899)
-        key2 = _get_cache_key(40.1231, -105.7891)
-        # First rounds to 40.123, -105.79
-        self.assertEqual(key1, "reverse_geocode:40.123,-105.79")
-        # Second rounds to 40.123, -105.789 (different longitude; use 40.1231 so round(..., 3) is 40.123)
-        self.assertEqual(key2, "reverse_geocode:40.123,-105.789")
-
-        # Test that similar coords get same key
-        key3 = _get_cache_key(40.12299, -105.78999)
-        key4 = _get_cache_key(40.12301, -105.79001)
-        # Both should round to 40.123, -105.79
-        self.assertEqual(key3, key4)
-
-    def test_cache_key_prefix(self):
-        """Test cache key uses custom prefix."""
-        key = _get_cache_key(40.0, -105.0, prefix="test")
-        self.assertTrue(key.startswith("test:"))
+    params = _get_areas_server_params()
+    assert "ocean-radius-miles" in params
+    assert "waterway-radius-miles" in params
+    assert "city-radius-miles" in params
+    assert "lake-radius-miles" in params
 
 
 @pytest.mark.django_db
@@ -343,10 +321,6 @@ class TestReverseGeocodingService(ReverseGeocodingTagTestMixin, TestCase):
 
     def setUp(self):
         cache.clear()
-        try:
-            caches['reverse_geocoding'].clear()
-        except Exception:
-            pass
 
     def tearDown(self):
         cache.clear()
@@ -883,10 +857,6 @@ class TestCaching(ReverseGeocodingTagTestMixin, TestCase):
     def setUp(self):
         """Set up test fixtures."""
         cache.clear()
-        try:
-            caches['reverse_geocoding'].clear()
-        except Exception:
-            pass
 
     def tearDown(self):
         """Clean up after tests."""
@@ -918,10 +888,6 @@ class TestErrorHandling(ReverseGeocodingTagTestMixin, TestCase):
     def setUp(self):
         """Set up test fixtures."""
         cache.clear()
-        try:
-            caches['reverse_geocoding'].clear()
-        except Exception:
-            pass
 
     def tearDown(self):
         """Clean up after tests."""
@@ -935,7 +901,6 @@ class TestErrorHandling(ReverseGeocodingTagTestMixin, TestCase):
 
     def test_areas_server_error_logged(self):
         """When areas client returns an error, error is logged and tags are empty. No fixture for errors, so we simulate the same (response, error) the real client returns when e.g. AREAS_SERVER_URL is unset."""
-        _REVERSE_GEOCODING_CACHE.clear()
         real_client_error = "AREAS_SERVER_URL is not set; required for reverse geocoding."
         with patch('geo_lib.reverse_geocoding.location_tags.query_areas_server') as mock_areas:
             mock_areas.return_value = (None, real_client_error)

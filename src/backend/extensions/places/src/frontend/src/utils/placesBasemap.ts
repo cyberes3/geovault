@@ -1,4 +1,4 @@
-import type { TileSource } from '../types/gv-core';
+import type { TileSource } from '@geovault/extension-sdk';
 
 const RasterTileUrls = window.gv_core.RasterTileUrls;
 

@@ -4,7 +4,7 @@ development/testing.
 
 Creates 10 tracks, 3 groups (2+2+3 track members), world shares (tracks and
 groups), direct shares to other users, public visibility, group visibility
-(public/shared/private), and group direct shares (LiveTrackGroupShare).
+(public/shared/private), and group direct shares (ShareGrant).
 Also creates one extra track, "Stale data test (active but dead)", whose
 last point timestamp is ~20 minutes in the past while the track row is new,
 for testing live_track / Android stale-data highlighting.
@@ -22,6 +22,11 @@ from django.apps import apps
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
 from django.db.models import Q
+
+from api.sharing.grants import ShareGrantService
+from api.sharing.service import ShareService
+from geo_lib.sharing.constants import AUDIENCE_WORLD, KIND_LIVE_TRACK, KIND_LIVE_TRACK_GROUP
+from geo_lib.track.store import PointStore
 
 User = get_user_model()
 
@@ -206,10 +211,6 @@ class Command(BaseCommand):
             LiveTrack = apps.get_model("live_track", "LiveTrack")
             LiveTrackGroup = apps.get_model("live_track", "LiveTrackGroup")
             LiveTrackGroupMember = apps.get_model("live_track", "LiveTrackGroupMember")
-            LiveTrackGroupShare = apps.get_model("live_track", "LiveTrackGroupShare")
-            LiveTrackGroupWorldShare = apps.get_model("live_track", "LiveTrackGroupWorldShare")
-            LiveTrackShare = apps.get_model("live_track", "LiveTrackShare")
-            LiveTrackWorldShare = apps.get_model("live_track", "LiveTrackWorldShare")
             from extensions.live_track.src.backend.helpers import generate_hauk_password
         except LookupError:
             self.stdout.write(self.style.ERROR(
@@ -296,9 +297,8 @@ class Command(BaseCommand):
                         settings=settings,
                         visibility=visibility,
                         share_params_with_recipients=(visibility != "private" and random.random() < 0.5),
-                        geometry={"type": "LineString", "coordinates": coords},
-                        point_params=point_params,
                     )
+                    PointStore(coords, point_params).persist_to_track(track)
                     tracks.append(track)
                     self.stdout.write(self.style.SUCCESS(
                         f"  [{user.email}] Created: {name} ({visibility}, {len(coords)} pts)"
@@ -314,9 +314,8 @@ class Command(BaseCommand):
                     settings={"color": "#c0392b"},
                     visibility="private",
                     share_params_with_recipients=False,
-                    geometry={"type": "LineString", "coordinates": s_coords},
-                    point_params=s_params,
                 )
+                PointStore(s_coords, s_params).persist_to_track(stale)
                 tracks.append(stale)
                 self.stdout.write(self.style.NOTICE(
                     f"  [{user.email}] Stale-data test: {stale.name} (private, 2 pts, "
@@ -348,9 +347,8 @@ class Command(BaseCommand):
                 # World share: a few tracks
                 world_share_indices = random.sample(range(NUM_TRACKS), min(NUM_WORLD_SHARES, NUM_TRACKS))
                 for idx in world_share_indices:
-                    LiveTrackWorldShare.objects.create(
-                        track=tracks[idx],
-                        share_id=str(uuid.uuid4()),
+                    ShareService.ensure_tracker_link(
+                        user, KIND_LIVE_TRACK, tracks[idx].id, AUDIENCE_WORLD
                     )
                     tracks[idx].share_params_with_world = random.choice([True, False])
                     tracks[idx].save(update_fields=["share_params_with_world"])
@@ -360,9 +358,8 @@ class Command(BaseCommand):
 
                 # Group world share: enable for at least one group (e.g. Public)
                 group_world_share_idx = NUM_GROUPS - 1
-                LiveTrackGroupWorldShare.objects.get_or_create(
-                    group=groups[group_world_share_idx],
-                    defaults={"share_id": str(uuid.uuid4())},
+                ShareService.ensure_tracker_link(
+                    user, KIND_LIVE_TRACK_GROUP, groups[group_world_share_idx].id, AUDIENCE_WORLD
                 )
                 self.stdout.write(self.style.SUCCESS(
                     f"  [{user.email}] Group world share: enabled on {groups[group_world_share_idx].name}."
@@ -400,7 +397,7 @@ class Command(BaseCommand):
                         for shift in range(recipient_count)
                     ]
                     for recipient in recipients:
-                        LiveTrackShare.objects.get_or_create(track=tracks[idx], shared_with=recipient)
+                        ShareGrantService.add(KIND_LIVE_TRACK, tracks[idx].id, recipient)
                 self.stdout.write(self.style.SUCCESS(
                     f"  [{user.email}] Shared {len(shared_track_indices)} track(s) "
                     f"with {recipient_count} recipient(s) each."
@@ -426,9 +423,7 @@ class Command(BaseCommand):
                         for shift in range(recipient_count)
                     ]
                     for recipient in recipients:
-                        LiveTrackGroupShare.objects.get_or_create(
-                            group=groups[gidx], shared_with=recipient
-                        )
+                        ShareGrantService.add(KIND_LIVE_TRACK_GROUP, groups[gidx].id, recipient)
                 self.stdout.write(self.style.SUCCESS(
                     f"  [{user.email}] Group direct shares: {NUM_GROUPS_SHARED_WITH_USERS} "
                     f"group(s) shared with {recipient_count} recipient(s) each."
@@ -467,10 +462,7 @@ class Command(BaseCommand):
                 hidden=True,
             )
             LiveTrackGroupMember.objects.get_or_create(group=reshare_group, track=reshare_track)
-            LiveTrackGroupShare.objects.get_or_create(
-                group=reshare_group,
-                shared_with=user,
-            )
+            ShareGrantService.add(KIND_LIVE_TRACK_GROUP, reshare_group.id, user)
             self.stdout.write(self.style.SUCCESS(
                 f"  Cross-user re-share: {user.email} shared '{reshare_track.name}', "
                 f"{reshare_user.email} added it to '{reshare_group.name}', and shared group back "

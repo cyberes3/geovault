@@ -11,8 +11,17 @@ from django.contrib.gis.geos import Point
 
 from django.contrib.auth import get_user_model
 
-from api.models import FeatureStore, Collection, TagShare, CollectionShare
+from api.models import FeatureStore, Collection
 from geo_lib.feature_id import generate_geojson_hash
+from test_utils.share_fixtures import (
+    SHARE_TEST_BBOX,
+    SHARE_TEST_LAT,
+    SHARE_TEST_LON,
+    create_collection_share,
+    create_owned_collection,
+    create_tag_share,
+    index_feature_tags,
+)
 
 
 class TestGeobufFormat(TestCase):
@@ -34,27 +43,27 @@ class TestGeobufFormat(TestCase):
                 'type': 'Feature',
                 'geometry': {
                     'type': 'Point',
-                    'coordinates': [-122.4194 + i * 0.01, 37.7749 + i * 0.01, 0.0]
+                    'coordinates': [SHARE_TEST_LON + i * 0.01, SHARE_TEST_LAT + i * 0.01, 0.0]
                 },
                 'properties': {
                     'name': f'Test Point {i}',
                     'tags': ['test', 'geobuf']
                 }
             }
-            FeatureStore.objects.create(
+            index_feature_tags(FeatureStore.objects.create(
                 user=self.user,
                 geojson=feature_data,
                 geometry=Point(feature_data['geometry']['coordinates'][0],
                              feature_data['geometry']['coordinates'][1],
                              0.0),
                 geojson_hash=generate_geojson_hash(feature_data)
-            )
+            ))
 
     def test_json_format_default(self):
         """Test that JSON format is returned by default."""
         response = self.client.get(
             '/api/geojson/',
-            {'bbox': '-123,37,-122,38', 'zoom': '10'}
+            {'bbox': SHARE_TEST_BBOX, 'zoom': '10'}
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response['Content-Type'], 'application/json')
@@ -68,7 +77,7 @@ class TestGeobufFormat(TestCase):
         """Test explicit JSON format via query parameter."""
         response = self.client.get(
             '/api/geojson/',
-            {'bbox': '-123,37,-122,38', 'zoom': '10', 'format': 'json'}
+            {'bbox': SHARE_TEST_BBOX, 'zoom': '10', 'format': 'json'}
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response['Content-Type'], 'application/json')
@@ -81,7 +90,7 @@ class TestGeobufFormat(TestCase):
         """Test protobuf format via query parameter."""
         response = self.client.get(
             '/api/geojson/',
-            {'bbox': '-123,37,-122,38', 'zoom': '10', 'format': 'protobuf'}
+            {'bbox': SHARE_TEST_BBOX, 'zoom': '10', 'format': 'protobuf'}
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response['Content-Type'], 'application/x-protobuf')
@@ -119,7 +128,7 @@ class TestGeobufFormat(TestCase):
         """Test protobuf format via Accept header."""
         response = self.client.get(
             '/api/geojson/',
-            {'bbox': '-123,37,-122,38', 'zoom': '10'},
+            {'bbox': SHARE_TEST_BBOX, 'zoom': '10'},
             HTTP_ACCEPT='application/x-protobuf'
         )
         self.assertEqual(response.status_code, 200)
@@ -148,7 +157,7 @@ class TestGeobufFormat(TestCase):
         # Request JSON via query param but protobuf via Accept header
         response = self.client.get(
             '/api/geojson/',
-            {'bbox': '-123,37,-122,38', 'zoom': '10', 'format': 'json'},
+            {'bbox': SHARE_TEST_BBOX, 'zoom': '10', 'format': 'json'},
             HTTP_ACCEPT='application/x-protobuf'
         )
         self.assertEqual(response.status_code, 200)
@@ -162,14 +171,14 @@ class TestGeobufFormat(TestCase):
         # Get JSON response
         json_response = self.client.get(
             '/api/geojson/',
-            {'bbox': '-123,37,-122,38', 'zoom': '10', 'format': 'json'}
+            {'bbox': SHARE_TEST_BBOX, 'zoom': '10', 'format': 'json'}
         )
         json_data = json.loads(json_response.content)
         
         # Get protobuf response
         pbf_response = self.client.get(
             '/api/geojson/',
-            {'bbox': '-123,37,-122,38', 'zoom': '10', 'format': 'protobuf'}
+            {'bbox': SHARE_TEST_BBOX, 'zoom': '10', 'format': 'protobuf'}
         )
         # Handle gzip compression if present
         pbf_content = pbf_response.content
@@ -214,7 +223,7 @@ class TestGeobufFormat(TestCase):
         """Test that protobuf responses include all metadata in headers."""
         response = self.client.get(
             '/api/geojson/',
-            {'bbox': '-123,37,-122,38', 'zoom': '10', 'format': 'protobuf'}
+            {'bbox': SHARE_TEST_BBOX, 'zoom': '10', 'format': 'protobuf'}
         )
         self.assertEqual(response.status_code, 200)
         
@@ -250,7 +259,7 @@ class TestGeobufFormat(TestCase):
         """Test that invalid format parameter defaults to JSON."""
         response = self.client.get(
             '/api/geojson/',
-            {'bbox': '-123,37,-122,38', 'zoom': '10', 'format': 'invalid'}
+            {'bbox': SHARE_TEST_BBOX, 'zoom': '10', 'format': 'invalid'}
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response['Content-Type'], 'application/json')
@@ -274,51 +283,36 @@ class TestGeobufPublicShare(TestCase):
                 'type': 'Feature',
                 'geometry': {
                     'type': 'Point',
-                    'coordinates': [-122.4194 + i * 0.01, 37.7749 + i * 0.01, 0.0]
+                    'coordinates': [SHARE_TEST_LON + i * 0.01, SHARE_TEST_LAT + i * 0.01, 0.0]
                 },
                 'properties': {
                     'name': f'Shared Point {i}',
                     'tags': ['shared-tag']
                 }
             }
-            FeatureStore.objects.create(
+            index_feature_tags(FeatureStore.objects.create(
                 user=self.user,
                 geojson=feature_data,
                 geometry=Point(feature_data['geometry']['coordinates'][0],
                              feature_data['geometry']['coordinates'][1],
                              0.0),
                 geojson_hash=generate_geojson_hash(feature_data)
-            )
+            ))
 
         # Create tag share with valid UUID4
-        self.tag_share = TagShare.objects.create(
-            share_id=str(uuid.uuid4()),
-            tag='shared-tag',
-            user=self.user,
-            allow_downloads=False
-        )
+        self.tag_share = create_tag_share(self.user, 'shared-tag', token=str(uuid.uuid4()), allow_downloads=False)
 
         # Create collection
-        self.collection = Collection.objects.create(
-            user=self.user,
-            name='Shared Collection',
-            tags=['shared-tag']
-        )
+        self.collection = create_owned_collection(self.user, 'Shared Collection', tags=['shared-tag'])
 
         # Create collection share with valid UUID4
-        self.collection_share = CollectionShare.objects.create(
-            share_id=str(uuid.uuid4()),
-            collection=self.collection,
-            user=self.user,
-            include_tags=False,
-            allow_downloads=False
-        )
+        self.collection_share = create_collection_share(self.user, self.collection, token=str(uuid.uuid4()), allow_downloads=False, include_tags=False)
 
     def test_public_tag_share_protobuf(self):
         """Test protobuf format for public tag share."""
         response = self.client.get(
-            f'/api/sharing/public/{self.tag_share.share_id}/',
-            {'bbox': '-123,37,-122,38', 'zoom': '10', 'format': 'protobuf'}
+            f'/api/shares/{self.tag_share.token}/features/',
+            {'bbox': SHARE_TEST_BBOX, 'zoom': '10', 'format': 'protobuf'}
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response['Content-Type'], 'application/x-protobuf')
@@ -347,8 +341,8 @@ class TestGeobufPublicShare(TestCase):
     def test_public_tag_share_json(self):
         """Test JSON format for public tag share."""
         response = self.client.get(
-            f'/api/sharing/public/{self.tag_share.share_id}/',
-            {'bbox': '-123,37,-122,38', 'zoom': '10', 'format': 'json'}
+            f'/api/shares/{self.tag_share.token}/features/',
+            {'bbox': SHARE_TEST_BBOX, 'zoom': '10', 'format': 'json'}
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response['Content-Type'], 'application/json')
@@ -359,8 +353,8 @@ class TestGeobufPublicShare(TestCase):
     def test_public_collection_share_protobuf(self):
         """Test protobuf format for public collection share."""
         response = self.client.get(
-            f'/api/sharing/public/collection/{self.collection_share.share_id}/',
-            {'bbox': '-123,37,-122,38', 'zoom': '10', 'format': 'protobuf'}
+            f'/api/shares/{self.collection_share.token}/features/',
+            {'bbox': SHARE_TEST_BBOX, 'zoom': '10', 'format': 'protobuf'}
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response['Content-Type'], 'application/x-protobuf')
@@ -394,8 +388,8 @@ class TestGeobufPublicShare(TestCase):
     def test_public_collection_share_json(self):
         """Test JSON format for public collection share."""
         response = self.client.get(
-            f'/api/sharing/public/collection/{self.collection_share.share_id}/',
-            {'bbox': '-123,37,-122,38', 'zoom': '10', 'format': 'json'}
+            f'/api/shares/{self.collection_share.token}/features/',
+            {'bbox': SHARE_TEST_BBOX, 'zoom': '10', 'format': 'json'}
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response['Content-Type'], 'application/json')
@@ -409,8 +403,8 @@ class TestGeobufPublicShare(TestCase):
         """Test that error responses for public shares are always JSON."""
         # Invalid share ID
         response = self.client.get(
-            '/api/sharing/public/invalid-share-id/',
-            {'bbox': '-123,37,-122,38', 'zoom': '10', 'format': 'protobuf'}
+            '/api/shares/invalid-share-id/features/',
+            {'bbox': SHARE_TEST_BBOX, 'zoom': '10', 'format': 'protobuf'}
         )
         self.assertEqual(response.status_code, 404)
         self.assertEqual(response['Content-Type'], 'application/json')
@@ -438,35 +432,31 @@ class TestGeobufWithCollection(TestCase):
                 'type': 'Feature',
                 'geometry': {
                     'type': 'Point',
-                    'coordinates': [-122.4194 + i * 0.01, 37.7749 + i * 0.01, 0.0]
+                    'coordinates': [SHARE_TEST_LON + i * 0.01, SHARE_TEST_LAT + i * 0.01, 0.0]
                 },
                 'properties': {
                     'name': f'Collection Point {i}',
                     'tags': ['collection-tag'] if i < 3 else ['other-tag']
                 }
             }
-            FeatureStore.objects.create(
+            index_feature_tags(FeatureStore.objects.create(
                 user=self.user,
                 geojson=feature_data,
                 geometry=Point(feature_data['geometry']['coordinates'][0],
                              feature_data['geometry']['coordinates'][1],
                              0.0),
                 geojson_hash=generate_geojson_hash(feature_data)
-            )
+            ))
 
         # Create collection
-        self.collection = Collection.objects.create(
-            user=self.user,
-            name='Test Collection',
-            tags=['collection-tag']
-        )
+        self.collection = create_owned_collection(self.user, 'Test Collection', tags=['collection-tag'])
 
     def test_collection_query_protobuf(self):
         """Test protobuf format with collection parameter."""
         response = self.client.get(
             '/api/geojson/',
             {
-                'bbox': '-123,37,-122,38',
+                'bbox': SHARE_TEST_BBOX,
                 'zoom': '10',
                 'collection': str(self.collection.id),
                 'format': 'protobuf'
@@ -507,7 +497,7 @@ class TestGeobufWithCollection(TestCase):
         json_response = self.client.get(
             '/api/geojson/',
             {
-                'bbox': '-123,37,-122,38',
+                'bbox': SHARE_TEST_BBOX,
                 'zoom': '10',
                 'collection': str(self.collection.id),
                 'format': 'json'
@@ -519,7 +509,7 @@ class TestGeobufWithCollection(TestCase):
         pbf_response = self.client.get(
             '/api/geojson/',
             {
-                'bbox': '-123,37,-122,38',
+                'bbox': SHARE_TEST_BBOX,
                 'zoom': '10',
                 'collection': str(self.collection.id),
                 'format': 'protobuf'
@@ -554,4 +544,40 @@ class TestGeobufWithCollection(TestCase):
             json_data['feature_count'],
             int(pbf_response['X-Feature-Count'])
         )
+
+
+class TestEmptyFeatureCollectionConstant(TestCase):
+    def test_none_and_empty_dict_encode_to_constant_collection(self):
+        from api.utils.format_encoding import EMPTY_FEATURE_COLLECTION, encode_bbox_response
+
+        for payload in (None, {}, {"type": "FeatureCollection", "features": []}):
+            encoded, headers = encode_bbox_response(
+                {"data": payload, "feature_count": 0},
+                "protobuf",
+            )
+            self.assertTrue(encoded)
+            self.assertEqual(headers["X-Feature-Count"], "0")
+            decoded = geobuf.decode(encoded)
+            if decoded is None:
+                decoded = EMPTY_FEATURE_COLLECTION
+            self.assertEqual(decoded["type"], "FeatureCollection")
+            self.assertEqual(decoded["features"], [])
+
+
+class TestEmptyFeatureCollectionConstant(TestCase):
+    def test_none_and_empty_dict_encode_to_constant_collection(self):
+        from api.utils.format_encoding import EMPTY_FEATURE_COLLECTION, encode_bbox_response
+
+        for payload in (None, {}, {"type": "FeatureCollection", "features": []}):
+            encoded, headers = encode_bbox_response(
+                {"data": payload, "feature_count": 0},
+                "protobuf",
+            )
+            self.assertTrue(encoded)
+            self.assertEqual(headers["X-Feature-Count"], "0")
+            decoded = geobuf.decode(encoded)
+            if decoded is None:
+                decoded = EMPTY_FEATURE_COLLECTION
+            self.assertEqual(decoded["type"], "FeatureCollection")
+            self.assertEqual(decoded["features"], [])
 

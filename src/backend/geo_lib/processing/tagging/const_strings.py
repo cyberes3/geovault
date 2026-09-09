@@ -24,23 +24,22 @@ TAG_PRIORITIES = {
 def is_protected_tag(tag: str, protected_prefixes: List[str]) -> bool:
     """
     Check if a tag is protected (matches exactly or starts with a protected prefix).
-    
-    Args:
-        tag: The tag to check
-        protected_prefixes: List of protected tag prefixes (e.g., ['type', 'import-year'])
-    
-    Returns:
-        True if the tag is protected, False otherwise
+    Comparison is case-insensitive and runs after lowercase.
     """
     if not isinstance(tag, str):
         return False
 
+    lowered = tag.strip().lower()
+    if not lowered:
+        return False
+
     for prefix in protected_prefixes:
-        # Exact match
-        if tag == prefix:
-            return True
-        # Prefix match (e.g., "type:point" matches "type")
-        if tag.startswith(prefix + ':'):
+        if not isinstance(prefix, str):
+            continue
+        prefix_lower = prefix.strip().lower()
+        if not prefix_lower:
+            continue
+        if lowered == prefix_lower or lowered.startswith(prefix_lower + ':'):
             return True
 
     return False

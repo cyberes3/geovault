@@ -199,7 +199,6 @@ export function setupMapEventListeners(map: MapLibreMap, handlers: MapEventListe
 
   if (onMoveEnd) {
     map.on('moveend', onMoveEnd)
-    map.on('zoomend', onMoveEnd)
   }
 
   if (onZoomEnd) {

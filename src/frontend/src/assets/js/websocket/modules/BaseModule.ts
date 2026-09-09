@@ -19,25 +19,38 @@ export abstract class BaseModule {
     readonly store: Store<RootState>;
     abstract readonly moduleName: string;
     socket: RealtimeSocketLike | null = null;
+    private readonly boundSubscriptions: Array<{ event: string; handler: (data: any) => void }> = [];
+    private initialized = false;
 
     constructor(store: Store<RootState>) {
         this.store = store;
     }
 
     /**
-     * Initialize module (called when socket connects).
-     * Override this method in subclasses to set up event handlers.
+     * Subscribe to events. Safe to call more than once: the first call runs `onInitialize()`,
+     * later calls are ignored. Handlers stay on the socket `Map` across reconnects.
      */
     initialize(): void {
-        // Override in subclasses
+        if (this.initialized) {
+            return;
+        }
+        this.initialized = true;
+        this.onInitialize();
     }
 
-    /**
-     * Cleanup module (called when socket disconnects).
-     * Override this method in subclasses for custom cleanup.
-     */
+    /** Override to `subscribe()` to this module's events. Invoked once by `initialize()`. */
+    protected onInitialize(): void {
+    }
+
+    /** Unsubscribe this module's handlers. Called on logout / unregister, not on transient disconnect. */
     cleanup(): void {
-        // Override in subclasses if needed
+        if (this.socket) {
+            for (const { event, handler } of this.boundSubscriptions) {
+                this.socket.unsubscribe(this.moduleName, event, handler);
+            }
+        }
+        this.boundSubscriptions.length = 0;
+        this.initialized = false;
     }
 
     /** Subscribe to a WebSocket event scoped to this module. */
@@ -46,6 +59,7 @@ export abstract class BaseModule {
             throw new Error('Socket not available - module not properly initialized');
         }
         this.socket.subscribe(this.moduleName, event, handler);
+        this.boundSubscriptions.push({ event, handler });
     }
 
     /** Send a message to the server, scoped to this module. */

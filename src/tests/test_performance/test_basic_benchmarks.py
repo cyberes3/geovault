@@ -13,6 +13,7 @@ from django.test import Client
 from api.models import FeatureStore, Collection, ImportQueue
 from geo_lib.feature_id import generate_geojson_hash
 
+from tests.test_utils.import_queue import queue_with_drafts, draft_geojson, draft_duplicate_infos, skipped_hashes
 User = get_user_model()
 
 
@@ -448,11 +449,11 @@ class TestImportPerformance:
         
         start_time = time.perf_counter()
         
-        import_item = ImportQueue.objects.create(
+        import_item = queue_with_drafts(
             user=user,
             original_filename='small.kml',
             raw_file='<kml>small file</kml>',
-            geofeatures=features
+            features=features
         )
         
         elapsed = time.perf_counter() - start_time
@@ -460,7 +461,7 @@ class TestImportPerformance:
         print(f"\nImport queue creation with 10 features took {elapsed:.2f}s")
         
         assert elapsed < 1.0, f"Small import took too long: {elapsed:.2f}s"
-        assert len(import_item.geofeatures) == 10
+        assert len(draft_geojson(import_item)) == 10
 
     def test_import_medium_file_100_features(self, user):
         """Test processing medium import with 100 features."""
@@ -478,11 +479,11 @@ class TestImportPerformance:
         
         start_time = time.perf_counter()
         
-        import_item = ImportQueue.objects.create(
+        import_item = queue_with_drafts(
             user=user,
             original_filename='medium.kml',
             raw_file='<kml>medium file</kml>',
-            geofeatures=features
+            features=features
         )
         
         elapsed = time.perf_counter() - start_time
@@ -490,7 +491,7 @@ class TestImportPerformance:
         print(f"\nImport queue creation with 100 features took {elapsed:.2f}s")
         
         assert elapsed < 5.0, f"Medium import took too long: {elapsed:.2f}s"
-        assert len(import_item.geofeatures) == 100
+        assert len(draft_geojson(import_item)) == 100
 
     def test_import_large_file_1000_features(self, user):
         """Test processing large import with 1000 features."""
@@ -508,11 +509,11 @@ class TestImportPerformance:
         
         start_time = time.perf_counter()
         
-        import_item = ImportQueue.objects.create(
+        import_item = queue_with_drafts(
             user=user,
             original_filename='large.kml',
             raw_file='<kml>large file</kml>',
-            geofeatures=features
+            features=features
         )
         
         elapsed = time.perf_counter() - start_time
@@ -520,5 +521,5 @@ class TestImportPerformance:
         print(f"\nImport queue creation with 1000 features took {elapsed:.2f}s")
         
         assert elapsed < 30.0, f"Large import took too long: {elapsed:.2f}s"
-        assert len(import_item.geofeatures) == 1000
+        assert len(draft_geojson(import_item)) == 1000
 

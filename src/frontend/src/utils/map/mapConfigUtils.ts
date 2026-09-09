@@ -22,9 +22,8 @@ function calculateZoomLevel(location: UserLocation): number {
         'country': 4     // Country level - shows entire country
     };
 
-    // If we have city data, we're likely in a state/province
     if (location.city) {
-        return baseZooms.state;
+        return baseZooms.city;
     }
 
     // If we only have country data, show the country
@@ -85,7 +84,7 @@ export function getMapRecenterFromUserLocation(userLocation: UserLocation | null
 /**
  * Read the user's preferred default basemap (`map.default_basemap`) straight from the Vuex
  * store singleton, for call sites that aren't Vue components with `useStore()` access (e.g. the
- * OpenLayers preview dialogs' `useOpenLayersPreviewMap()` factory calls).
+ * preview maps use the same store default.
  */
 export function getDefaultBasemapFromStore(): string | undefined {
     const getters = store.getters as Record<string, unknown>;

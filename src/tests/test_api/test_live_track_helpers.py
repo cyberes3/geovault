@@ -1,8 +1,8 @@
-from extensions.live_track.src.backend import helpers
 from extensions.live_track.src.backend.helpers import (
     _filter_coords_by_recent_window,
     latest_coord_by_time,
 )
+from geo_lib.track import window as track_window
 
 
 class TestLatestCoordByTime:
@@ -30,7 +30,7 @@ class TestLatestCoordByTime:
 
 class TestRecentWindowLatestFallback:
     def test_fallback_uses_time_max_not_array_tail(self, monkeypatch):
-        monkeypatch.setattr(helpers.time, "time", lambda: 1_700_000_100)
+        monkeypatch.setattr(track_window.time, "time", lambda: 1_700_000_100)
         coords = [
             [1.0, 2.0, 1_700_000_000_000],
             [9.0, 9.0, 1_699_000_000_000],

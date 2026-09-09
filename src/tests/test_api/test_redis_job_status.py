@@ -15,6 +15,7 @@ from geo_lib.processing.jobs.helpers.redis_job_storage import (
     get_job_status,
     COMPLETED_JOB_TTL
 )
+from tests.test_utils.import_queue import queue_with_drafts, draft_geojson, draft_duplicate_infos, skipped_hashes
 from geo_lib.utils.redis_connection import get_redis_connection
 from geo_lib.processing.jobs.import_job import ImportJob
 from geo_lib.processing.jobs.delete_job import DeleteJob
@@ -101,11 +102,11 @@ class TestRedisJobStatusAPI(TransactionTestCase):
         # Add required geojson_hash
         feature['properties']['geojson_hash'] = generate_geojson_hash(feature)
         
-        import_item = ImportQueue.objects.create(
+        import_item = queue_with_drafts(
             user=self.user,
             original_filename='test.kml',
             raw_file='<kml></kml>',
-            geofeatures=[feature]
+            features=[feature]
         )
 
         # Start import job
@@ -150,7 +151,6 @@ class TestRedisJobStatusAPI(TransactionTestCase):
             user=self.user,
             original_filename='test.kml',
             raw_file='<kml></kml>',
-            geofeatures=[]
         )
 
         # Start delete job
@@ -191,21 +191,21 @@ class TestRedisJobStatusAPI(TransactionTestCase):
     def test_bulk_import_job_stored_in_redis(self):
         """Test that bulk import job is stored in Redis when started."""
         # Create import queue items
-        import_item1 = ImportQueue.objects.create(
+        import_item1 = queue_with_drafts(
             user=self.user,
             original_filename='test1.kml',
             raw_file='<kml></kml>',
-            geofeatures=[{
+            features=[{
                 'type': 'Feature',
                 'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749, 0]},
                 'properties': {'name': 'Test Point 1'}
             }]
         )
-        import_item2 = ImportQueue.objects.create(
+        import_item2 = queue_with_drafts(
             user=self.user,
             original_filename='test2.kml',
             raw_file='<kml></kml>',
-            geofeatures=[{
+            features=[{
                 'type': 'Feature',
                 'geometry': {'type': 'Point', 'coordinates': [-122.4094, 37.7849, 0]},
                 'properties': {'name': 'Test Point 2'}
@@ -245,13 +245,11 @@ class TestRedisJobStatusAPI(TransactionTestCase):
             user=self.user,
             original_filename='test1.kml',
             raw_file='<kml></kml>',
-            geofeatures=[]
         )
         import_item2 = ImportQueue.objects.create(
             user=self.user,
             original_filename='test2.kml',
             raw_file='<kml></kml>',
-            geofeatures=[]
         )
 
         # Start bulk delete job
@@ -283,11 +281,11 @@ class TestRedisJobStatusAPI(TransactionTestCase):
     def test_get_all_job_statuses_api_endpoint(self):
         """Test the API endpoint returns all jobs for the current user."""
         # Create and start multiple jobs
-        import_item1 = ImportQueue.objects.create(
+        import_item1 = queue_with_drafts(
             user=self.user,
             original_filename='test1.kml',
             raw_file='<kml></kml>',
-            geofeatures=[{
+            features=[{
                 'type': 'Feature',
                 'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749, 0]},
                 'properties': {'name': 'Test Point 1'}
@@ -297,7 +295,6 @@ class TestRedisJobStatusAPI(TransactionTestCase):
             user=self.user,
             original_filename='test2.kml',
             raw_file='<kml></kml>',
-            geofeatures=[]
         )
 
         # Start an import job
@@ -344,11 +341,11 @@ class TestRedisJobStatusAPI(TransactionTestCase):
     def test_jobs_sorted_by_created_at(self):
         """Test that jobs are returned sorted by created_at (newest first)."""
         # Create and start jobs with small delays
-        import_item1 = ImportQueue.objects.create(
+        import_item1 = queue_with_drafts(
             user=self.user,
             original_filename='test1.kml',
             raw_file='<kml></kml>',
-            geofeatures=[{
+            features=[{
                 'type': 'Feature',
                 'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749, 0]},
                 'properties': {'name': 'Test Point 1'}
@@ -362,11 +359,11 @@ class TestRedisJobStatusAPI(TransactionTestCase):
         
         time.sleep(0.1)
         
-        import_item2 = ImportQueue.objects.create(
+        import_item2 = queue_with_drafts(
             user=self.user,
             original_filename='test2.kml',
             raw_file='<kml></kml>',
-            geofeatures=[{
+            features=[{
                 'type': 'Feature',
                 'geometry': {'type': 'Point', 'coordinates': [-122.4094, 37.7849, 0]},
                 'properties': {'name': 'Test Point 2'}
@@ -401,11 +398,11 @@ class TestRedisJobStatusAPI(TransactionTestCase):
     def test_completed_job_has_ttl(self):
         """Test that completed jobs have TTL set in Redis."""
         # Create an import queue item
-        import_item = ImportQueue.objects.create(
+        import_item = queue_with_drafts(
             user=self.user,
             original_filename='test.kml',
             raw_file='<kml></kml>',
-            geofeatures=[{
+            features=[{
                 'type': 'Feature',
                 'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749, 0]},
                 'properties': {'name': 'Test Point'}
@@ -443,8 +440,7 @@ class TestRedisJobStatusAPI(TransactionTestCase):
         import_item = ImportQueue.objects.create(
             user=self.user,
             original_filename='test.kml',
-            raw_file='<kml></kml>',
-            geofeatures=[]  # Empty geofeatures will cause import to fail
+            raw_file='<kml></kml>',  # Empty geofeatures will cause import to fail
         )
 
         # Start import job
@@ -484,21 +480,21 @@ class TestRedisJobStatusAPI(TransactionTestCase):
         )
 
         # Create jobs for both users
-        import_item1 = ImportQueue.objects.create(
+        import_item1 = queue_with_drafts(
             user=self.user,
             original_filename='test1.kml',
             raw_file='<kml></kml>',
-            geofeatures=[{
+            features=[{
                 'type': 'Feature',
                 'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749, 0]},
                 'properties': {'name': 'Test Point 1'}
             }]
         )
-        import_item2 = ImportQueue.objects.create(
+        import_item2 = queue_with_drafts(
             user=other_user,
             original_filename='test2.kml',
             raw_file='<kml></kml>',
-            geofeatures=[{
+            features=[{
                 'type': 'Feature',
                 'geometry': {'type': 'Point', 'coordinates': [-122.4094, 37.7849, 0]},
                 'properties': {'name': 'Test Point 2'}
@@ -555,11 +551,11 @@ class TestRedisJobStatusAPI(TransactionTestCase):
     def test_get_all_job_statuses_includes_all_job_types(self):
         """Test that endpoint returns all job types (import, delete, bulk_import, bulk_delete)."""
         # Create import queue items
-        import_item1 = ImportQueue.objects.create(
+        import_item1 = queue_with_drafts(
             user=self.user,
             original_filename='import.kml',
             raw_file='<kml></kml>',
-            geofeatures=[{
+            features=[{
                 'type': 'Feature',
                 'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749, 0]},
                 'properties': {'name': 'Test Point'}
@@ -569,19 +565,16 @@ class TestRedisJobStatusAPI(TransactionTestCase):
             user=self.user,
             original_filename='delete.kml',
             raw_file='<kml></kml>',
-            geofeatures=[]
         )
         import_item3 = ImportQueue.objects.create(
             user=self.user,
             original_filename='bulk1.kml',
             raw_file='<kml></kml>',
-            geofeatures=[]
         )
         import_item4 = ImportQueue.objects.create(
             user=self.user,
             original_filename='bulk2.kml',
             raw_file='<kml></kml>',
-            geofeatures=[]
         )
 
         # Start different job types
@@ -623,11 +616,11 @@ class TestRedisJobStatusAPI(TransactionTestCase):
     def test_get_all_job_statuses_response_structure(self):
         """Test that response has correct structure with all required fields."""
         # Create and start a job
-        import_item = ImportQueue.objects.create(
+        import_item = queue_with_drafts(
             user=self.user,
             original_filename='test.kml',
             raw_file='<kml></kml>',
-            geofeatures=[{
+            features=[{
                 'type': 'Feature',
                 'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749, 0]},
                 'properties': {'name': 'Test Point'}
@@ -669,11 +662,11 @@ class TestRedisJobStatusAPI(TransactionTestCase):
         # Add required geojson_hash
         feature['properties']['geojson_hash'] = generate_geojson_hash(feature)
         
-        import_item = ImportQueue.objects.create(
+        import_item = queue_with_drafts(
             user=self.user,
             original_filename='test.kml',
             raw_file='<kml></kml>',
-            geofeatures=[feature]
+            features=[feature]
         )
         
         job_id = self.import_job.start_import_job(
@@ -705,8 +698,7 @@ class TestRedisJobStatusAPI(TransactionTestCase):
         import_item = ImportQueue.objects.create(
             user=self.user,
             original_filename='test.kml',
-            raw_file='<kml></kml>',
-            geofeatures=[]  # Will cause failure
+            raw_file='<kml></kml>',  # Will cause failure
         )
         
         job_id = self.import_job.start_import_job(
@@ -733,11 +725,11 @@ class TestRedisJobStatusAPI(TransactionTestCase):
         """Test pagination parameters if implemented."""
         # Create multiple jobs
         for i in range(5):
-            import_item = ImportQueue.objects.create(
+            import_item = queue_with_drafts(
                 user=self.user,
                 original_filename=f'test{i}.kml',
                 raw_file='<kml></kml>',
-                geofeatures=[{
+                features=[{
                     'type': 'Feature',
                     'geometry': {'type': 'Point', 'coordinates': [-122.4 + i*0.01, 37.7 + i*0.01, 0]},
                     'properties': {'name': f'Test Point {i}'}
@@ -772,11 +764,11 @@ class TestRedisJobStatusAPI(TransactionTestCase):
         # Add required geojson_hash
         feature['properties']['geojson_hash'] = generate_geojson_hash(feature)
         
-        import_item = ImportQueue.objects.create(
+        import_item = queue_with_drafts(
             user=self.user,
             original_filename='test.kml',
             raw_file='<kml></kml>',
-            geofeatures=[feature]
+            features=[feature]
         )
         
         job_id = self.import_job.start_import_job(
@@ -808,11 +800,11 @@ class TestRedisJobStatusAPI(TransactionTestCase):
     def test_get_all_job_statuses_multiple_calls_consistency(self):
         """Test that multiple calls return consistent results."""
         # Create a job
-        import_item = ImportQueue.objects.create(
+        import_item = queue_with_drafts(
             user=self.user,
             original_filename='test.kml',
             raw_file='<kml></kml>',
-            geofeatures=[{
+            features=[{
                 'type': 'Feature',
                 'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749, 0]},
                 'properties': {'name': 'Test Point'}

@@ -3,7 +3,7 @@
  */
 
 import { ICON_PROPERTY_NAMES } from './iconDetection';
-import type { ImportFeatureItem } from '@/assets/js/types/import-types';
+import type { ImportFeatureGeometry, ImportFeatureItem, ImportFeatureProperties } from '@/assets/js/types/import-types';
 
 /** Check if feature geometry is a point type. */
 export function isPointGeometry(item: ImportFeatureItem | null | undefined): boolean {
@@ -23,8 +23,8 @@ export function isPolygonGeometry(item: ImportFeatureItem | null | undefined): b
   return item.geometry.type === 'Polygon' || item.geometry.type === 'MultiPolygon';
 }
 
-/** Initialize default style properties for feature. */
-export function initializeFeatureDefaults(item: ImportFeatureItem): ImportFeatureItem {
+/** Initialize default style properties for a preview feature (parsed or raw page item). */
+export function initializeFeatureDefaults<T extends { geometry: ImportFeatureGeometry; properties: ImportFeatureProperties }>(item: T): T {
   // Check if item has a custom icon
   const hasIcon = ICON_PROPERTY_NAMES.some((propName) => {
     const iconValue = item.properties[propName];

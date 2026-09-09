@@ -100,7 +100,6 @@ class TestWebSocketForceDisconnectorDirect(TransactionTestCase):
             user=user,
             original_filename='test.kml',
             raw_file='<kml></kml>',
-            geofeatures=[],
         )
         communicator = WebsocketCommunicator(
             ProcessStatusConsumer.as_asgi(),

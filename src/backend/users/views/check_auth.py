@@ -1,12 +1,12 @@
 import traceback
 from allauth.account.models import EmailAddress
-from django.core.cache import cache
 from django.db import connection
 from django.http import JsonResponse
 from pydantic import BaseModel, Field
 
 from api.models import FeatureStore, ImportQueue
 from geo_lib.logging.console import get_tagged_logger
+from geo_lib.perf.shared_cache import get_shared_cache
 from website.auth_decorators import api_or_login_required_401
 
 _logger = get_tagged_logger(__name__)
@@ -90,7 +90,8 @@ def get_user_storage(request):
 
     type_value = type_param or "all"
     cache_key = f"{STORAGE_USAGE_CACHE_KEY_PREFIX}:{request.user.id}:{type_value}"
-    cached = cache.get(cache_key)
+    shared_cache = get_shared_cache()
+    cached = shared_cache.get(cache_key)
     if cached is not None:
         return JsonResponse(cached)
 
@@ -99,7 +100,7 @@ def get_user_storage(request):
         by_type = {"feature": feature_bytes}
         total = feature_bytes
         response_data = StorageUsageResponse(by_type=by_type, total_storage_bytes=total).model_dump()
-        cache.set(cache_key, response_data, timeout=STORAGE_USAGE_CACHE_TIMEOUT_SECONDS)
+        shared_cache.set(cache_key, response_data, timeout=STORAGE_USAGE_CACHE_TIMEOUT_SECONDS)
         return JsonResponse(response_data)
     except Exception:
         _logger.error("Error calculating storage usage for user %s:\n%s", request.user.id, traceback.format_exc())

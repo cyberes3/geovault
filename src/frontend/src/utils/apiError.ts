@@ -1,3 +1,4 @@
+import { errorMessageFromEnvelope } from '@/contracts/envelope';
 import { toast } from './toast.js';
 
 const STATUS_MESSAGES: Record<number, string> = {
@@ -32,17 +33,10 @@ export function isAbortError(error: unknown): boolean {
     return cause !== undefined && (cause as unknown) !== error && isAbortError(cause);
 }
 
-/** Response body field names that different backend endpoints use for their error string. */
-const MESSAGE_FIELDS = ['error', 'message', 'msg'] as const;
-
 function messageFromResponseData(data: unknown, status: number | undefined, fallback: string): string {
-    if (data && typeof data === 'object') {
-        for (const field of MESSAGE_FIELDS) {
-            const value = (data as Record<string, unknown>)[field];
-            if (typeof value === 'string' && value.trim()) {
-                return value;
-            }
-        }
+    const fromEnvelope = errorMessageFromEnvelope(data, '');
+    if (fromEnvelope) {
+        return fromEnvelope;
     }
     if (typeof data === 'string' && data.trim()) {
         return data;

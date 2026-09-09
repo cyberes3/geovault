@@ -13,6 +13,7 @@ from geo_lib.processing.jobs.bulk_import_job import BulkImportJob
 from geo_lib.processing.jobs.helpers.status_tracker import status_tracker, ProcessingStatus
 from geo_lib.feature_id import generate_geojson_hash
 
+from tests.test_utils.import_queue import queue_with_drafts, draft_geojson
 User = get_user_model()
 
 
@@ -61,13 +62,12 @@ class TestBulkImportJobIntegration(TransactionTestCase):
     def test_bulk_import_single_item_success(self):
         """Test bulk import with just one item."""
         # Create single import item
-        item1 = ImportQueue.objects.create(
+        item1 = queue_with_drafts(
             user=self.user,
             original_filename='single_bulk.kml',
             raw_file='<kml></kml>',
-            geofeatures=[self.features[0], self.features[1]],
-            duplicate_features=[],
-            skipped_feature_ids=[],
+            features=[self.features[0], self.features[1]],
+            skipped=[],
             imported=False
         )
         
@@ -98,33 +98,30 @@ class TestBulkImportJobIntegration(TransactionTestCase):
     def test_bulk_import_multiple_items_all_success(self):
         """Test bulk import with multiple items, all succeed."""
         # Create 3 import items
-        item1 = ImportQueue.objects.create(
+        item1 = queue_with_drafts(
             user=self.user,
             original_filename='bulk_item1.kml',
             raw_file='<kml></kml>',
-            geofeatures=[self.features[0]],
-            duplicate_features=[],
-            skipped_feature_ids=[],
+            features=[self.features[0]],
+            skipped=[],
             imported=False
         )
         
-        item2 = ImportQueue.objects.create(
+        item2 = queue_with_drafts(
             user=self.user,
             original_filename='bulk_item2.kml',
             raw_file='<kml></kml>',
-            geofeatures=[self.features[1], self.features[2]],
-            duplicate_features=[],
-            skipped_feature_ids=[],
+            features=[self.features[1], self.features[2]],
+            skipped=[],
             imported=False
         )
         
-        item3 = ImportQueue.objects.create(
+        item3 = queue_with_drafts(
             user=self.user,
             original_filename='bulk_item3.kml',
             raw_file='<kml></kml>',
-            geofeatures=[self.features[3], self.features[4]],
-            duplicate_features=[],
-            skipped_feature_ids=[],
+            features=[self.features[3], self.features[4]],
+            skipped=[],
             imported=False
         )
         
@@ -160,35 +157,32 @@ class TestBulkImportJobIntegration(TransactionTestCase):
     def test_bulk_import_partial_failure(self):
         """Test bulk import where some items succeed, others fail."""
         # Create one valid item
-        item1 = ImportQueue.objects.create(
+        item1 = queue_with_drafts(
             user=self.user,
             original_filename='valid_item.kml',
             raw_file='<kml></kml>',
-            geofeatures=[self.features[0]],
-            duplicate_features=[],
-            skipped_feature_ids=[],
+            features=[self.features[0]],
+            skipped=[],
             imported=False
         )
         
         # Create item with all features skipped (will fail)
-        item2 = ImportQueue.objects.create(
+        item2 = queue_with_drafts(
             user=self.user,
             original_filename='all_skipped.kml',
             raw_file='<kml></kml>',
-            geofeatures=[self.features[1]],
-            duplicate_features=[],
-            skipped_feature_ids=[self.hashes[1]],  # Skip the only feature
+            features=[self.features[1]],
+            skipped=[self.hashes[1]],  # Skip the only feature
             imported=False
         )
         
         # Create another valid item
-        item3 = ImportQueue.objects.create(
+        item3 = queue_with_drafts(
             user=self.user,
             original_filename='valid_item2.kml',
             raw_file='<kml></kml>',
-            geofeatures=[self.features[2]],
-            duplicate_features=[],
-            skipped_feature_ids=[],
+            features=[self.features[2]],
+            skipped=[],
             imported=False
         )
         
@@ -225,13 +219,12 @@ class TestBulkImportJobIntegration(TransactionTestCase):
     def test_bulk_import_missing_items(self):
         """Test bulk import with non-existent item IDs."""
         # Create one valid item
-        item1 = ImportQueue.objects.create(
+        item1 = queue_with_drafts(
             user=self.user,
             original_filename='valid.kml',
             raw_file='<kml></kml>',
-            geofeatures=[self.features[0]],
-            duplicate_features=[],
-            skipped_feature_ids=[],
+            features=[self.features[0]],
+            skipped=[],
             imported=False
         )
         
@@ -261,13 +254,12 @@ class TestBulkImportJobIntegration(TransactionTestCase):
         # Create 3 items
         items = []
         for i in range(3):
-            item = ImportQueue.objects.create(
+            item = queue_with_drafts(
                 user=self.user,
                 original_filename=f'progress_item{i}.kml',
                 raw_file='<kml></kml>',
-                geofeatures=[self.features[i]],
-                duplicate_features=[],
-                skipped_feature_ids=[],
+                features=[self.features[i]],
+                skipped=[],
                 imported=False
             )
             items.append(item)
@@ -314,23 +306,21 @@ class TestBulkImportJobIntegration(TransactionTestCase):
     def test_bulk_import_aggregates_results(self):
         """Test that results are aggregated across all items."""
         # Create items with various features
-        item1 = ImportQueue.objects.create(
+        item1 = queue_with_drafts(
             user=self.user,
             original_filename='agg_item1.kml',
             raw_file='<kml></kml>',
-            geofeatures=[self.features[0], self.features[1]],
-            duplicate_features=[],
-            skipped_feature_ids=[],
+            features=[self.features[0], self.features[1]],
+            skipped=[],
             imported=False
         )
         
-        item2 = ImportQueue.objects.create(
+        item2 = queue_with_drafts(
             user=self.user,
             original_filename='agg_item2.kml',
             raw_file='<kml></kml>',
-            geofeatures=[self.features[2]],
-            duplicate_features=[],
-            skipped_feature_ids=[],
+            features=[self.features[2]],
+            skipped=[],
             imported=False
         )
         
@@ -362,13 +352,12 @@ class TestBulkImportJobIntegration(TransactionTestCase):
         # Create multiple items
         items = []
         for i in range(3):
-            item = ImportQueue.objects.create(
+            item = queue_with_drafts(
                 user=self.user,
                 original_filename=f'seq_item{i}.kml',
                 raw_file='<kml></kml>',
-                geofeatures=[self.features[i]],
-                duplicate_features=[],
-                skipped_feature_ids=[],
+                features=[self.features[i]],
+                skipped=[],
                 imported=False
             )
             items.append(item)

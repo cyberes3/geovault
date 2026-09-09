@@ -1,9 +1,9 @@
 """
 Shared types and utilities for forward reverse_geocoding (place search) backends.
 """
-import hashlib
-
 from django.conf import settings
+
+from geo_lib.perf.cache_keys import GeocodeKey
 
 
 class GeocodingBackendError(Exception):
@@ -26,7 +26,4 @@ def get_geocoding_cache_key(query: str) -> str:
     Returns:
         Cache key string safe for memcached
     """
-    mode = settings.GEOCODING_SEARCH_MODE
-    normalized = query.strip().lower()
-    query_hash = hashlib.md5(normalized.encode('utf-8')).hexdigest()
-    return f"reverse_geocoding:{mode}:{query_hash}"
+    return str(GeocodeKey(settings.GEOCODING_SEARCH_MODE, query))

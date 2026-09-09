@@ -10,11 +10,11 @@
           <p>{{ message }}</p>
           <div v-if="queueDuplicateInfo" class="mt-2">
             <router-link
-              :to="{ path: `/import/process/${queueDuplicateInfo.queue_item_id}`, query: { scrollToIndex: queueDuplicateInfo.global_index } }"
+              :to="{ path: `/import/process/${queueDuplicateInfo.queue_item_id}`, query: { scrollToIndex: queueDuplicateInfo.spatial_index } }"
               class="inline-flex items-center px-3 py-1.5 border border-gray-300 rounded-md text-xs font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
             >
               <MapIcon class="w-3 h-3 mr-1" />
-              View in "{{ queueDuplicateInfo.queue_item_filename }}"
+              View matching queue feature
             </router-link>
           </div>
           <div v-if="featureStoreInfo" class="mt-2">
@@ -34,17 +34,14 @@
 
 <script lang="ts">
 import { defineComponent, type PropType } from 'vue'
-import { ExclamationTriangleIcon } from '@heroicons/vue/24/outline'
-import { MapIcon } from '@heroicons/vue/24/outline'
-import type { ImportFeatureItem } from '@/assets/js/types/import-types'
-
-type DuplicateWarningType = 'feature_store_hash' | 'feature_store_geometry' | 'cross_queue_hash' | 'cross_queue_geometry'
+import { ExclamationTriangleIcon, MapIcon } from '@heroicons/vue/24/outline'
+import type { DuplicateVerdictWire } from '@/contracts/duplicates'
+import { emptyVerdict } from '@/contracts/duplicates'
+import { isBlockedVerdict, isDuplicateVerdict, isRestorableVerdict } from '@/composables/import/duplicateSession'
 
 interface QueueDuplicateInfo {
-  hash?: string
-  global_index?: number
   queue_item_id: number
-  queue_item_filename?: string
+  spatial_index: number | null
 }
 
 interface FeatureStoreDuplicateInfo {
@@ -58,90 +55,52 @@ export default defineComponent({
     MapIcon
   },
   props: {
-    type: {
-      type: String as PropType<DuplicateWarningType>,
-      required: true,
-      validator: (value: string) => [
-        'feature_store_hash',
-        'feature_store_geometry',
-        'cross_queue_hash',
-        'cross_queue_geometry'
-      ].includes(value)
-    },
-    item: {
-      type: Object as PropType<ImportFeatureItem>,
-      required: true
+    verdict: {
+      type: Object as PropType<DuplicateVerdictWire>,
+      default: () => emptyVerdict()
     }
   },
   computed: {
     show(): boolean {
-      switch (this.type) {
-        case 'feature_store_hash':
-          return this.item.isFeatureStoreHashDup ?? false
-        case 'feature_store_geometry':
-          return this.item.isFeatureStoreGeometryDup ?? false
-        case 'cross_queue_hash':
-          return this.item.isCrossQueueHashDup ?? false
-        case 'cross_queue_geometry':
-          return this.item.isCrossQueueGeometryDup ?? false
-        default:
-          return false
-      }
+      return isDuplicateVerdict(this.verdict)
     },
     title(): string {
-      switch (this.type) {
-        case 'feature_store_hash':
-          return 'Exact Duplicate in Feature Library (Blocked)'
-        case 'feature_store_geometry':
-          return 'Same Location as Feature in Library'
-        case 'cross_queue_hash':
-          return 'Exact Duplicate in Import Table (Blocked)'
-        case 'cross_queue_geometry':
-          return 'Same Location as Feature in Import Table'
-        default:
-          return ''
+      if (isBlockedVerdict(this.verdict) && this.verdict.scope === 'library') {
+        return 'Exact Duplicate in Feature Library (Blocked)'
       }
+      if (isBlockedVerdict(this.verdict) && this.verdict.scope === 'draft_queue') {
+        return 'Exact Duplicate in Import Table (Blocked)'
+      }
+      if (isRestorableVerdict(this.verdict) && this.verdict.scope === 'library') {
+        return 'Same Location as Feature in Library'
+      }
+      if (isRestorableVerdict(this.verdict) && this.verdict.scope === 'draft_queue') {
+        return 'Same Location as Feature in Import Table'
+      }
+      return 'Duplicate Feature'
     },
     message(): string {
-      switch (this.type) {
-        case 'feature_store_hash':
-          return 'This feature is identical to an existing feature in your feature library. Hash duplicates cannot be imported and are automatically blocked.'
-        case 'feature_store_geometry':
-          return 'This feature has the same location as an existing feature in your feature library. It is skipped by default, but you can restore it if needed.'
-        case 'cross_queue_hash':
-          return 'This feature is identical to one in another item in your queue and will be automatically blocked during import.'
-        case 'cross_queue_geometry':
-          return 'This feature has the same location as a feature in another item in your import table. It is skipped by default, but you can restore it if needed.'
-        default:
-          return ''
+      if (isBlockedVerdict(this.verdict)) {
+        return 'This feature is identical to an existing feature. Hash duplicates cannot be imported and are automatically blocked.'
       }
+      return 'This feature has the same location as an existing feature. It is skipped by default, but you can restore it if needed.'
     },
     queueDuplicateInfo(): QueueDuplicateInfo | null {
-      // For cross-queue types, return queue item info
-      if (this.type === 'cross_queue_hash' || this.type === 'cross_queue_geometry') {
-        const info = this.item.duplicateInfo
-        if (info?.queue_item_id != null) {
-          return {
-            hash: info.hash,
-            global_index: info.global_index,
-            queue_item_id: info.queue_item_id,
-            queue_item_filename: info.queue_item_filename
-          };
-        }
+      if (this.verdict.scope !== 'draft_queue' || this.verdict.match_queue_id == null) {
+        return null
       }
-      return null
+      return {
+        queue_item_id: this.verdict.match_queue_id,
+        spatial_index: this.verdict.match_spatial_index
+      }
     },
     featureStoreInfo(): FeatureStoreDuplicateInfo | null {
-      // For feature store types, return feature store ID for map link
-      if (this.type === 'feature_store_hash' || this.type === 'feature_store_geometry') {
-        const info = this.item.duplicateInfo
-        if (info?.feature_store_id != null) {
-          return {
-            feature_store_id: info.feature_store_id
-          };
-        }
+      if (this.verdict.scope !== 'library' || this.verdict.match_feature_store_id == null) {
+        return null
       }
-      return null;
+      return {
+        feature_store_id: this.verdict.match_feature_store_id
+      }
     },
     containerClasses(): string {
       return 'mb-4 p-4 rounded-md bg-yellow-100 border border-yellow-300'
@@ -158,4 +117,3 @@ export default defineComponent({
   }
 })
 </script>
-

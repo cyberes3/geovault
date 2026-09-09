@@ -26,6 +26,18 @@ CONTENT_TYPE_PROTOBUF = 'application/x-protobuf'
 GEOBUF_PRECISION = 5
 GEOBUF_DIMENSIONS = 2  # 2D coordinates (lat, lon)
 
+EMPTY_FEATURE_COLLECTION = {"type": "FeatureCollection", "features": []}
+
+
+def as_feature_collection(geojson_data) -> dict:
+    if not geojson_data or geojson_data.get("type") != "FeatureCollection":
+        return EMPTY_FEATURE_COLLECTION
+    if not isinstance(geojson_data.get("features"), list):
+        return EMPTY_FEATURE_COLLECTION
+    if len(geojson_data["features"]) == 0:
+        return EMPTY_FEATURE_COLLECTION
+    return geojson_data
+
 
 def detect_response_format(request) -> str:
     """
@@ -80,10 +92,7 @@ def encode_bbox_response(response_data: dict, format_type: str) -> tuple:
         return response_data, None
 
     if format_type == FORMAT_PROTOBUF:
-        # Extract GeoJSON FeatureCollection
-        geojson_data = response_data.get('data', {})
-        if not geojson_data or geojson_data.get('type') != 'FeatureCollection':
-            raise ValueError("Response data must contain a GeoJSON FeatureCollection")
+        geojson_data = as_feature_collection(response_data.get('data'))
 
         # Encode to geobuf with reduced precision for better compression
         # geobuf.encode() accepts precision and dim as positional arguments
@@ -138,7 +147,7 @@ def create_bbox_response(response_data: dict, request) -> HttpResponse:
     
     if format_type == FORMAT_PROTOBUF:
         # Always compress with gzip for maximum compression
-        compressed_data = gzip.compress(encoded_data, compresslevel=9)  # Maximum compression
+        compressed_data = gzip.compress(encoded_data, compresslevel=6)
         response = HttpResponse(compressed_data, content_type=CONTENT_TYPE_PROTOBUF)
         response['Content-Encoding'] = 'gzip'
         

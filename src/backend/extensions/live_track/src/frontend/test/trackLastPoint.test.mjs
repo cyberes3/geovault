@@ -41,12 +41,12 @@ test('resolveTrackLastCoordinate prefers dated geometry over undated last_point'
   assert.deepEqual(last, [1, 2, 1_700_000_000_000]);
 });
 
-test('resolveTrackLastCoordinate uses last_position when it is newer than geometry', () => {
+test('resolveTrackLastCoordinate ignores last_position when geometry has a dated point', () => {
   const last = resolveTrackLastCoordinate({
     id: 1,
     geometry: { type: 'LineString', coordinates: [[1, 2, 1_700_000_000_000]] },
     last_position: { lon: 7, lat: 8 },
     last_timestamp_ms: 1_700_000_200_000,
   });
-  assert.deepEqual(last, [7, 8, 1_700_000_200_000]);
+  assert.deepEqual(last, [1, 2, 1_700_000_000_000]);
 });

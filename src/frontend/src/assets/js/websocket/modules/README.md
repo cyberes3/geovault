@@ -1,9 +1,9 @@
 # WebSocket Modules
 
 This directory contains the modules for `realtimeSocket` (`assets/js/websocket/realtimeSocket.ts`),
-the app-lifetime WebSocket connection to `/ws/realtime/`. Every message on that connection is
-multiplexed with a `{ module, type, data }` envelope; each module here owns one `module` name and
-reacts to its `type`s, mirroring a same-named module class on the backend
+the app-lifetime `GeoVaultSocket` connection to `/ws/realtime/`. Every message on that connection
+is multiplexed with a `{ module, type, data }` envelope; each module here owns one `module` name
+and reacts to its `type`s, mirroring a same-named module class on the backend
 (`geo_lib/websocket/modules/*.py`).
 
 Currently registered modules (see `ModuleRegistry.ts`):
@@ -17,12 +17,10 @@ Currently registered modules (see `ModuleRegistry.ts`):
 | `BulkImportJobModule` | `bulk_import_job` | `geo_lib/websocket/modules/bulk_import_job_module.py` |
 | `BulkDeleteJobModule` | `bulk_delete_job` | `geo_lib/websocket/modules/bulk_delete_job_module.py` |
 
-Note: `ImportProcessPage.vue`'s live per-item updates (progress, pages, logs) do **not** go
-through this system. That page opens its own dedicated connection to `/ws/upload/status/:id/`
-via `ImportStatusSocket` (`assets/js/websocket/ImportStatusSocket.ts`), because the backend scopes
-that socket to a single authorized item via the URL rather than multiplexing it over the shared
-per-user connection. `ImportStatusSocket` reuses the same `WebSocketHeartbeat` and mirrors this
-system's reconnect/backoff behavior, but is otherwise a separate, self-contained client.
+`ImportProcessPage.vue` and live-track each construct their own `GeoVaultSocket` for a
+different URL (`/ws/upload/status/:id/` and `/ws/extensions/live-track/trackers-live/`).
+Those sockets share heartbeat, reconnect, and handler-map behavior with this connection;
+they do not share the multiplexed module registry.
 
 ## Creating a new module
 
@@ -34,9 +32,7 @@ import { BaseModule } from './BaseModule';
 export class NotificationsModule extends BaseModule {
     readonly moduleName = 'notifications'; // Must match the backend module_name
 
-    initialize(): void {
-        super.initialize();
-
+    protected onInitialize(): void {
         this.subscribe('notification_received', (data) => {
             this.store.dispatch('notifications/addNotification', data);
         });
@@ -65,11 +61,10 @@ registers every class in `MODULE_REGISTRY` automatically; nothing else needs to 
 ## Module lifecycle
 
 1. **Constructor** (`BaseModule`) -- stores the Vuex store reference. `this.socket` is not yet set.
-2. **`initialize()`** -- called once the socket registers the module (immediately if already
-   connected, otherwise on the next `connected` event) and again on every reconnect. Subscribe to
-   events here.
-3. **`cleanup()`** -- called on disconnect. `subscribe`d handlers are dropped automatically when
-   the socket cleans up modules, but override this for any other teardown (timers, etc).
+2. **`initialize()`** -- called once when the socket registers the module. It invokes
+   `onInitialize()` exactly once; subscribe to events there. Reconnects do not re-run this.
+3. **`cleanup()`** -- called on logout / unregister, not on a transient disconnect. `subscribe`d
+   handlers are unsubscribed here.
 
 ## API available to a module (via `BaseModule`)
 
@@ -79,13 +74,13 @@ registers every class in `MODULE_REGISTRY` automatically; nothing else needs to 
   messages.
 - `this.send(type, data)` -- send `{module: this.moduleName, type, data}` to the server.
 - `this.requestRefresh()` -- shorthand for `send('refresh')`.
-- `this.socket` -- the underlying `RealtimeSocket` (typed as `RealtimeSocketLike`). Use this
+- `this.socket` -- the realtime facade (typed as `RealtimeSocketLike`). Use this
   directly only for cross-module operations, e.g. `ProcessJobModule` calls
   `this.socket.requestRefresh('import_queue')` because it has no state of its own to refresh.
 
 ## Best practices
 
-1. Always call `super.initialize()` / `super.cleanup()` when overriding them.
+1. Override `onInitialize()` (not `initialize()`) to subscribe. `cleanup()` already unsubscribes.
 2. Only `dispatch` Vuex actions from a module; let the target store module decide how to mutate
    its own state.
 3. If a status event doesn't carry enough data to patch a single row (e.g. the server-computed

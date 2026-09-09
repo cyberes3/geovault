@@ -270,7 +270,6 @@ def import_queue(db, user):
         user=user,
         original_filename='test.kml',
         raw_file='<kml></kml>',
-        geofeatures=[]
     )
 
 
@@ -281,8 +280,6 @@ def collection(db, user):
         user=user,
         name='Test Collection',
         description='A test collection',
-        tags=['test'],
-        feature_ids=[]
     )
 
 

@@ -15,16 +15,17 @@ export interface RouteWrapperOptions {
     api: ExtensionApi;
     platformState?: PlatformStateBridge;
     router?: unknown;
+    routeName?: string;
     [extraProvideKey: string]: unknown;
 }
 
 export function createRouteWrapper(component: Component, options: RouteWrapperOptions) {
-    const { api, router = null, platformState = null, ...rest } = options;
+    const { api, router = null, platformState = null, routeName = 'default', ...rest } = options;
     const kebabName = api.kebabName;
     const scopeClass = `gv-ext gv-ext-${kebabName}`;
 
     return {
-        name: `ExtensionBoundary_${kebabName}`,
+        name: `ExtensionBoundary_${kebabName}_${routeName}`,
         setup() {
             provide('extensionApi', api);
             provide('extensionRouter', router);

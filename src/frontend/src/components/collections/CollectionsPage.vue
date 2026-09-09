@@ -184,7 +184,8 @@
 <script lang="ts">
 import { defineComponent } from 'vue'
 import { listCollections, deleteCollection as deleteCollectionApi, applyBulkOperationsToCollection as applyBulkOperationsToCollectionApi, type Collection } from "@/api/services/collectionsApi";
-import { getApiErrorMessage } from "@/utils/apiError";
+import { getApiErrorMessage, toastApiError } from "@/utils/apiError";
+import { downloadKmz } from "@/utils/sharing/downloadKmz";
 import CollectionDialog from "./CollectionDialog.vue";
 import ShareDialog from "@/components/parts/ShareDialog.vue";
 import Loader from "../parts/Loader.vue";
@@ -298,8 +299,9 @@ export default defineComponent({
       this.selectedCollectionForShare = null;
     },
     downloadCollectionKmz(collection: Collection) {
-      const url = `/api/export-kmz?collection=${collection.id}`;
-      window.open(url, '_blank');
+      void downloadKmz({ collection: String(collection.id) }).catch((error) => {
+        toastApiError(error, 'Failed to download KMZ.');
+      });
     },
     openBulkOperationsModal(collection: Collection) {
       this.bulkOperationsSelectedCollectionId = collection.id;

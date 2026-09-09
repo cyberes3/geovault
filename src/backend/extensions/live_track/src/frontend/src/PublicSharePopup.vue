@@ -46,7 +46,7 @@ import BaseButton from 'platform/components/parts/BaseButton.vue';
 import Loader from 'platform/components/parts/Loader.vue';
 import { buildTrackerSharingPayload } from './settingsPayloadBuilders';
 import type { LiveTrack } from './types/track';
-import type { ExtensionApi } from './types/extension-api';
+import type { ExtensionApi } from '@geovault/extension-sdk';
 
 interface Subscriber {
   id: string | number;

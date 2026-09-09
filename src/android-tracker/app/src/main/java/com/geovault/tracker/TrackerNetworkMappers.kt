@@ -37,13 +37,6 @@ fun TrackerDto.toDomainModel(): Tracker {
 
 fun List<TrackerDto>.toDomainModels(): List<Tracker> = map { it.toDomainModel() }
 
-fun TrackerCoordinatesResponseDto.toDomainModel(): TrackerCoordinatesResponse {
-    return TrackerCoordinatesResponse(
-        coordinates = coordinates,
-        point_params = point_params
-    )
-}
-
 private fun TrackerGeometryStatusDto.toDomainModel(): TrackerGeometryStatus {
     return TrackerGeometryStatus(
         window = window ?: "all",

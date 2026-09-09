@@ -65,7 +65,7 @@
         :class="{ 'bg-gray-100': !isOwner }"
         @change="$emit('update:recentDataWindow', ($event.target as HTMLSelectElement).value)"
       >
-        <option value="">All History</option>
+        <option value="all">All History</option>
         <option value="1min">Last Minute</option>
         <option value="1h">Last Hour</option>
         <option value="1d">Last Day</option>
@@ -143,7 +143,7 @@ export default defineComponent({
     track: { type: Object as PropType<LiveTrack | null>, default: null },
     name: { type: String, default: '' },
     color: { type: String, default: '#6C93DE' },
-    recentDataWindow: { type: String, default: '' },
+    recentDataWindow: { type: String, default: 'all' },
     visibility: { type: String as PropType<TrackVisibility>, default: 'private' },
     shareParamsWithRecipients: { type: Boolean, default: false },
     sharedWithEmails: { type: Array as PropType<string[]>, default: () => [] },
@@ -191,8 +191,8 @@ export default defineComponent({
       loadingUsers.value = true;
       try {
         const res = await fetch('/api/users/', { credentials: 'include' });
-        const data = (await res.json()) as { users?: AvailableUser[] } | null;
-        availableUsers.value = Array.isArray(data?.users) ? data.users : [];
+        const data = await res.json();
+        availableUsers.value = Array.isArray(data?.items) ? data.items as AvailableUser[] : [];
       } catch {
         availableUsers.value = [];
       } finally {

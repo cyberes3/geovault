@@ -8,7 +8,8 @@ from urllib.parse import urlencode
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 
-from extensions.live_track.src.backend.models import LiveTrack, LiveTrackWorldShare
+from api.sharing.models import ShareLink
+from extensions.live_track.src.backend.models import LiveTrack
 
 from test_api.test_live_track_extension import _patch_live_track_enabled
 
@@ -81,7 +82,7 @@ class TestHaukClientCreatePostStop(TestCase):
         track_name = "Hauk Track"
         track_id, hauk_password = self._create_track_with_hauk_password(name=track_name)
         self.assertFalse(
-            LiveTrackWorldShare.objects.filter(track_id=track_id).exists(),
+            ShareLink.objects.for_track(track_id).world().exists(),
             "Hauk create must not auto-create a world share row",
         )
         form = _hauk_create_form(self.user.email, hauk_password, dur=120, interval=10)
@@ -109,7 +110,7 @@ class TestHaukClientCreatePostStop(TestCase):
         )
         self.assertEqual(view_id, track_name)
         self.assertFalse(
-            LiveTrackWorldShare.objects.filter(track_id=track_id).exists(),
+            ShareLink.objects.for_track(track_id).world().exists(),
             "Hauk create must not create LiveTrackWorldShare",
         )
 
@@ -129,7 +130,7 @@ class TestHaukClientCreatePostStop(TestCase):
         view_url = _parse_hauk_lines(response)[2]
         self.assertEqual(view_url, "https://public.example.test/")
         self.assertNotIn("172.0.2.102", view_url)
-        self.assertFalse(LiveTrackWorldShare.objects.filter(track_id=track_id).exists())
+        self.assertFalse(ShareLink.objects.for_track(track_id).world().exists())
 
     def test_hauk_create_wrong_password_returns_401(self):
         """POST api/create.php with wrong pwd returns 401 and 'Incorrect password'."""

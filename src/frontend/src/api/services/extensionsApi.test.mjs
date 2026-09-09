@@ -13,7 +13,7 @@ test.after(() => {
 });
 
 test('listExtensions only hits the network once across repeated sequential calls', async () => {
-  const get = mock.method(httpClient, 'get', () => Promise.resolve({ data: [{ name: 'places' }] }));
+  const get = mock.method(httpClient, 'get', () => Promise.resolve({ data: { items: [{ name: 'places' }], page: 1, page_size: 1, total_items: 1, total_pages: 1 } }));
 
   const first = await listExtensions();
   const second = await listExtensions();
@@ -34,7 +34,7 @@ test('listExtensions only hits the network once across overlapping concurrent ca
   const call2 = listExtensions();
   const call3 = listExtensions();
 
-  resolveRequest({ data: [{ name: 'caltopo' }] });
+  resolveRequest({ data: { items: [{ name: 'caltopo' }], page: 1, page_size: 1, total_items: 1, total_pages: 1 } });
   const results = await Promise.all([call1, call2, call3]);
 
   assert.equal(get.mock.callCount(), 1);
@@ -44,7 +44,7 @@ test('listExtensions only hits the network once across overlapping concurrent ca
   get.mock.restore();
 });
 
-test('listExtensions caches an empty list (and does not retry) after a failed request', async () => {
+test('listExtensions does not cache an empty list after a failed request', async () => {
   const get = mock.method(httpClient, 'get', () => Promise.reject(new Error('network down')));
 
   const first = await listExtensions();
@@ -52,12 +52,24 @@ test('listExtensions caches an empty list (and does not retry) after a failed re
 
   assert.deepEqual(first, []);
   assert.deepEqual(second, []);
-  assert.equal(get.mock.callCount(), 1);
+  assert.equal(get.mock.callCount(), 2);
+  get.mock.restore();
+});
+
+test('listExtensions does not cache a successful empty catalog', async () => {
+  const get = mock.method(httpClient, 'get', () => Promise.resolve({ data: { items: [], page: 1, page_size: 1, total_items: 0, total_pages: 0 } }));
+
+  const first = await listExtensions();
+  const second = await listExtensions();
+
+  assert.deepEqual(first, []);
+  assert.deepEqual(second, []);
+  assert.equal(get.mock.callCount(), 2);
   get.mock.restore();
 });
 
 test('clearExtensionsCache forces the next call to hit the network again', async () => {
-  const get = mock.method(httpClient, 'get', () => Promise.resolve({ data: [{ name: 'places' }] }));
+  const get = mock.method(httpClient, 'get', () => Promise.resolve({ data: { items: [{ name: 'places' }], page: 1, page_size: 1, total_items: 1, total_pages: 1 } }));
 
   await listExtensions();
   clearExtensionsCache();

@@ -445,11 +445,7 @@ class TestCalTopoViews(TestCase):
         data = response.json()
         self.assertTrue(data['imported'])
         
-        # Verify feature was created
         feature = FeatureStore.objects.get(user=self.user)
-        self.assertEqual(feature.geojson['properties']['caltopo_feature_id'], 'feature1')
-        
-        # Verify mapping was updated
         caltopo_user.refresh_from_db()
         self.assertEqual(caltopo_user.imported_features['map1']['feature1'], feature.id)
     
@@ -470,7 +466,8 @@ class TestCalTopoViews(TestCase):
         
         self.assertEqual(response.status_code, 400)
         data = response.json()
-        self.assertIn('Invalid feature_class', data['error'])
+        fields = (data.get('details') or {}).get('fields') or {}
+        self.assertIn('feature_class', fields)
     
     def test_import_feature_rejects_invalid_feature_class(self):
         """Test POST /api/extensions/caltopo/import/feature/ rejects invalid feature_class."""
@@ -489,7 +486,8 @@ class TestCalTopoViews(TestCase):
         
         self.assertEqual(response.status_code, 400)
         data = response.json()
-        self.assertIn('Invalid feature_class', data['error'])
+        fields = (data.get('details') or {}).get('fields') or {}
+        self.assertIn('feature_class', fields)
     
     @patch('extensions.caltopo.src.backend.views.single_import.get_feature')
     @patch('extensions.caltopo.src.backend.views.single_import.convert_caltopo_to_geojson')
@@ -600,8 +598,7 @@ class TestCalTopoViews(TestCase):
     
     @patch('extensions.caltopo.src.backend.views.single_import.get_feature')
     @patch('extensions.caltopo.src.backend.views.single_import.convert_caltopo_to_geojson')
-    @patch('geo_lib.processing.duplicate_detection.find._find_hash_duplicates')
-    def test_import_feature_includes_duplicate_warnings(self, mock_hash_dups, mock_convert, mock_get_feature):
+    def test_import_feature_includes_duplicate_warnings(self, mock_convert, mock_get_feature):
         """Test POST /api/extensions/caltopo/import/feature/ includes duplicate warnings in response."""
         CalTopoUser.objects.create(
             user=self.user,
@@ -640,11 +637,6 @@ class TestCalTopoViews(TestCase):
             }
         }
         mock_convert.return_value = geojson_feature
-        
-        # Mock duplicate detection to return a duplicate
-        mock_hash_dups.return_value = [{
-            'existing_features': [{'id': 1, 'geojson': {'properties': {'name': 'Existing Feature'}}}]
-        }]
         
         response = self.client.post('/api/extensions/caltopo/import/feature/', {
             'map_id': 'map1',
@@ -703,7 +695,7 @@ class TestCalTopoViews(TestCase):
     @patch('extensions.caltopo.src.backend.views.single_import.get_feature')
     @patch('extensions.caltopo.src.backend.views.single_import.convert_caltopo_to_geojson')
     def test_import_feature_preserves_caltopo_metadata(self, mock_convert, mock_get_feature):
-        """Test POST /api/extensions/caltopo/import/feature/ preserves CalTopo metadata in geojson properties."""
+        """CalTopo ids are stashed by ImportProvider, not leftover geojson properties."""
         CalTopoUser.objects.create(
             user=self.user,
             account_id='abc123',
@@ -738,12 +730,9 @@ class TestCalTopoViews(TestCase):
         
         self.assertEqual(response.status_code, 201)
         
-        # Verify metadata is preserved
         feature = FeatureStore.objects.get(user=self.user)
-        props = feature.geojson['properties']
-        self.assertEqual(props['caltopo_map_id'], 'map1')
-        self.assertEqual(props['caltopo_feature_id'], 'feature1')
-        self.assertEqual(props['caltopo_feature_class'], 'Marker')
+        caltopo_user = CalTopoUser.objects.get(user=self.user)
+        self.assertEqual(caltopo_user.imported_features['map1']['feature1'], feature.id)
     
     @patch('extensions.caltopo.src.backend.views.map_import.get_map_features')
     @patch('extensions.caltopo.src.backend.views.map_import.convert_caltopo_to_geojson')

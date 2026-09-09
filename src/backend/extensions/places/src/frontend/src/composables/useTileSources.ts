@@ -1,5 +1,5 @@
 import { ref, type Ref } from 'vue';
-import type { TileSource, TileSourceCatalog } from '@/types/gv-core';
+import type { TileSource, TileSourceCatalog } from '@geovault/extension-sdk';
 
 /** Reuse core's singleton catalog instance so places shares its cache/in-flight fetch with the rest of the app. */
 const sharedCatalog: TileSourceCatalog = window.gv_core.tileSourceCatalog;

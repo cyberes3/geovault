@@ -31,14 +31,18 @@ class SuperuserOnlyAdminSite(AdminSite):
 
 admin.site.__class__ = SuperuserOnlyAdminSite
 from website.exception_handler import custom_exception_handler
-from website.map_share_social.views import map_share_social_page, map_share_social_preview_image
+from website.map_share_social.views import (
+    map_share_social_page,
+    map_share_social_preview_image,
+    track_share_social_page,
+)
 from website.views import index
 
 def well_known_routing(request, path):
     """
     Dynamic routing for /.well-known/ items registered by extensions.
     """
-    from website.extensions.extension_hooks import get_well_known_callback
+    from website.extensions.capabilities import get_well_known_callback
     callback = get_well_known_callback(path)
     if callback:
         return callback(request)
@@ -47,56 +51,13 @@ def well_known_routing(request, path):
 # Set custom exception handler
 handler500 = custom_exception_handler
 
-import os
-from pathlib import Path
+from website.extensions.static_bundle import ExtensionStaticBundle
 
-from django.views.static import serve
-from django.conf import settings
+_extension_static = ExtensionStaticBundle()
 
-from geo_lib.utils.secure_path import is_path_under_base, secure_path
-from website.settings import EXTENSIONS_DIR
 
 def serve_extension_static(request, path, **kwargs):
-    """
-    Custom static server that maps hyphenated URL segments to underscored directories.
-    Example: extensions/static/example-extension/ -> extensions/example_extension/
-    """
-    import logging
-    logger = logging.getLogger('django')
-
-    ext_folder = None
-    parts = path.split('/', 1)
-    if parts:
-        ext_folder = parts[0].replace('-', '_')
-        if len(parts) > 1:
-            path = os.path.join(ext_folder, parts[1])
-        else:
-            path = ext_folder
-
-    path = secure_path(path)
-
-    extensions_base = Path(EXTENSIONS_DIR)
-    try:
-        candidate = (extensions_base / path).resolve()
-    except (OSError, RuntimeError):
-        return HttpResponse(status=404)
-    if not is_path_under_base(candidate, extensions_base):
-        return HttpResponse(status=404)
-    if ext_folder is not None:
-        extension_base = extensions_base / ext_folder
-        if not is_path_under_base(candidate, extension_base):
-            return HttpResponse(status=404)
-
-    logger.debug(f"Extension static serving: {path} (root: {EXTENSIONS_DIR})")
-    kwargs['document_root'] = EXTENSIONS_DIR
-    response = serve(request, path, **kwargs)
-    if response.status_code == 200:
-        if settings.DEBUG:
-            # In dev, avoid long cache so rebuilt extension assets are picked up without restart
-            response['Cache-Control'] = 'no-cache, must-revalidate'
-        else:
-            response['Cache-Control'] = 'public, max-age=31536000, immutable'
-    return response
+    return _extension_static.serve(request, path, **kwargs)
 
 urlpatterns = [
     path('', index, name='index'),  # Root route
@@ -110,6 +71,7 @@ urlpatterns = [
     path('api/', include("api.urls")),
     path('share/map/<str:share_id>/', map_share_social_page, name='map_share_social_page'),
     path('share/map/<str:share_id>/preview.png', map_share_social_preview_image, name='map_share_social_preview_image'),
+    path('share/track/<str:share_id>/', track_share_social_page, name='track_share_social_page'),
     re_path(r'^extensions/static/(?P<path>.*)$', serve_extension_static),
     # Catch-all route for Vue.js router (must be last)
     # Serves index.html for any route that doesn't match above patterns

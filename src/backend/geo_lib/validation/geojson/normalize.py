@@ -1,5 +1,6 @@
 from typing import Dict, Any
 
+from geo_lib.types.feature_properties import ingest_icon_properties
 from geo_lib.validation.geojson.models import PropertiesModel
 from geo_lib.validation.styling_validation import normalize_feature_colors_and_styles
 
@@ -44,6 +45,8 @@ def _normalize_properties(feature: Dict[str, Any]) -> Dict[str, Any]:
         Normalized properties with only whitelisted keys and normalized styles
     """
     properties = feature.get('properties', {})
+    if isinstance(properties, dict):
+        properties = ingest_icon_properties(dict(properties))
     geometry = feature.get('geometry', {})
 
     # Validate with Pydantic - this automatically filters out extra fields

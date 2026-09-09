@@ -2,7 +2,6 @@
   <div class="w-full h-full flex">
     <!-- Left Sidebar - Feature List -->
     <FeatureListSidebar
-        :key="sidebarKey"
         :available-tags="availableTags"
         :class="['transition-opacity duration-300', (publicShareError || loadError) ? 'opacity-50 pointer-events-none' : 'opacity-100']"
         :features="featuresInExtent"
@@ -17,7 +16,6 @@
         @feature-hover="handleFeatureListHover"
         @tag-filter-change="handleTagFilterChange"
         @tag-filter-loading-change="isDataLoading = $event"
-        @tag-filter-start="handleTagFilterStart"
         @reverse_geocoding-result-click="handleReverseGeocodingResultClick"
         @reverse_geocoding-clear="clearGeocodingMarker"
     />
@@ -102,26 +100,17 @@
 
         <!-- Feature Info Box or Edit Box -->
         <FeatureInfoBox
-            v-if="!isEditingFeature && !isPublicShareMode && !showElevationProfile"
+            v-if="selectedFeature && !isEditingFeature && !showElevationProfile"
             :feature="selectedFeature ?? undefined"
+            :show-download-button="!isPublicShareMode || !!(publicShareInfo && publicShareInfo.allow_downloads)"
+            :show-edit-button="!isPublicShareMode"
+            :show-share-button="!isPublicShareMode"
             @close="selectedFeature = null"
             @download="handleDownloadFeatureKmz"
             @edit="handleEditFeature"
             @zoom="zoomToFeature(selectedFeature)"
             @show-profile="showElevationProfile = true"
             @share="handleShareFeature"
-        />
-        <FeatureInfoBox
-            v-if="!isEditingFeature && isPublicShareMode && !showElevationProfile"
-            :feature="selectedFeature ?? undefined"
-            :share-id="shareId ?? undefined"
-            :show-download-button="!!(publicShareInfo && publicShareInfo.allow_downloads)"
-            :show-edit-button="false"
-            :show-share-button="false"
-            @close="selectedFeature = null"
-            @download="handleDownloadFeatureKmz"
-            @zoom="zoomToFeature(selectedFeature)"
-            @show-profile="showElevationProfile = true"
         />
         <FeatureEditBox
             v-if="isEditingFeature && !isPublicShareMode"
@@ -140,8 +129,8 @@
         <ElevationProfileDialog
             v-if="showElevationProfile"
             :feature="selectedFeature"
-            :share-id="isPublicShareMode && publicShareInfo && publicShareInfo.share_type === 'feature' ? shareId : null"
-            :is-public-share="isPublicShareMode && publicShareInfo && publicShareInfo.share_type === 'feature'"
+            :share-id="isPublicShareMode ? shareId : null"
+            :is-public-share="isPublicShareMode"
             @close="handleElevationProfileClose"
             @hover-point="handleHoverPoint"
             @hover-clear="handleHoverClear"
@@ -226,9 +215,9 @@
  * alive via `<keep-alive>` and those hooks do not fire on `activated`/`deactivated`).
  */
 import { computed, defineAsyncComponent, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch, type Component } from 'vue';
+defineOptions({ name: 'Map' });
 import { useRoute, useRouter } from 'vue-router';
 import { useStore } from 'vuex';
-import type { GeoJSONSource } from 'maplibre-gl';
 import type { RootState } from '@/assets/js/store';
 import type { UserInfo } from '@/assets/js/types/store-types';
 
@@ -259,9 +248,12 @@ import { useFeatureSelection } from '@/composables/useFeatureSelection';
 import { useMapShare } from '@/composables/useMapShare';
 import { useCollectionTagFilters } from '@/composables/useCollectionTagFilters';
 import { useMapGeolocation, type GeocodingResult } from '@/composables/useMapGeolocation';
-import type { LoadContext, LoadContextType, MapUserSettings, MapViewContext } from '@/composables/mapPageTypes';
+import type { MapUserSettings, MapViewContext } from '@/composables/mapPageTypes';
 import type { HiddenFeature } from '@/assets/js/store/modules/userSettings';
 import type { GeoJsonFeature } from '@/types/geospatial';
+import { MapSession } from '@/utils/map/session/MapSession';
+import type { MapRouteLocation } from '@/utils/map/session/types';
+import { settingsReady } from '@/utils/settings/SettingsReady';
 
 /** Narrow view of root getters this component reads by namespaced key. */
 interface RootGetters {
@@ -275,17 +267,13 @@ const router = useRouter();
 const store = useStore<RootState>();
 const getters = computed(() => store.getters as RootGetters);
 
-const sidebarKey = ref(0);
 const activeMobileSidebar = ref<'features' | 'controls' | null>(null);
 const showQuickPointDialog = ref(false);
+const isMobile = ref(typeof window !== 'undefined' && window.innerWidth < 768);
 
-/**
- * The terrain tooltip text branches on `isMobile`, but no component state actually tracks device
- * type here (the only other `isMobile` in this file is an unrelated local inside `zoomToFeature`),
- * so the tooltip always renders its "mouse button" wording. Hardcoded to `false` rather than wired
- * to a real mobile check, to avoid changing the tooltip's current behavior.
- */
-const isMobile = false;
+function syncIsMobile(): void {
+    isMobile.value = window.innerWidth < 768;
+}
 
 const isMainMapRoute = computed(() => {
     const hasCollection = !!route.query.collection;
@@ -314,24 +302,8 @@ function getUserMapSettings(): MapUserSettings {
     return settings?.map ?? {};
 }
 
-/**
- * Wait briefly for `App.vue`'s `userSettings/fetchUserSettings` dispatch to resolve (or dispatch
- * it once ourselves if it still hasn't), so `fetchTileSources()` reads the real default basemap
- * instead of racing `App.vue` and falling back to the first tile source. Mirrors the Places
- * extension's `ensureUserSettingsLoaded` (`placesMapSettings.js`).
- */
-function hasUserSettingsLoaded(): boolean {
-    return getters.value['userSettings/userSettings'] != null;
-}
-
-async function ensureUserMapSettingsLoaded(waitMs = 3000, pollMs = 50): Promise<void> {
-    if (hasUserSettingsLoaded()) return;
-    const deadline = Date.now() + waitMs;
-    while (!hasUserSettingsLoaded() && Date.now() < deadline) {
-        await new Promise((resolve) => setTimeout(resolve, pollMs));
-    }
-    if (hasUserSettingsLoaded()) return;
-    await store.dispatch('userSettings/fetchUserSettings');
+async function ensureUserMapSettingsLoaded(): Promise<void> {
+    await settingsReady.awaitReady(() => store.dispatch('userSettings/fetchUserSettings'));
 }
 
 /*
@@ -351,6 +323,35 @@ let collectionTagFilters!: ReturnType<typeof useCollectionTagFilters>;
 // eslint-disable-next-line prefer-const -- forward reference: assigned once, below, after the composables that capture it by closure
 let mapGeolocation!: ReturnType<typeof useMapGeolocation>;
 
+function routeLocation(): MapRouteLocation {
+    return { path: route.path, query: route.query as MapRouteLocation['query'] };
+}
+
+const mapSession = new MapSession({
+    getContainer: () => (mapContainer.value instanceof HTMLElement ? mapContainer.value : null),
+    getAntialias: () => !!getUserMapSettings().enable_antialias,
+    getDefaultBasemap: () => getUserMapSettings().default_basemap,
+    getHiddenIds: () => hiddenFeatureIds.value,
+    canWrite: () => canManageHiddenFeatures.value,
+    showLabels: () => showAllLabels.value,
+    onMoveOrZoomStart: () => { featureData.cancelPendingBboxQuery(); },
+    onMoveEnd: () => {
+        featureData.debouncedLoadData();
+        featureData.debouncedUpdateFeaturesInExtent();
+    },
+    onZoomEnd: () => {
+        featureData.debouncedLoadData();
+        featureData.debouncedUpdateFeaturesInExtent();
+        void featureData.reprocessFeaturesForZoom();
+        featureData.debouncedUpdateSmallFeatureFlags();
+    },
+    onZoomFrame: () => { featureData.handleZoomUpdate(); },
+    onClick: (event) => { featureSelection.onMapClick(event as never); },
+    onMouseMove: (event) => { featureSelection.onMapMouseMove(event as never); },
+    onMouseOut: () => { featureSelection.onMapMouseOut(); },
+    onWebGlLost: () => { loadError.value = 'The map graphics context was lost. Refresh the page.'; },
+});
+
 const mapShare = useMapShare({
     getSelectedFeature: () => featureSelection.selectedFeature.value,
 });
@@ -359,33 +360,14 @@ const mapShare = useMapShare({
 const canManageHiddenFeatures = computed(() => isMainMapRoute.value && !mapShare.isPublicShareMode.value && !!getters.value['auth/userInfo']);
 
 const mapInit = useMapInitialization({
+    runtime: mapSession.runtime,
     getEnableAntialias: () => !!getUserMapSettings().enable_antialias,
-    callbacks: {
-        onMoveOrZoomStart: () => { featureData.cancelPendingBboxQuery(); },
-        onMoveEnd: () => {
-            featureData.debouncedLoadData();
-            featureData.debouncedUpdateFeaturesInExtent();
-        },
-        onZoomEnd: () => {
-            featureData.debouncedLoadData();
-            featureData.debouncedUpdateFeaturesInExtent();
-            void featureData.reprocessFeaturesForZoom();
-            featureData.debouncedUpdateSmallFeatureFlags();
-        },
-        onZoomFrame: () => { featureData.handleZoomUpdate(); },
-        onClick: (e) => { featureSelection.onMapClick(e); },
-        onMouseMove: (e) => { featureSelection.onMapMouseMove(e); },
-        onMouseOut: () => { featureSelection.onMapMouseOut(); },
-        isTrackingLocked: () => mapGeolocation.trackingState.value === 'locked',
-        onTrackingUnlock: () => {
-            mapGeolocation.trackingState.value = 'tracking';
-        },
-    },
 });
 
 mapGeolocation = useMapGeolocation({
     map: mapInit.map,
     isMapshareRoute: mapShare.isMapshareRoute,
+    location: mapSession.location,
     navigateAndRefresh: (fn, clear) => featureData.navigateAndRefresh(fn, clear),
 });
 
@@ -400,33 +382,17 @@ featureSelection = useFeatureSelection({
     isPublicShareMode: mapShare.isPublicShareMode,
     shareId: mapShare.shareId,
     canManageHiddenFeatures,
+    mutations: mapSession.mutations,
+    featureSource: mapSession.features,
 });
 
-/** Builds the current load context (default/collection/share_*) from route + share/tag state. */
-function getLoadContext(): LoadContext {
-    if (mapShare.isPublicShareMode.value && mapShare.shareId.value) {
-        const shareInfo = mapShare.publicShareInfo.value;
-        if (shareInfo?.share_id === mapShare.shareId.value) {
-            return {
-                type: `share_${shareInfo.share_type}` as LoadContextType,
-                isPublicShare: true,
-                shareId: mapShare.shareId.value,
-                shareInfo,
-            };
-        }
-        return { type: 'share_unknown', isPublicShare: true, shareId: mapShare.shareId.value, shareInfo: null };
+function getSessionLoadContext() {
+    mapSession.filters.applyRoute(routeLocation());
+    const tags = collectionTagFilters.currentTags.value;
+    if (tags?.length) {
+        mapSession.filters.setSidebarTags(tags, collectionTagFilters.currentTagMatchMode.value);
     }
-
-    if (collectionTagFilters.isCollectionMode.value && collectionTagFilters.collectionId.value) {
-        return { type: 'collection', isPublicShare: false, collectionId: collectionTagFilters.collectionId.value };
-    }
-
-    return {
-        type: 'default',
-        isPublicShare: false,
-        tags: collectionTagFilters.currentTags.value,
-        matchMode: collectionTagFilters.currentTagMatchMode.value,
-    };
+    return mapSession.filters.getLoadContext(mapShare.publicShareInfo.value);
 }
 
 featureData = useFeatureData({
@@ -436,7 +402,7 @@ featureData = useFeatureData({
     isMapInitializing: mapInit.isMapInitializing,
     waitForMapEvent: mapInit.waitForMapEvent,
     getUserMapSettings,
-    getLoadContext,
+    getSessionLoadContext,
     ensurePublicShareInfo: mapShare.ensurePublicShareInfo,
     handlePublicShareError: mapShare.handlePublicShareError,
     onAfterFeaturesChanged: () => { featureSelection.updateFeatureHighlighting(); },
@@ -446,6 +412,10 @@ featureData = useFeatureData({
     zoomToTaggedFeatures: (features, options) => collectionTagFilters.zoomToTaggedFeatures(features, options),
     publicShareRefinedFitShareId: mapShare.publicShareRefinedFitShareId,
     isMapshareRoute: mapShare.isMapshareRoute,
+    featureSource: mapSession.features,
+    loadPipeline: mapSession.pipeline,
+    hiddenFeatures: mapSession.hidden,
+    elevations: mapSession.elevations,
 });
 
 collectionTagFilters = useCollectionTagFilters({
@@ -453,44 +423,37 @@ collectionTagFilters = useCollectionTagFilters({
     labelMarkerManager: mapInit.labelMarkerManager,
     isDataLoading: featureData.isDataLoading,
     loadError: featureData.loadError,
-    featuresInExtent: featureData.featuresInExtent,
-    featureCount: featureData.featureCount,
-    cachedGeoJsonData: featureData.cachedGeoJsonData,
     selectedFeature: featureSelection.selectedFeature,
     navigateAndRefresh: featureData.navigateAndRefresh,
     addFeaturesToMap: featureData.addFeaturesToMap,
-    invalidateSourceCache: featureData.invalidateSourceCache,
-    clearLoadedBounds: featureData.clearLoadedBounds,
+    resetFeatureState: featureData.resetFeatureState,
     loadDataForCurrentView: featureData.loadDataForCurrentView,
     waitForMap: mapInit.waitForMap,
-    waitForMapEvent: mapInit.waitForMapEvent,
     zoomToFeature: featureSelection.zoomToFeature,
-    updateFeatureCount: featureData.updateFeatureCount,
-    updateFeaturesInExtent: featureData.updateFeaturesInExtent,
 });
 
 const mapLayers = useMapLayers({
     map: mapInit.map,
     labelMarkerManager: mapInit.labelMarkerManager,
     showAllLabels: mapInit.showAllLabels,
-    createMapInstance: mapInit.createMapInstance,
-    destroyMap: mapInit.destroyMap,
     ensureMapResize: mapInit.ensureMapResize,
-    waitForMapEvent: mapInit.waitForMapEvent,
     updateLayerMaxZoom: mapInit.updateLayerMaxZoom,
     getDefaultBasemap: () => getUserMapSettings().default_basemap,
-    cachedGeoJsonData: featureData.cachedGeoJsonData,
     hasLoadedBounds: featureData.hasLoadedBounds,
     loadDataForCurrentView: featureData.loadDataForCurrentView,
     onAfterFeaturesChanged: () => { featureSelection.updateFeatureHighlighting(); },
     setLoadError: (message) => {
         featureData.loadError.value = message;
     },
+    tiles: mapSession.tiles,
+    runtime: mapSession.runtime,
+    featureSource: mapSession.features,
+    hiddenFeatures: mapSession.hidden,
 });
 
 // --- Flat bindings for template + script-internal use (script setup auto-unwraps top-level refs). ---
 
-const { mapContainer, map, showAllLabels, isMapInitializing, mapWasDestroyed, savedMapCenter, savedMapZoom, savedMapPitch, savedMapBearing, createMapInstance, performMapDestruction, ensureMapResize, waitForElement, updateLayerMaxZoom } =
+const { mapContainer, map, showAllLabels, isMapInitializing, savedMapCenter, savedMapZoom, savedMapPitch, savedMapBearing, createMapInstance, performMapDestruction, ensureMapResize, waitForElement, updateLayerMaxZoom } =
     mapInit;
 
 const {
@@ -502,6 +465,7 @@ const {
     hillshadeEnabled,
     fetchTileSources,
     fetchMaptilerConfig,
+    applyUserTerrainDefaults,
     setupTerrain,
     addHillshadeIfNeeded,
     toggleTerrain,
@@ -548,6 +512,7 @@ const {
     featureToShare,
     handleShareFeature,
     handleCloseFeatureShareDialog,
+    resetForRoute: resetShareForRoute,
 } = mapShare;
 
 const {
@@ -556,14 +521,12 @@ const {
     isCollectionMode,
     collectionName,
     isTagFilterActive,
-    tagFilteredFeatures,
     currentTags,
     availableTags,
     fetchAvailableTags,
     handleCollectionFilter,
     handleUrlTag,
     handleTagFilterChange,
-    filterExistingFeaturesByTags,
 } = collectionTagFilters;
 
 const { userLocation, trackingState, getUserLocation, centerToHomeExtent, toggleLocationTracking, handleGeocodingResult, clearGeocodingMarker } = mapGeolocation;
@@ -634,15 +597,6 @@ async function handleEditBoxVisibilityChange(payload: { featureId?: string | num
 
 async function handleLabelsVisibilityChange(showLabels: boolean): Promise<void> {
     await mapLayers.handleLabelsVisibilityChange(showLabels, featureData.clearLoadedBounds);
-}
-
-/**
- * `FeatureListSidebar`'s `tag-filter-start` emits with no payload (it signals "the user is about
- * to change the tag filter", not "here are the new tags") - the tags to pre-filter with are our
- * own `currentTags` state, already updated via `tag-filter-change` by the time this fires.
- */
-function handleTagFilterStart(): void {
-    filterExistingFeaturesByTags(currentTags.value);
 }
 
 /** `FeatureListSidebar` types this emit as `unknown` since the geocoding result shape is search-provider-specific. */
@@ -720,108 +674,102 @@ function logMapState(): void {
     });
 }
 
-/** Full destruction used when navigating away (keep-alive `deactivated`): saves camera state, clears feature state, cancels in-flight work. */
+/** Keep-alive leave: stop GPS and in-flight loads, save camera, keep FeatureSource + map. */
 function cleanupOnNavigateAway(): void {
-    const source: GeoJSONSource | undefined = map.value?.getSource('geojson-data');
-    source?.setData({ type: 'FeatureCollection', features: [] });
+    mapSession.deactivate();
+    mapGeolocation.cleanup();
+    featureData.cancelPendingRequests();
+    handleHoverClear();
+    if (map.value) {
+        mapInit.savedMapCenter.value = map.value.getCenter();
+        mapInit.savedMapZoom.value = map.value.getZoom();
+        mapInit.savedMapPitch.value = map.value.getPitch();
+        mapInit.savedMapBearing.value = map.value.getBearing();
+    }
+}
 
-    featuresInExtent.value = [];
-    featureData.clearLoadedBounds();
+function resetUiForRoute(): void {
     selectedFeature.value = null;
     isEditingFeature.value = false;
     showElevationProfile.value = false;
-
-    featureData.cancelPendingRequests();
-    handleHoverClear();
-
-    performMapDestruction();
-
-    featureCount.value = 0;
+    showFeaturePopup.value = false;
+    overlappingFeatures.value = [];
+    showQuickPointDialog.value = false;
+    activeMobileSidebar.value = null;
 }
 
-/** Re-create the map after a keep-alive `deactivated` destroyed it, restoring camera/layer/terrain/data state. */
-async function restoreMap(): Promise<void> {
-    if (map.value) return;
-
-    featureData.mainMapExtentHintRequested.value = false;
-    isMapInitializing.value = true;
-    isDataLoading.value = true;
-
-    await nextTick();
-
-    try {
-        await waitForElement(mapContainer);
-    } catch (error) {
-        console.error('Map container not available for restore:', error instanceof Error ? error.message : error);
-        isMapInitializing.value = false;
-        isDataLoading.value = false;
+async function loadRouteData(): Promise<void> {
+    if (route.path === '/mapshare' && !route.query.id) {
+        mapShare.handlePublicShareError('This share link is missing an id.');
         return;
     }
-
-    try {
-        if (!isMapshareRoute.value && getters.value['auth/userInfo']) {
-            await ensureUserMapSettingsLoaded();
-        }
-
-        if (getters.value['auth/userInfo']) {
-            await fetchAvailableTags();
-        }
-
-        const skipUrlDrivenCamera = !!collectionId.value || !!route.query.featureId || !!route.query.tag;
-
-        let mapConfig;
-        if (savedMapCenter.value && savedMapZoom.value !== null) {
-            mapConfig = {
-                center: [savedMapCenter.value.lng, savedMapCenter.value.lat] as [number, number],
-                zoom: savedMapZoom.value,
-                pitch: savedMapPitch.value ?? 0,
-                bearing: savedMapBearing.value ?? 0,
-            };
-        } else {
-            mapConfig = { ...getInitialCameraConfig(skipUrlDrivenCamera), pitch: 0, bearing: 0 };
-        }
-
-        const initialTileSource = tileSources.value.find((s) => s.id === selectedLayer.value);
-        await createMapInstance({ ...mapConfig, style: resolveMapStyle(initialTileSource) });
-
-        await new Promise<void>((resolve) => {
-            if (map.value?.loaded()) {
-                resolve();
-            } else {
-                void map.value?.once('load', () => { resolve(); });
-            }
-        });
-
-        applyPostLoadMaxZoom();
-
-        if (terrainEnabled.value && maptilerConfig.value?.isAvailable()) {
-            await setupTerrain();
-        }
-
-        if (hillshadeEnabled.value && maptilerConfig.value?.isAvailable()) {
-            addHillshadeIfNeeded();
-        }
-
-        if (!savedMapCenter.value) {
-            featureData.syncPendingExtentFitWithoutGeolocation(skipUrlDrivenCamera);
-        } else {
-            featureData.pendingExtentFitWithoutGeolocation.value = false;
-        }
-
-        if (collectionId.value) {
-            await handleCollectionFilter(collectionId.value);
-        } else {
-            await featureData.loadDataForCurrentView();
-        }
-
-        ensureMapResize();
-        featureData.updateFeaturesInExtent();
-    } catch (error) {
-        console.error('Error restoring map:', error);
-        loadError.value = error instanceof Error ? error.message : 'Failed to restore map';
-    } finally {
-        isMapInitializing.value = false;
+    if (collectionId.value) {
+        await handleCollectionFilter(collectionId.value);
+        return;
     }
+    if (route.query.featureId) {
+        await handleUrlFeatureId();
+        return;
+    }
+    if (route.query.tag) {
+        isTagFilterActive.value = true;
+        await handleUrlTag();
+        return;
+    }
+    await featureData.loadDataForCurrentView();
+}
+
+async function recreateMapIfMissing(): Promise<void> {
+    if (map.value) return;
+    isMapInitializing.value = true;
+    await nextTick();
+    await waitForElement(mapContainer);
+    const skipUrlDrivenCamera = mapSession.filters.isUrlDrivenCamera;
+    let mapConfig;
+    if (savedMapCenter.value && savedMapZoom.value !== null) {
+        mapConfig = {
+            center: [savedMapCenter.value.lng, savedMapCenter.value.lat] as [number, number],
+            zoom: savedMapZoom.value,
+            pitch: savedMapPitch.value ?? 0,
+            bearing: savedMapBearing.value ?? 0,
+        };
+    } else {
+        mapConfig = { ...getInitialCameraConfig(skipUrlDrivenCamera), pitch: 0, bearing: 0 };
+    }
+    const initialTileSource = tileSources.value.find((s) => s.id === selectedLayer.value);
+    await createMapInstance({ ...mapConfig, style: resolveMapStyle(initialTileSource) });
+    applyPostLoadMaxZoom();
+    if (terrainEnabled.value && maptilerConfig.value?.isAvailable()) {
+        await setupTerrain();
+    }
+    if (hillshadeEnabled.value && maptilerConfig.value?.isAvailable()) {
+        addHillshadeIfNeeded();
+    }
+    isMapInitializing.value = false;
+}
+
+async function handleKeepAliveActivate(): Promise<void> {
+    const action = await mapSession.activate(routeLocation());
+    if (action === 'restore') {
+        ensureMapResize();
+        mapSession.features.commit(mapSession.hidden);
+        featureData.updateFeaturesInExtent();
+        return;
+    }
+    if (action === 'reload') {
+        ensureMapResize();
+        featureData.clearLoadedBounds();
+        mapSession.cache.clear();
+        await featureData.loadDataForCurrentView({ force: true });
+        return;
+    }
+    resetUiForRoute();
+    featureData.resetFeatureState();
+    resetShareForRoute();
+    await recreateMapIfMissing();
+    await loadRouteData();
+    ensureMapResize();
+    featureData.updateFeaturesInExtent();
 }
 
 let handleKeyDown: ((event: KeyboardEvent) => void) | null = null;
@@ -829,16 +777,37 @@ let handleKeyDown: ((event: KeyboardEvent) => void) | null = null;
 onMounted(async () => {
     isMapInitializing.value = true;
     isDataLoading.value = true;
+    window.addEventListener('resize', syncIsMobile);
 
     handleKeyDown = (event: KeyboardEvent) => {
-        if (event.key === 'Escape' || event.key === 'Esc') {
-            if (selectedFeature.value && !isEditingFeature.value) {
-                selectedFeature.value = null;
-            }
+        if (event.key !== 'Escape' && event.key !== 'Esc') return;
+        if (isEditingFeature.value) {
+            handleCancelEdit();
+            return;
+        }
+        if (showElevationProfile.value) {
+            showElevationProfile.value = false;
+            return;
+        }
+        if (showFeaturePopup.value) {
+            showFeaturePopup.value = false;
+            return;
+        }
+        if (showQuickPointDialog.value) {
+            showQuickPointDialog.value = false;
+            return;
+        }
+        if (activeMobileSidebar.value) {
+            activeMobileSidebar.value = null;
+            return;
+        }
+        if (selectedFeature.value) {
+            selectedFeature.value = null;
         }
     };
     window.addEventListener('keydown', handleKeyDown);
 
+    await mapSession.activate(routeLocation());
     await nextTick();
 
     try {
@@ -859,13 +828,10 @@ onMounted(async () => {
     const userLocationPromise = isMapshareRoute.value ? Promise.resolve() : getUserLocation();
     const tagsPromise = getters.value['auth/userInfo'] ? fetchAvailableTags() : Promise.resolve();
 
-    const [fetchedTileSources] = await Promise.all([tileSourcesPromise, userLocationPromise, tagsPromise]);
-    await fetchMaptilerConfig(fetchedTileSources);
+    await Promise.all([tileSourcesPromise, userLocationPromise, tagsPromise]);
+    await fetchMaptilerConfig();
 
-    // Everything the initial camera/basemap need (settings, geolocation, tile sources) is
-    // already resolved above, so bake both into map construction instead of birthing the map
-    // at the blank/world-view default and correcting it after 'load'.
-    const skipUrlDrivenCamera = !!collectionId.value || !!route.query.featureId || !!route.query.tag;
+    const skipUrlDrivenCamera = mapSession.filters.isUrlDrivenCamera;
     const initialCamera = getInitialCameraConfig(skipUrlDrivenCamera);
     const initialTileSource = tileSources.value.find((s) => s.id === selectedLayer.value);
     const initialStyle = resolveMapStyle(initialTileSource);
@@ -894,11 +860,10 @@ onMounted(async () => {
     });
 
     const userSettings = getUserMapSettings();
-    const defaultTerrainOn = !!userSettings.enable_3d_terrain;
-    const defaultHillshadeOn = !!userSettings.enable_hillshade;
-
-    terrainEnabled.value = defaultTerrainOn && !!maptilerConfig.value?.isAvailable();
-    hillshadeEnabled.value = defaultHillshadeOn && !!maptilerConfig.value?.isAvailable();
+    applyUserTerrainDefaults(
+        !!userSettings.enable_3d_terrain && !!maptilerConfig.value?.isAvailable(),
+        !!userSettings.enable_hillshade && !!maptilerConfig.value?.isAvailable(),
+    );
 
     applyPostLoadMaxZoom();
 
@@ -910,19 +875,12 @@ onMounted(async () => {
         map.value.setPitch(50);
     }
 
-    featureData.syncPendingExtentFitWithoutGeolocation(skipUrlDrivenCamera);
+    const hasIpHint = !!mapGeolocation.userLocation.value;
+    featureData.syncPendingExtentFitWithoutGeolocation(!hasIpHint && !skipUrlDrivenCamera && !isMapshareRoute.value);
 
-    if (collectionId.value) {
-        await handleCollectionFilter(collectionId.value);
-    } else if (route.query.featureId) {
-        await handleUrlFeatureId();
-    } else if (route.query.tag) {
-        isTagFilterActive.value = true;
-        await handleUrlTag();
-    } else {
-        await featureData.loadDataForCurrentView();
-    }
+    await loadRouteData();
 
+    mapSession.markBooted();
     isMapInitializing.value = false;
     ensureMapResize();
     featureData.updateFeaturesInExtent();
@@ -930,60 +888,8 @@ onMounted(async () => {
 });
 
 onActivated(() => {
-    isDataLoading.value = true;
-
-    const activateSource: GeoJSONSource | undefined = map.value?.getSource('geojson-data');
-    activateSource?.setData({ type: 'FeatureCollection', features: [] });
-    featuresInExtent.value = [];
-    featureData.clearLoadedBounds();
-    selectedFeature.value = null;
-    isEditingFeature.value = false;
-    showElevationProfile.value = false;
-
-    if (!route.query.tag) {
-        isTagFilterActive.value = false;
-        tagFilteredFeatures.value = [];
-    }
-
-    isInitialLoad.value = true;
-    featureData.mainMapExtentHintRequested.value = false;
-
-    sidebarKey.value += 1;
-
-    if (mapWasDestroyed.value) {
-        void restoreMap();
-        mapWasDestroyed.value = false;
-        return;
-    }
-
-    const hasTagQuery = !!route.query.tag;
-    const hasCollectionQuery = !!route.query.collection;
-    const hasFeatureId = !!route.query.featureId;
-
-    if (!map.value) return;
-
-    if (hasCollectionQuery) {
-        void handleCollectionFilter(collectionId.value);
-    } else if (hasFeatureId) {
-        void handleUrlFeatureId();
-    } else if (hasTagQuery) {
-        isTagFilterActive.value = true;
-        void handleUrlTag();
-    } else {
-        const skipUrlDrivenCamera = !!collectionId.value || !!route.query.featureId || !!route.query.tag;
-        featureData.syncPendingExtentFitWithoutGeolocation(skipUrlDrivenCamera);
-        void featureData.loadDataForCurrentView().then(() => {
-            featureData.updateFeaturesInExtent();
-            const resizeWhenIdle = (): void => {
-                void map.value?.once('idle', () => map.value?.resize());
-            };
-            if (map.value?.loaded()) {
-                resizeWhenIdle();
-            } else {
-                void map.value?.once('load', resizeWhenIdle);
-            }
-        });
-    }
+    if (!mapSession.booted) return;
+    void handleKeepAliveActivate();
 });
 
 onDeactivated(() => {
@@ -991,14 +897,14 @@ onDeactivated(() => {
 });
 
 onBeforeUnmount(() => {
+    window.removeEventListener('resize', syncIsMobile);
     if (handleKeyDown) {
         window.removeEventListener('keydown', handleKeyDown);
     }
     mapGeolocation.cleanup();
     performMapDestruction();
+    mapSession.dispose();
 });
-
-// --- Watchers ---
 
 watch(selectedFeature, () => {
     void nextTick(() => {
@@ -1012,67 +918,16 @@ watch(isEditingFeature, () => {
     });
 });
 
-// Handle featureId query parameter changes for subsequent navigations (component already mounted).
 watch(
-    () => route.query.featureId,
-    (newFeatureId, oldFeatureId) => {
-        if (newFeatureId && newFeatureId !== oldFeatureId) {
-            void handleUrlFeatureId();
-        }
-    },
-);
-
-// Handle tag query parameter changes for subsequent navigations (component already mounted).
-watch(
-    () => route.query.tag,
-    (newTag, oldTag) => {
-        const newTagValue = Array.isArray(newTag) ? newTag[0] : newTag;
-        const oldTagValue = Array.isArray(oldTag) ? oldTag[0] : oldTag;
-
-        if (newTagValue && newTagValue !== oldTagValue) {
-            featureData.cancelPendingRequests();
-
-            isCollectionMode.value = false;
-            collectionName.value = null;
-
-            currentTags.value = [newTagValue];
-            isTagFilterActive.value = true;
-
-            sidebarKey.value += 1;
-
-            void nextTick(async () => {
-                await handleUrlTag();
-            });
-        } else if (!newTagValue && oldTagValue) {
-            isTagFilterActive.value = false;
-            currentTags.value = null;
-            featureData.clearLoadedBounds();
-            sidebarKey.value += 1;
-            void featureData.loadDataForCurrentView();
-        }
-    },
-);
-
-// Handle collection query parameter changes for subsequent navigations (component already mounted).
-watch(
-    () => route.query.collection,
-    (newCollectionId, oldCollectionId) => {
-        if (newCollectionId && newCollectionId !== oldCollectionId) {
-            featureData.cancelPendingRequests();
-
-            isTagFilterActive.value = false;
-            currentTags.value = null;
-
-            sidebarKey.value += 1;
-
-            void handleCollectionFilter(newCollectionId as string);
-        } else if (!newCollectionId && oldCollectionId) {
-            isCollectionMode.value = false;
-            collectionName.value = null;
-            featureData.clearLoadedBounds();
-            sidebarKey.value += 1;
-            void featureData.loadDataForCurrentView();
-        }
+    () => [route.path, route.query.id, route.query.collection, route.query.tag, route.query.featureId, route.query.match_mode],
+    async () => {
+        if (!mapSession.booted || !mapSession.active) return;
+        const changed = await mapSession.onRouteChange(routeLocation());
+        if (!changed) return;
+        resetUiForRoute();
+        featureData.resetFeatureState();
+        resetShareForRoute();
+        await loadRouteData();
     },
 );
 </script>

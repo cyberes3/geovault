@@ -30,6 +30,7 @@ export function loadMaplibreGl(): Promise<MaplibreGlModule> {
     ]).then(([mod]) => {
         const maplibregl = (mod as unknown as { default: MaplibreGlModule }).default;
         window.gv_core.maplibre = maplibregl;
+        window.gv_core.map.maplibre = maplibregl;
         window.maplibregl = maplibregl;
         return maplibregl;
     });

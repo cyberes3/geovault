@@ -3,7 +3,6 @@ Ingress endpoints: POST-only, Basic Auth or OAuth, rate limit, insert point by t
 """
 
 import base64
-import bisect
 import secrets
 import struct
 import uuid
@@ -12,7 +11,6 @@ from dataclasses import dataclass
 from typing import Callable, Optional
 
 from django.contrib.auth import get_user_model
-from django.db import transaction
 from django.http import JsonResponse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
@@ -26,9 +24,10 @@ from api.utils.authorization import get_object_or_404_for_user
 from api.utils.responses import error_response
 from api.utils.responses import handle_404
 
-from .helpers import broadcast_track_updated, parse_ingress_body, parse_time_to_ms, queue_broadcast_track_updated
+from .helpers import parse_ingress_body, parse_time_to_ms
 from .models import LiveTrack
 from .validation import LiveTrackIngressBody
+from .writer import append_point_to_track, point_writer
 
 User = get_user_model()
 logger = get_tagged_logger()
@@ -40,57 +39,6 @@ _ingress_rate_limiter = RedisRateLimiter(name='live_track_ingress', limit=1, win
 # Decompressed ingress payloads are small structured points; cap well above any
 # legitimate batch (_MAX_POINTS_PER_PAYLOAD below) to stop decompression-bomb bodies.
 _MAX_DECOMPRESSED_BODY_BYTES = 2 * 1024 * 1024  # 2 MB
-
-
-def _point_identity_key(lon: float, lat: float, timestamp_ms: int) -> tuple[float, float, int]:
-    return (float(lon), float(lat), int(timestamp_ms))
-
-
-def append_point_to_track(track, lat: float, lon: float, timestamp_ms: int, extra: dict | None = None) -> int | None:
-    """
-    Append one point to a track (geometry + point_params), broadcast update. Used by ingress and Hauk post.
-    Returns the index of the inserted point for broadcasting, or None if not found.
-    """
-    extra = extra or {}
-    with transaction.atomic():
-        track_locked = LiveTrack.objects.select_for_update().get(pk=track.id)
-        geom = track_locked.geometry or {"type": "LineString", "coordinates": []}
-        coords = list(geom.get("coordinates") or [])
-        point_params = list(track_locked.point_params or [])
-
-        existing_keys = set()
-        for c in coords:
-            if len(c) < 3:
-                continue
-            existing_keys.add(_point_identity_key(c[0], c[1], c[2]))
-
-        new_point = [lon, lat, timestamp_ms]
-        new_key = _point_identity_key(lon, lat, timestamp_ms)
-        if new_key in existing_keys:
-            return next(
-                (
-                    i
-                    for i, c in enumerate(coords)
-                    if len(c) >= 3 and _point_identity_key(c[0], c[1], c[2]) == new_key
-                ),
-                None,
-            )
-        ts_list = [c[2] for c in coords]
-        idx = bisect.bisect_right(ts_list, timestamp_ms)
-        coords.insert(idx, new_point)
-        point_params.insert(idx, dict(extra))
-
-        track_locked.geometry = {"type": "LineString", "coordinates": coords}
-        track_locked.point_params = point_params
-        track_locked.updated_at = timezone.now()
-        track_locked.save(update_fields=["geometry", "point_params", "updated_at"])
-
-        broadcast_idx = next((i for i, c in enumerate(coords) if c == new_point), None)
-
-    if broadcast_idx is not None:
-        if not queue_broadcast_track_updated(track, new_point, extra, index=broadcast_idx):
-            broadcast_track_updated(track, new_point, extra, index=broadcast_idx)
-    return broadcast_idx
 
 
 def _decode_basic_auth(request):
@@ -505,7 +453,6 @@ def _get_request_body_decompressed(request) -> Optional[bytes]:
 @api_or_login_required_401()
 @handle_404
 @require_http_methods(["POST"])
-@csrf_exempt
 def app_ingress(request):
     body = _get_request_body_decompressed(request)
     if body is None:
@@ -529,53 +476,5 @@ def app_ingress(request):
     if not points:
         return JsonResponse({"ok": True}, status=200)
 
-    with transaction.atomic():
-        track_locked = LiveTrack.objects.select_for_update().get(pk=track.id)
-        geom = track_locked.geometry or {"type": "LineString", "coordinates": []}
-        coords = list(geom.get("coordinates") or [])
-        point_params = list(track_locked.point_params or [])
-
-        ts_list = [c[2] for c in coords]
-        seen_keys = set()
-        for c in coords:
-            if len(c) < 3:
-                continue
-            seen_keys.add(_point_identity_key(c[0], c[1], c[2]))
-        last_inserted_point = None
-        last_inserted_extra = None
-        for point_data in points:
-            new_key = _point_identity_key(point_data["lon"], point_data["lat"], point_data["timestamp"])
-            if new_key in seen_keys:
-                continue
-            new_point = [point_data["lon"], point_data["lat"], point_data["timestamp"]]
-            extra = {k: v for k, v in point_data.items() if k not in ("lat", "lon", "timestamp")}
-
-            idx = bisect.bisect_right(ts_list, point_data["timestamp"])
-            coords.insert(idx, new_point)
-            point_params.insert(idx, extra)
-            ts_list.insert(idx, point_data["timestamp"])
-            seen_keys.add(new_key)
-            last_inserted_point = new_point
-            last_inserted_extra = extra
-
-        if last_inserted_point is None:
-            broadcast_idx = None
-            last_new_point = None
-            last_extra = None
-        else:
-            track_locked.geometry = {"type": "LineString", "coordinates": coords}
-            track_locked.point_params = point_params
-            track_locked.updated_at = timezone.now()
-            track_locked.save(update_fields=["geometry", "point_params", "updated_at"])
-            last_new_point = last_inserted_point
-            last_extra = last_inserted_extra or {}
-            try:
-                broadcast_idx = coords.index(last_new_point)
-            except ValueError:
-                broadcast_idx = None
-
-    if broadcast_idx is not None and last_new_point is not None and last_extra is not None:
-        if not queue_broadcast_track_updated(track, last_new_point, last_extra, index=broadcast_idx):
-            broadcast_track_updated(track, last_new_point, last_extra, index=broadcast_idx)
-
+    point_writer.append_many(track, points)
     return JsonResponse({"ok": True}, status=200)

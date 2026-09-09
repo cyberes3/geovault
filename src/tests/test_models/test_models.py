@@ -10,9 +10,11 @@ from django.utils import timezone
 import logging
 
 from api.models import (
-    FeatureStore, ImportQueue, Collection, TagShare, CollectionShare,
+    FeatureStore, ImportQueue, Collection, CollectionTagRule,
     UserSettings, DatabaseLogging
 )
+from api.sharing.models import ShareLink
+from geo_lib.sharing.constants import AUDIENCE_WORLD, CAP_ALLOW_DOWNLOADS, CAP_INCLUDE_TAGS, DOMAIN_MAP, KIND_COLLECTION, KIND_TAG
 from users.api_keys import create_user_api_key, validate_api_key
 from users.models import ApiKey, UserProfile
 from geo_lib.feature_id import generate_geojson_hash
@@ -119,7 +121,6 @@ class TestImportQueue(TestCase):
             user=self.user,
             original_filename='test.kml',
             raw_file='<kml></kml>',
-            geofeatures=[]
         )
         self.assertIsNotNone(import_queue.id)
         self.assertEqual(import_queue.user, self.user)
@@ -132,21 +133,19 @@ class TestImportQueue(TestCase):
             user=self.user,
             original_filename='test.kml',
             raw_file='<kml></kml>',
-            geofeatures=[]
         )
         self.assertIsNotNone(import_queue.log_id)
         self.assertIsInstance(import_queue.log_id, uuid.UUID)
 
-    def test_import_queue_duplicate_features(self):
-        """Test storing duplicate features."""
+    def test_import_queue_skip_intent(self):
+        """Test storing SkipIntent on the queue."""
         import_queue = ImportQueue.objects.create(
             user=self.user,
             original_filename='test.kml',
             raw_file='<kml></kml>',
-            geofeatures=[],
-            duplicate_features=[{'id': 1, 'name': 'Duplicate'}]
+            skip_intent={'user_skipped': ['hash1', 'hash2']},
         )
-        self.assertEqual(len(import_queue.duplicate_features), 1)
+        self.assertEqual(import_queue.skip_intent['user_skipped'], ['hash1', 'hash2'])
 
     def test_import_queue_bulk_operations(self):
         """Test storing bulk operations."""
@@ -158,31 +157,18 @@ class TestImportQueue(TestCase):
             user=self.user,
             original_filename='test.kml',
             raw_file='<kml></kml>',
-            geofeatures=[],
             bulk_operations=bulk_ops
         )
         self.assertEqual(import_queue.bulk_operations, bulk_ops)
 
-    def test_import_queue_skipped_feature_ids(self):
-        """Test storing skipped feature IDs."""
-        skipped_ids = ['hash1', 'hash2', 'hash3']
+    def test_import_queue_skip_intent_default(self):
+        """Test skip_intent defaults to an empty dict."""
         import_queue = ImportQueue.objects.create(
-            user=self.user,
-            original_filename='test.kml',
-            raw_file='<kml></kml>',
-            geofeatures=[],
-            skipped_feature_ids=skipped_ids
-        )
-        self.assertEqual(import_queue.skipped_feature_ids, skipped_ids)
-        
-        # Test default is empty list
-        import_queue2 = ImportQueue.objects.create(
             user=self.user,
             original_filename='test2.kml',
             raw_file='<kml></kml>',
-            geofeatures=[]
         )
-        self.assertEqual(import_queue2.skipped_feature_ids, [])
+        self.assertEqual(import_queue.skip_intent, {})
 
 
 class TestCollection(TestCase):
@@ -202,21 +188,18 @@ class TestCollection(TestCase):
             user=self.user,
             name='Test Collection',
             description='A test collection',
-            tags=['test'],
-            feature_ids=[1, 2, 3]
         )
+        CollectionTagRule.objects.create(collection=collection, tag='test')
         self.assertIsNotNone(collection.id)
         self.assertIsInstance(collection.id, uuid.UUID)
         self.assertEqual(collection.name, 'Test Collection')
-        self.assertEqual(collection.tags, ['test'])
-        self.assertEqual(collection.feature_ids, [1, 2, 3])
+        self.assertEqual(list(collection.tag_rules.values_list('tag', flat=True)), ['test'])
 
     def test_collection_timestamp(self):
         """Test that timestamps are set automatically."""
         collection = Collection.objects.create(
             user=self.user,
             name='Test Collection',
-            tags=[]
         )
         self.assertIsNotNone(collection.created_at)
         self.assertIsNotNone(collection.updated_at)
@@ -226,7 +209,6 @@ class TestCollection(TestCase):
         collection = Collection.objects.create(
             user=self.user,
             name='Test Collection',
-            tags=[]
         )
         original_updated = collection.updated_at
         collection.name = 'Updated Name'
@@ -235,7 +217,7 @@ class TestCollection(TestCase):
 
 
 class TestTagShare(TestCase):
-    """Test TagShare model."""
+    """Test ShareLink for a tag subject."""
 
     def setUp(self):
         """Set up test fixtures."""
@@ -246,26 +228,32 @@ class TestTagShare(TestCase):
         )
 
     def test_create_tag_share(self):
-        """Test creating a TagShare instance."""
-        share_id = str(uuid.uuid4())
-        share = TagShare.objects.create(
-            share_id=share_id,
-            tag='test-tag',
-            user=self.user,
-            allow_downloads=True
+        """Test creating a tag ShareLink."""
+        token = str(uuid.uuid4())
+        share = ShareLink.objects.create(
+            token=token,
+            owner=self.user,
+            domain=DOMAIN_MAP,
+            subject_kind=KIND_TAG,
+            subject_ref='test-tag',
+            audience=AUDIENCE_WORLD,
+            capabilities={CAP_ALLOW_DOWNLOADS: True},
         )
-        self.assertEqual(share.share_id, share_id)
-        self.assertEqual(share.tag, 'test-tag')
-        self.assertEqual(share.user, self.user)
+        self.assertEqual(share.token, token)
+        self.assertEqual(share.subject_ref, 'test-tag')
+        self.assertEqual(share.owner, self.user)
         self.assertTrue(share.allow_downloads)
         self.assertEqual(share.access_count, 0)
 
     def test_tag_share_access_count(self):
         """Test incrementing access count."""
-        share = TagShare.objects.create(
-            share_id=str(uuid.uuid4()),
-            tag='test-tag',
-            user=self.user
+        share = ShareLink.objects.create(
+            token=str(uuid.uuid4()),
+            owner=self.user,
+            domain=DOMAIN_MAP,
+            subject_kind=KIND_TAG,
+            subject_ref='test-tag',
+            audience=AUDIENCE_WORLD,
         )
         initial_count = share.access_count
         share.access_count += 1
@@ -275,7 +263,7 @@ class TestTagShare(TestCase):
 
 
 class TestCollectionShare(TestCase):
-    """Test CollectionShare model."""
+    """Test ShareLink for a collection subject."""
 
     def setUp(self):
         """Set up test fixtures."""
@@ -287,21 +275,22 @@ class TestCollectionShare(TestCase):
         self.collection = Collection.objects.create(
             user=self.user,
             name='Test Collection',
-            tags=[]
         )
 
     def test_create_collection_share(self):
-        """Test creating a CollectionShare instance."""
-        share_id = str(uuid.uuid4())
-        share = CollectionShare.objects.create(
-            share_id=share_id,
-            collection=self.collection,
-            user=self.user,
-            include_tags=True,
-            allow_downloads=False
+        """Test creating a collection ShareLink."""
+        token = str(uuid.uuid4())
+        share = ShareLink.objects.create(
+            token=token,
+            owner=self.user,
+            domain=DOMAIN_MAP,
+            subject_kind=KIND_COLLECTION,
+            subject_ref=str(self.collection.id),
+            audience=AUDIENCE_WORLD,
+            capabilities={CAP_INCLUDE_TAGS: True, CAP_ALLOW_DOWNLOADS: False},
         )
-        self.assertEqual(share.share_id, share_id)
-        self.assertEqual(share.collection, self.collection)
+        self.assertEqual(share.token, token)
+        self.assertEqual(share.subject_ref, str(self.collection.id))
         self.assertTrue(share.include_tags)
         self.assertFalse(share.allow_downloads)
 

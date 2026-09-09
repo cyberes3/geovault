@@ -14,7 +14,6 @@ from geo_lib.websocket.modules.delete_job_module import DeleteJobModule
 from geo_lib.websocket.modules.import_history_module import ImportHistoryModule
 from geo_lib.websocket.modules.import_queue_module import ImportQueueModule
 from geo_lib.websocket.modules.process_job_module import ProcessJobModule
-from geo_lib.websocket.registry import get_registered_websocket_modules
 
 from api.ws_consumers.base import AuthenticatedJsonConsumer
 
@@ -33,15 +32,13 @@ class RealtimeConsumer(AuthenticatedJsonConsumer):
         self.modules = {}
 
     def _load_modules(self):
-        """Load built-in and extension-registered WebSocket modules."""
+        """Load built-in WebSocket modules."""
         self.modules['import_queue'] = ImportQueueModule(self)
         self.modules['import_history'] = ImportHistoryModule(self)
         self.modules['process_job'] = ProcessJobModule(self)
         self.modules['delete_job'] = DeleteJobModule(self)
         self.modules['bulk_import_job'] = BulkImportJobModule(self)
         self.modules['bulk_delete_job'] = BulkDeleteJobModule(self)
-        for name, module_class in get_registered_websocket_modules():
-            self.modules[name] = module_class(self)
 
     async def on_connect(self, path, client_ip):
         """Join the user's realtime room, accept the connection, and load modules."""
@@ -79,10 +76,6 @@ class RealtimeConsumer(AuthenticatedJsonConsumer):
                 _logger.warning(f"Invalid JSON received from user {self.user.id}")
         elif bytes_data:
             _logger.warning("Binary data received but not supported")
-
-    async def live_track_track_updated(self, event):
-        """No-op: live_track updates use the trackers-live consumer, not this realtime channel."""
-        pass
 
     # Dynamic event routing - automatically route events to modules
     def __getattr__(self, name):

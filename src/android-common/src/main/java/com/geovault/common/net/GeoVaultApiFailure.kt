@@ -25,7 +25,7 @@ class GeoVaultApiFailure(
         fun fromOkHttp(response: OkHttpResponse, operation: String? = null, body: String? = null): GeoVaultApiFailure {
             return GeoVaultApiFailure(
                 httpCode = response.code,
-                serverMessage = body?.trim()?.takeIf { it.isNotEmpty() },
+                serverMessage = parseServerMessage(body),
                 operation = operation,
             )
         }
@@ -50,13 +50,8 @@ class GeoVaultApiFailure(
         }
 
         private fun parseServerMessage(body: String?): String? {
-            val trimmed = body?.trim()?.takeIf { it.isNotEmpty() } ?: return null
-            return runCatching {
-                val json = org.json.JSONObject(trimmed)
-                sequenceOf("error", "message", "detail", "error_description")
-                    .mapNotNull { key -> json.optString(key).trim().takeIf { it.isNotEmpty() } }
-                    .firstOrNull()
-            }.getOrNull() ?: trimmed
+            return ErrorEnvelope.parse(body)?.error
+                ?: body?.trim()?.takeIf { it.isNotEmpty() }
         }
 
         private fun buildMessage(httpCode: Int?, serverMessage: String?, operation: String?): String {

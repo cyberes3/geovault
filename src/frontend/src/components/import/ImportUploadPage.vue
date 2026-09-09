@@ -261,7 +261,6 @@ interface ImportUploadPageInstance {
   overallProgress: number;
   isDragOver: boolean;
   uploadResults: UploadResults;
-  startAutoRefresh: () => void;
 }
 
 export default defineComponent({
@@ -399,7 +398,6 @@ export default defineComponent({
       uploadProgress: 0,
       overallProgress: 0,
       loadingQueueList: false,
-      refreshInterval: null as ReturnType<typeof setInterval> | null,
       isDragOver: false,
       isRefreshing: false,
       uploadResults: {
@@ -719,21 +717,6 @@ export default defineComponent({
 
       this.uploadMsg = getApiErrorMessage(error, 'Upload failed. Please try again.')
     },
-    startAutoRefresh(): void {
-      // Clear any existing interval
-      this.stopAutoRefresh()
-
-      // Start auto-refresh every 1 second
-      this.refreshInterval = setInterval(() => {
-        // WebSocket will handle real-time updates
-      }, 1000)
-    },
-    stopAutoRefresh(): void {
-      if (this.refreshInterval) {
-        clearInterval(this.refreshInterval)
-        this.refreshInterval = null
-      }
-    },
     handleBeforeUnload(event: BeforeUnloadEvent): string | undefined {
       // Check if upload is in progress
       if (this.disableUpload) {
@@ -746,18 +729,10 @@ export default defineComponent({
     },
   },
   async mounted() {
-    // Start auto-refresh when component is mounted
-    this.startAutoRefresh()
-
-    // Add beforeunload event listener to prevent navigation during upload
     this.boundHandleBeforeUnload = (event) => this.handleBeforeUnload(event)
     window.addEventListener('beforeunload', this.boundHandleBeforeUnload)
   },
   beforeUnmount() {
-    // Stop auto-refresh when component is about to be destroyed
-    this.stopAutoRefresh()
-
-    // Remove beforeunload event listener
     if (this.boundHandleBeforeUnload) window.removeEventListener('beforeunload', this.boundHandleBeforeUnload)
   },
   beforeRouteEnter(_to: RouteLocationNormalized, _from: RouteLocationNormalized, next: NavigationGuardNext) {
@@ -776,27 +751,15 @@ export default defineComponent({
         failed: [],
         skipped: []
       }
-      // Start auto-refresh when entering the route
-      instance.startAutoRefresh()
     })
   },
-  beforeRouteUpdate(_to: RouteLocationNormalized, _from: RouteLocationNormalized, next: NavigationGuardNext) {
-    // Start auto-refresh when updating to the same route
-    this.startAutoRefresh()
-    next()
-  },
   beforeRouteLeave(_to: RouteLocationNormalized, _from: RouteLocationNormalized, next: NavigationGuardNext) {
-    // Stop auto-refresh when leaving the route
-    this.stopAutoRefresh()
-
-    // Clear upload details when navigating away
     this.uploadResults = {
       successful: [],
       failed: [],
       skipped: []
     }
 
-    // Check if upload is in progress
     if (this.disableUpload) {
       const confirmed = confirm(
           'Upload is currently in progress. Are you sure you want to leave this page? ' +
@@ -804,9 +767,6 @@ export default defineComponent({
       )
 
       if (!confirmed) {
-        // User canceled, don't navigate away
-        // Restart auto-refresh since we're staying on the page
-        this.startAutoRefresh()
         return
       }
     }

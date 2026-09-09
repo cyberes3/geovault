@@ -86,6 +86,8 @@ import BaseModal from '@/components/parts/BaseModal.vue'
 import BaseButton from '@/components/parts/BaseButton.vue'
 import { restoreElevationInGeometry, type ElevationFeature } from '@/utils/elevationUtils.js'
 import { validateCoordinates } from '@/utils/geo/coordinates'
+import 'simple-code-editor/themes/themes.css'
+import 'simple-code-editor/themes/themes-base16.css'
 import CodeEditor from 'simple-code-editor'
 
 /** Only the fields this dialog reads off the feature prop; kept loose so any `Feature`-shaped object (e.g. `MapPageFeature`) can be passed in. */

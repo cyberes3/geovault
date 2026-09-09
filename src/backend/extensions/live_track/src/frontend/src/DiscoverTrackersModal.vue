@@ -97,7 +97,7 @@ import BaseButton from 'platform/components/parts/BaseButton.vue';
 import Loader from 'platform/components/parts/Loader.vue';
 import { filterByQuery } from './sharingSelectors';
 import type { LiveTrack, LiveTrackGroup } from './types/track';
-import type { ExtensionApi } from './types/extension-api';
+import type { ExtensionApi } from '@geovault/extension-sdk';
 
 interface DiscoverTracker extends LiveTrack {
   kind: 'tracker';

@@ -13,6 +13,7 @@ from geo_lib.feature_id import generate_geojson_hash
 from geo_lib.processing.jobs.import_job import ImportJob
 from geo_lib.processing.jobs.helpers.status_tracker import ProcessingStatus, status_tracker
 
+from tests.test_utils.import_queue import queue_with_drafts, draft_geojson
 User = get_user_model()
 
 
@@ -57,13 +58,12 @@ class TestImportEmptyNames(TransactionTestCase):
         hash_val = generate_geojson_hash(feature)
         feature['properties']['geojson_hash'] = hash_val
         
-        import_item = ImportQueue.objects.create(
+        import_item = queue_with_drafts(
             user=self.user,
             original_filename='empty_name_point.kml',
             raw_file='<kml></kml>',
-            geofeatures=[feature],
-            duplicate_features=[],
-            skipped_feature_ids=[],
+            features=[feature],
+            skipped=[],
             imported=False
         )
         
@@ -105,13 +105,12 @@ class TestImportEmptyNames(TransactionTestCase):
         hash_val = generate_geojson_hash(feature)
         feature['properties']['geojson_hash'] = hash_val
         
-        import_item = ImportQueue.objects.create(
+        import_item = queue_with_drafts(
             user=self.user,
             original_filename='empty_name_line.kml',
             raw_file='<kml></kml>',
-            geofeatures=[feature],
-            duplicate_features=[],
-            skipped_feature_ids=[],
+            features=[feature],
+            skipped=[],
             imported=False
         )
         
@@ -159,13 +158,12 @@ class TestImportEmptyNames(TransactionTestCase):
         hash_val = generate_geojson_hash(feature)
         feature['properties']['geojson_hash'] = hash_val
         
-        import_item = ImportQueue.objects.create(
+        import_item = queue_with_drafts(
             user=self.user,
             original_filename='empty_name_polygon.kml',
             raw_file='<kml></kml>',
-            geofeatures=[feature],
-            duplicate_features=[],
-            skipped_feature_ids=[],
+            features=[feature],
+            skipped=[],
             imported=False
         )
         
@@ -204,13 +202,12 @@ class TestImportEmptyNames(TransactionTestCase):
         hash_val = generate_geojson_hash(feature)
         feature['properties']['geojson_hash'] = hash_val
         
-        import_item = ImportQueue.objects.create(
+        import_item = queue_with_drafts(
             user=self.user,
             original_filename='none_name.kml',
             raw_file='<kml></kml>',
-            geofeatures=[feature],
-            duplicate_features=[],
-            skipped_feature_ids=[],
+            features=[feature],
+            skipped=[],
             imported=False
         )
         
@@ -258,13 +255,12 @@ class TestImportEmptyNames(TransactionTestCase):
             hash_val = generate_geojson_hash(feature)
             feature['properties']['geojson_hash'] = hash_val
         
-        import_item = ImportQueue.objects.create(
+        import_item = queue_with_drafts(
             user=self.user,
             original_filename='mixed_names.kml',
             raw_file='<kml></kml>',
-            geofeatures=features,
-            duplicate_features=[],
-            skipped_feature_ids=[],
+            features=features,
+            skipped=[],
             imported=False
         )
         
@@ -304,13 +300,12 @@ class TestImportEmptyNames(TransactionTestCase):
         hash_val = generate_geojson_hash(feature)
         feature['properties']['geojson_hash'] = hash_val
         
-        import_item = ImportQueue.objects.create(
+        import_item = queue_with_drafts(
             user=self.user,
             original_filename='missing_name.kml',
             raw_file='<kml></kml>',
-            geofeatures=[feature],
-            duplicate_features=[],
-            skipped_feature_ids=[],
+            features=[feature],
+            skipped=[],
             imported=False
         )
         

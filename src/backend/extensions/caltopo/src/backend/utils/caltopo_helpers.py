@@ -46,7 +46,7 @@ def perform_caltopo_call(
         )
 
 VALID_CALTOPO_FEATURE_CLASSES = {
-        'Shape', 'Marker', 'AppTrack', 'LiveTrack', 'Folder',
+        'Shape', 'Marker', 'Line', 'AppTrack', 'LiveTrack', 'Folder',
         'MapMediaObject', 'OperationalPeriod', 'Assignment',
         'Clue', 'Resource', 'SmsLocationRequest'
     }

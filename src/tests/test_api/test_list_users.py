@@ -48,7 +48,7 @@ class TestListUsers(TestCase):
         response = self.client.get('/api/users/')
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
-        emails = {u['email'] for u in data['users']}
+        emails = {u['email'] for u in data['items']}
         self.assertIn('alice@example.com', emails)
         self.assertIn('bob@example.com', emails)
         self.assertNotIn('self@example.com', emails)
@@ -56,15 +56,15 @@ class TestListUsers(TestCase):
     def test_excludes_users_without_email(self):
         response = self.client.get('/api/users/')
         data = json.loads(response.content)
-        emails = {u['email'] for u in data['users']}
+        emails = {u['email'] for u in data['items']}
         self.assertNotIn('', emails)
-        ids = {u['id'] for u in data['users']}
+        ids = {u['id'] for u in data['items']}
         self.assertNotIn(self.no_email_user.id, ids)
 
     def test_results_ordered_by_email(self):
         response = self.client.get('/api/users/')
         data = json.loads(response.content)
-        emails = [u['email'] for u in data['users']]
+        emails = [u['email'] for u in data['items']]
         self.assertEqual(emails, sorted(emails))
 
     def test_only_get_allowed(self):

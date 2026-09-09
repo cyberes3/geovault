@@ -6,7 +6,7 @@ import importlib
 from unittest.mock import patch, MagicMock
 from pathlib import Path
 import re
-from website.extensions.extension_loader import ExtensionRegistry, get_extension_registry
+from website.extensions.registry import ExtensionRegistry, get_extension_registry
 from django.test import TestCase
 import sys
 
@@ -27,7 +27,7 @@ class TestExtensionConfiguration:
         # and populates self.loaded_extensions.
         
         # We'll mock the config loader to ensure it's enabled
-        with patch('website.extensions.extension_loader.get_config') as mock_loader_get:
+        with patch('website.extensions.registry.get_config') as mock_loader_get:
             mock_config = MagicMock()
             # Default to True for all boolean checks
             mock_config.extension_settings.return_value = {'enabled': True}
@@ -48,7 +48,7 @@ class TestExtensionConfiguration:
         from website.settings import EXTENSIONS_DIR
         registry = ExtensionRegistry(EXTENSIONS_DIR)
         
-        with patch('website.extensions.extension_loader.get_config') as mock_loader_get:
+        with patch('website.extensions.registry.get_config') as mock_loader_get:
             mock_config = MagicMock()
             
             # Return enabled: False for our specific extension
@@ -69,7 +69,7 @@ class TestExtensionConfiguration:
         from website.settings import EXTENSIONS_DIR
         registry = ExtensionRegistry(EXTENSIONS_DIR)
         
-        with patch('website.extensions.extension_loader.get_config') as mock_loader_get:
+        with patch('website.extensions.registry.get_config') as mock_loader_get:
             mock_config = MagicMock()
             
             mock_config.extension_settings.side_effect = (
@@ -108,7 +108,7 @@ class TestExtensionAPI(TestCase):
         response = client.get('/api/extensions/example-extension/items/')
         assert response.status_code == 200
         data = response.json()
-        assert isinstance(data, list)
+        assert isinstance(data['items'], list)
         
         # 2. Test POST item
         response = client.post(
@@ -140,9 +140,9 @@ class TestExtensionAPI(TestCase):
         # Yes, standard 'website.urls' has the 'extensions/static/...' re_path.
         
         # We just need to hit the URL.
-        # Path: /extensions/static/example-extension/src/frontend/dist/index.css
+        # Path: /extensions/static/example-extension/dist/index.css
         
-        url = '/extensions/static/example-extension/src/frontend/dist/index.css'
+        url = '/extensions/static/example-extension/dist/index.css'
         response = client.get(url)
         
         assert response.status_code == 200
@@ -198,7 +198,8 @@ class TestExtensionFeatureCRUD(TestCase):
             user=self.user,
             geojson=self.feature_data,
             geometry=Point(-122.4194, 37.7749, 0.0),
-            geojson_hash=generate_geojson_hash(self.feature_data)
+            geojson_hash=generate_geojson_hash(self.feature_data),
+            scope='example_extension',
         )
         
         # Create a feature for another user
@@ -217,7 +218,8 @@ class TestExtensionFeatureCRUD(TestCase):
             user=self.other_user,
             geojson=self.other_feature_data,
             geometry=Point(-122.0, 37.0, 0.0),
-            geojson_hash=generate_geojson_hash(self.other_feature_data)
+            geojson_hash=generate_geojson_hash(self.other_feature_data),
+            scope='example_extension',
         )
     
     def test_create_feature_success(self):
@@ -440,6 +442,31 @@ class TestExtensionFeatureCRUD(TestCase):
             content_type='application/json'
         )
         assert response.status_code == 404  # Not found (not authorized)
+
+    def test_list_scoped_features(self):
+        response = self.client.get('/api/extensions/example-extension/features/')
+        assert response.status_code == 200
+        data = response.json()
+        ids = [row['properties']['database_id'] for row in data['features']]
+        assert self.feature.id in ids
+        assert self.other_feature.id not in ids
+
+    def test_modify_unscoped_feature_is_404(self):
+        from django.contrib.gis.geos import Point
+        from geo_lib.feature_id import generate_geojson_hash
+
+        unscoped = self.FeatureStore.objects.create(
+            user=self.user,
+            geojson=self.feature_data,
+            geometry=Point(10.0, 20.0, 0.0),
+            geojson_hash=generate_geojson_hash({**self.feature_data, 'properties': {'name': 'Unscoped'}}),
+            scope=None,
+        )
+        response = self.client.post(
+            f'/api/extensions/example-extension/features/{unscoped.id}/modify/',
+            content_type='application/json'
+        )
+        assert response.status_code == 404
     
     def test_modify_feature_unauthenticated(self):
         """Test that unauthenticated users cannot modify features."""
@@ -503,30 +530,22 @@ class TestExtensionFeatureCRUD(TestCase):
         )
         assert response.status_code == 400
     
-    def test_create_feature_system_tags_filtered(self):
-        """Test that system tags are filtered from user-provided tags."""
+    def test_create_feature_system_tags_rejected(self):
+        """Protected system tag names in user tags are rejected, not silently stored."""
         payload = {
             'latitude': 40.7128,
             'longitude': -74.0060,
             'name': 'Test Feature',
-            'tags': ['user-tag', 'type:point', 'import-year:2024']  # type:point is a system tag
+            'tags': ['user-tag', 'type:point', 'import-year:2024']
         }
-        
+
         response = self.client.post(
             '/api/extensions/example-extension/features/create/',
             data=json.dumps(payload),
             content_type='application/json'
         )
-        
-        assert response.status_code == 201
-        data = response.json()
-        feature = data['feature']
-        tags = feature['properties']['tags']
-        
-        # System tags should be filtered out
-        assert 'user-tag' in tags
-        assert 'type:point' not in tags
-        assert 'import-year:2024' not in tags
+
+        assert response.status_code == 400
 
 
 # ============================================================================
@@ -557,14 +576,14 @@ class TestExtensionErrorHandling:
             assert len(registry.loaded_extensions) == 0
 
     def test_extension_without_manifest(self):
-        """Test that directories without manifest.py are skipped."""
+        """Test that directories without manifest.toml are skipped."""
         with tempfile.TemporaryDirectory() as tmpdir:
             ext_dir = Path(tmpdir)
             # Create extension directory without manifest
             (ext_dir / 'no_manifest_ext').mkdir()
             
             registry = ExtensionRegistry(ext_dir)
-            with patch('website.extensions.extension_loader.get_config') as mock_loader_get:
+            with patch('website.extensions.registry.get_config') as mock_loader_get:
                 mock_config = MagicMock()
                 mock_config.extension_settings.return_value = {'enabled': True}
                 mock_loader_get.return_value = mock_config
@@ -582,11 +601,11 @@ class TestExtensionErrorHandling:
             ext_path.mkdir()
             
             # Create manifest with syntax error
-            manifest_path = ext_path / 'manifest.py'
+            manifest_path = ext_path / 'manifest.toml'
             manifest_path.write_text('name = "test"\nversion = "1.0.0"\ninvalid syntax here!!!')
             
             registry = ExtensionRegistry(ext_dir)
-            with patch('website.extensions.extension_loader.get_config') as mock_loader_get:
+            with patch('website.extensions.registry.get_config') as mock_loader_get:
                 mock_config = MagicMock()
                 mock_config.extension_settings.return_value = {'enabled': True}
                 mock_loader_get.return_value = mock_config
@@ -605,11 +624,11 @@ class TestExtensionErrorHandling:
             ext_path.mkdir()
             
             # Create manifest without name
-            manifest_path = ext_path / 'manifest.py'
+            manifest_path = ext_path / 'manifest.toml'
             manifest_path.write_text('version = "1.0.0"\ndescription = "Test"')
             
             registry = ExtensionRegistry(ext_dir)
-            with patch('website.extensions.extension_loader.get_config') as mock_loader_get:
+            with patch('website.extensions.registry.get_config') as mock_loader_get:
                 mock_config = MagicMock()
                 mock_config.extension_settings.return_value = {'enabled': True}
                 mock_loader_get.return_value = mock_config
@@ -627,11 +646,11 @@ class TestExtensionErrorHandling:
             ext_path.mkdir()
             
             # Create manifest without version
-            manifest_path = ext_path / 'manifest.py'
+            manifest_path = ext_path / 'manifest.toml'
             manifest_path.write_text('name = "missing_version_ext"\ndescription = "Test"')
             
             registry = ExtensionRegistry(ext_dir)
-            with patch('website.extensions.extension_loader.get_config') as mock_loader_get:
+            with patch('website.extensions.registry.get_config') as mock_loader_get:
                 mock_config = MagicMock()
                 mock_config.extension_settings.return_value = {'enabled': True}
                 mock_loader_get.return_value = mock_config
@@ -649,11 +668,11 @@ class TestExtensionErrorHandling:
             ext_path.mkdir()
             
             # Create manifest but no backend directory
-            manifest_path = ext_path / 'manifest.py'
+            manifest_path = ext_path / 'manifest.toml'
             manifest_path.write_text('name = "no_backend_ext"\nversion = "1.0.0"')
             
             registry = ExtensionRegistry(ext_dir)
-            with patch('website.extensions.extension_loader.get_config') as mock_loader_get:
+            with patch('website.extensions.registry.get_config') as mock_loader_get:
                 mock_config = MagicMock()
                 mock_config.extension_settings.return_value = {'enabled': True}
                 mock_loader_get.return_value = mock_config
@@ -676,7 +695,7 @@ class TestExtensionErrorHandling:
             ext_path = ext_dir / 'frontend_only_ext'
             ext_path.mkdir()
 
-            manifest_path = ext_path / 'manifest.py'
+            manifest_path = ext_path / 'manifest.toml'
             manifest_path.write_text(
                 'name = "frontend_only_ext"\n'
                 'version = "1.0.0"\n'
@@ -689,7 +708,7 @@ class TestExtensionErrorHandling:
             (dist_path / 'index.css').write_text('/* styles */')
 
             registry = ExtensionRegistry(ext_dir)
-            with patch('website.extensions.extension_loader.get_config') as mock_loader_get:
+            with patch('website.extensions.registry.get_config') as mock_loader_get:
                 mock_config = MagicMock()
                 mock_config.extension_settings.return_value = {'enabled': True}
                 mock_loader_get.return_value = mock_config
@@ -711,7 +730,7 @@ class TestExtensionErrorHandling:
             ext_path.mkdir()
             
             # Create manifest
-            manifest_path = ext_path / 'manifest.py'
+            manifest_path = ext_path / 'manifest.toml'
             manifest_path.write_text('name = "no_frontend_ext"\nversion = "1.0.0"')
             
             # Create backend directory
@@ -720,7 +739,7 @@ class TestExtensionErrorHandling:
             (backend_path / '__init__.py').write_text('')
             
             registry = ExtensionRegistry(ext_dir)
-            with patch('website.extensions.extension_loader.get_config') as mock_loader_get:
+            with patch('website.extensions.registry.get_config') as mock_loader_get:
                 mock_config = MagicMock()
                 mock_config.extension_settings.return_value = {'enabled': True}
                 mock_loader_get.return_value = mock_config
@@ -741,7 +760,7 @@ class TestExtensionErrorHandling:
             (ext_dir / 'not_a_directory.txt').write_text('some content')
             
             registry = ExtensionRegistry(ext_dir)
-            with patch('website.extensions.extension_loader.get_config') as mock_loader_get:
+            with patch('website.extensions.registry.get_config') as mock_loader_get:
                 mock_config = MagicMock()
                 mock_config.extension_settings.return_value = {'enabled': True}
                 mock_loader_get.return_value = mock_config
@@ -759,11 +778,11 @@ class TestExtensionErrorHandling:
             ext_path.mkdir()
             
             # Create manifest that raises exception when executed
-            manifest_path = ext_path / 'manifest.py'
+            manifest_path = ext_path / 'manifest.toml'
             manifest_path.write_text('raise RuntimeError("Test exception")\nname = "test"')
             
             registry = ExtensionRegistry(ext_dir)
-            with patch('website.extensions.extension_loader.get_config') as mock_loader_get:
+            with patch('website.extensions.registry.get_config') as mock_loader_get:
                 mock_config = MagicMock()
                 mock_config.extension_settings.return_value = {'enabled': True}
                 mock_loader_get.return_value = mock_config
@@ -785,7 +804,7 @@ class TestExtensionURLRouting:
         from website.settings import EXTENSIONS_DIR
         registry = ExtensionRegistry(EXTENSIONS_DIR)
         
-        with patch('website.extensions.extension_loader.get_config') as mock_loader_get:
+        with patch('website.extensions.registry.get_config') as mock_loader_get:
             mock_config = MagicMock()
             mock_config.extension_settings.return_value = {'enabled': True}
             mock_loader_get.return_value = mock_config
@@ -810,7 +829,7 @@ class TestExtensionURLRouting:
             ext_path.mkdir()
             
             # Create manifest
-            manifest_path = ext_path / 'manifest.py'
+            manifest_path = ext_path / 'manifest.toml'
             manifest_path.write_text('name = "no_urls_ext"\nversion = "1.0.0"')
             
             # Create backend directory but no urls.py
@@ -819,7 +838,7 @@ class TestExtensionURLRouting:
             (backend_path / '__init__.py').write_text('')
             
             registry = ExtensionRegistry(ext_dir)
-            with patch('website.extensions.extension_loader.get_config') as mock_loader_get:
+            with patch('website.extensions.registry.get_config') as mock_loader_get:
                 mock_config = MagicMock()
                 mock_config.extension_settings.return_value = {'enabled': True}
                 mock_loader_get.return_value = mock_config
@@ -839,7 +858,7 @@ class TestExtensionURLRouting:
             ext_path.mkdir()
             
             # Create manifest
-            manifest_path = ext_path / 'manifest.py'
+            manifest_path = ext_path / 'manifest.toml'
             manifest_path.write_text('name = "test_extension_name"\nversion = "1.0.0"')
             
             # Create backend with urls.py
@@ -849,7 +868,7 @@ class TestExtensionURLRouting:
             (backend_path / 'urls.py').write_text('from django.urls import path\nurlpatterns = []')
             
             registry = ExtensionRegistry(ext_dir)
-            with patch('website.extensions.extension_loader.get_config') as mock_loader_get:
+            with patch('website.extensions.registry.get_config') as mock_loader_get:
                 mock_config = MagicMock()
                 mock_config.extension_settings.return_value = {'enabled': True}
                 mock_loader_get.return_value = mock_config
@@ -878,7 +897,7 @@ class TestFrontendAssetDiscovery:
             ext_path = ext_dir / 'js_priority_ext'
             ext_path.mkdir()
             
-            manifest_path = ext_path / 'manifest.py'
+            manifest_path = ext_path / 'manifest.toml'
             manifest_path.write_text('name = "js_priority_ext"\nversion = "1.0.0"')
             
             backend_path = ext_path / 'src' / 'backend'
@@ -893,7 +912,7 @@ class TestFrontendAssetDiscovery:
             (dist_path / 'index.iife.js').write_text('// iife')
             
             registry = ExtensionRegistry(ext_dir)
-            with patch('website.extensions.extension_loader.get_config') as mock_loader_get:
+            with patch('website.extensions.registry.get_config') as mock_loader_get:
                 mock_config = MagicMock()
                 mock_config.extension_settings.return_value = {'enabled': True}
                 mock_loader_get.return_value = mock_config
@@ -910,7 +929,7 @@ class TestFrontendAssetDiscovery:
             ext_path = ext_dir / 'js_umd_ext'
             ext_path.mkdir()
             
-            manifest_path = ext_path / 'manifest.py'
+            manifest_path = ext_path / 'manifest.toml'
             manifest_path.write_text('name = "js_umd_ext"\nversion = "1.0.0"')
             
             backend_path = ext_path / 'src' / 'backend'
@@ -923,7 +942,7 @@ class TestFrontendAssetDiscovery:
             (dist_path / 'index.iife.js').write_text('// iife')
             
             registry = ExtensionRegistry(ext_dir)
-            with patch('website.extensions.extension_loader.get_config') as mock_loader_get:
+            with patch('website.extensions.registry.get_config') as mock_loader_get:
                 mock_config = MagicMock()
                 mock_config.extension_settings.return_value = {'enabled': True}
                 mock_loader_get.return_value = mock_config
@@ -940,7 +959,7 @@ class TestFrontendAssetDiscovery:
             ext_dir = Path(tmpdir)
             ext_path = ext_dir / 'cache_bust_ext'
             ext_path.mkdir()
-            manifest_path = ext_path / 'manifest.py'
+            manifest_path = ext_path / 'manifest.toml'
             manifest_path.write_text('name = "cache_bust_ext"\nversion = "1.0.0"')
             backend_path = ext_path / 'src' / 'backend'
             backend_path.mkdir(parents=True)
@@ -950,7 +969,7 @@ class TestFrontendAssetDiscovery:
             (dist_path / 'index.umd.js').write_text('// umd bundle')
             (dist_path / 'index.css').write_text('/* styles */')
             registry = ExtensionRegistry(ext_dir)
-            with patch('website.extensions.extension_loader.get_config') as mock_loader_get:
+            with patch('website.extensions.registry.get_config') as mock_loader_get:
                 mock_config = MagicMock()
                 mock_config.extension_settings.return_value = {'enabled': True}
                 mock_loader_get.return_value = mock_config
@@ -967,7 +986,7 @@ class TestFrontendAssetDiscovery:
             ext_dir = Path(tmpdir)
             ext_path = ext_dir / 'content_hash_ext'
             ext_path.mkdir()
-            manifest_path = ext_path / 'manifest.py'
+            manifest_path = ext_path / 'manifest.toml'
             manifest_path.write_text('name = "content_hash_ext"\nversion = "1.0.0"')
             backend_path = ext_path / 'src' / 'backend'
             backend_path.mkdir(parents=True)
@@ -977,7 +996,7 @@ class TestFrontendAssetDiscovery:
             js_file = dist_path / 'index.umd.js'
             js_file.write_text('// version A')
             registry = ExtensionRegistry(ext_dir)
-            with patch('website.extensions.extension_loader.get_config') as mock_loader_get:
+            with patch('website.extensions.registry.get_config') as mock_loader_get:
                 mock_config = MagicMock()
                 mock_config.extension_settings.return_value = {'enabled': True}
                 mock_loader_get.return_value = mock_config
@@ -985,7 +1004,7 @@ class TestFrontendAssetDiscovery:
             v1 = registry.loaded_extensions['content_hash_ext']['frontend_entry'].split('?v=')[-1]
             js_file.write_text('// version B')
             registry2 = ExtensionRegistry(ext_dir)
-            with patch('website.extensions.extension_loader.get_config') as mock_loader_get:
+            with patch('website.extensions.registry.get_config') as mock_loader_get:
                 mock_config = MagicMock()
                 mock_config.extension_settings.return_value = {'enabled': True}
                 mock_loader_get.return_value = mock_config
@@ -1000,7 +1019,7 @@ class TestFrontendAssetDiscovery:
             ext_path = ext_dir / 'js_assets_ext'
             ext_path.mkdir()
             
-            manifest_path = ext_path / 'manifest.py'
+            manifest_path = ext_path / 'manifest.toml'
             manifest_path.write_text('name = "js_assets_ext"\nversion = "1.0.0"')
             
             backend_path = ext_path / 'src' / 'backend'
@@ -1014,7 +1033,7 @@ class TestFrontendAssetDiscovery:
             (assets_path / 'index.js').write_text('// assets index')
             
             registry = ExtensionRegistry(ext_dir)
-            with patch('website.extensions.extension_loader.get_config') as mock_loader_get:
+            with patch('website.extensions.registry.get_config') as mock_loader_get:
                 mock_config = MagicMock()
                 mock_config.extension_settings.return_value = {'enabled': True}
                 mock_loader_get.return_value = mock_config
@@ -1031,7 +1050,7 @@ class TestFrontendAssetDiscovery:
             ext_path = ext_dir / 'css_priority_ext'
             ext_path.mkdir()
             
-            manifest_path = ext_path / 'manifest.py'
+            manifest_path = ext_path / 'manifest.toml'
             manifest_path.write_text('name = "css_priority_ext"\nversion = "1.0.0"')
             
             backend_path = ext_path / 'src' / 'backend'
@@ -1045,7 +1064,7 @@ class TestFrontendAssetDiscovery:
             (dist_path / 'other.css').write_text('/* other */')
             
             registry = ExtensionRegistry(ext_dir)
-            with patch('website.extensions.extension_loader.get_config') as mock_loader_get:
+            with patch('website.extensions.registry.get_config') as mock_loader_get:
                 mock_config = MagicMock()
                 mock_config.extension_settings.return_value = {'enabled': True}
                 mock_loader_get.return_value = mock_config
@@ -1062,7 +1081,7 @@ class TestFrontendAssetDiscovery:
             ext_path = ext_dir / 'css_style_ext'
             ext_path.mkdir()
             
-            manifest_path = ext_path / 'manifest.py'
+            manifest_path = ext_path / 'manifest.toml'
             manifest_path.write_text('name = "css_style_ext"\nversion = "1.0.0"')
             
             backend_path = ext_path / 'src' / 'backend'
@@ -1075,7 +1094,7 @@ class TestFrontendAssetDiscovery:
             (dist_path / 'other.css').write_text('/* other */')
             
             registry = ExtensionRegistry(ext_dir)
-            with patch('website.extensions.extension_loader.get_config') as mock_loader_get:
+            with patch('website.extensions.registry.get_config') as mock_loader_get:
                 mock_config = MagicMock()
                 mock_config.extension_settings.return_value = {'enabled': True}
                 mock_loader_get.return_value = mock_config
@@ -1093,7 +1112,7 @@ class TestFrontendAssetDiscovery:
             ext_path = ext_dir / 'css_assets_ext'
             ext_path.mkdir()
             
-            manifest_path = ext_path / 'manifest.py'
+            manifest_path = ext_path / 'manifest.toml'
             manifest_path.write_text('name = "css_assets_ext"\nversion = "1.0.0"')
             
             backend_path = ext_path / 'src' / 'backend'
@@ -1107,7 +1126,7 @@ class TestFrontendAssetDiscovery:
             (assets_path / 'style.css').write_text('/* assets style */')
             
             registry = ExtensionRegistry(ext_dir)
-            with patch('website.extensions.extension_loader.get_config') as mock_loader_get:
+            with patch('website.extensions.registry.get_config') as mock_loader_get:
                 mock_config = MagicMock()
                 mock_config.extension_settings.return_value = {'enabled': True}
                 mock_loader_get.return_value = mock_config
@@ -1146,8 +1165,8 @@ class TestExtensionAPIEdgeCases(TestCase):
             response = self.client.get('/api/extensions/')
             assert response.status_code == 200
             data = response.json()
-            assert isinstance(data, list)
-            assert len(data) == 0
+            assert data['items'] == []
+            assert data['total_items'] == 0
 
     def test_list_extensions_registry_none(self):
         """Test GET /api/extensions/ when registry returns empty list."""
@@ -1162,15 +1181,15 @@ class TestExtensionAPIEdgeCases(TestCase):
             response = self.client.get('/api/extensions/')
             assert response.status_code == 200
             data = response.json()
-            assert isinstance(data, list)
-            assert len(data) == 0
+            assert data['items'] == []
+            assert data['total_items'] == 0
 
     def test_extension_metadata_structure(self):
         """Test that extension metadata contains all expected fields."""
         from website.settings import EXTENSIONS_DIR
         registry = ExtensionRegistry(EXTENSIONS_DIR)
         
-        with patch('website.extensions.extension_loader.get_config') as mock_loader_get:
+        with patch('website.extensions.registry.get_config') as mock_loader_get:
             mock_config = MagicMock()
             mock_config.extension_settings.return_value = {'enabled': True}
             mock_loader_get.return_value = mock_config
@@ -1197,7 +1216,7 @@ class TestExtensionAPIEdgeCases(TestCase):
             ext_path = ext_dir / 'test_internal_ext'
             ext_path.mkdir()
             
-            manifest_path = ext_path / 'manifest.py'
+            manifest_path = ext_path / 'manifest.toml'
             manifest_path.write_text('name = "test_internal_ext"\nversion = "1.0.0"')
             
             # Create backend with urls.py to ensure _urls_module is set
@@ -1207,7 +1226,7 @@ class TestExtensionAPIEdgeCases(TestCase):
             (backend_path / 'urls.py').write_text('from django.urls import path\nurlpatterns = []')
             
             registry = ExtensionRegistry(ext_dir)
-            with patch('website.extensions.extension_loader.get_config') as mock_loader_get:
+            with patch('website.extensions.registry.get_config') as mock_loader_get:
                 mock_config = MagicMock()
                 mock_config.extension_settings.return_value = {'enabled': True}
                 mock_loader_get.return_value = mock_config
@@ -1234,9 +1253,9 @@ class TestExtensionAPIEdgeCases(TestCase):
             ext_dir = Path(tmpdir)
             ext_path = ext_dir / 'test_map_route_ext'
             ext_path.mkdir()
-            manifest_path = ext_path / 'manifest.py'
+            manifest_path = ext_path / 'manifest.toml'
             manifest_path.write_text(
-                'name = "test_map_route_ext"\nversion = "1.0.0"\nmap_route = True'
+                'name = "test_map_route_ext"\nversion = "1.0.0"\nmap_route = true'
             )
             backend_path = ext_path / 'src' / 'backend'
             backend_path.mkdir(parents=True)
@@ -1244,7 +1263,7 @@ class TestExtensionAPIEdgeCases(TestCase):
             (backend_path / 'urls.py').write_text('from django.urls import path\nurlpatterns = []')
 
             registry = ExtensionRegistry(ext_dir)
-            with patch('website.extensions.extension_loader.get_config') as mock_loader_get:
+            with patch('website.extensions.registry.get_config') as mock_loader_get:
                 mock_config = MagicMock()
                 mock_config.extension_settings.return_value = {'enabled': True}
                 mock_loader_get.return_value = mock_config
@@ -1261,7 +1280,7 @@ class TestExtensionAPIEdgeCases(TestCase):
             ext_dir = Path(tmpdir)
             ext_path = ext_dir / 'test_no_map_route_ext'
             ext_path.mkdir()
-            manifest_path = ext_path / 'manifest.py'
+            manifest_path = ext_path / 'manifest.toml'
             manifest_path.write_text('name = "test_no_map_route_ext"\nversion = "1.0.0"')
             backend_path = ext_path / 'src' / 'backend'
             backend_path.mkdir(parents=True)
@@ -1269,7 +1288,7 @@ class TestExtensionAPIEdgeCases(TestCase):
             (backend_path / 'urls.py').write_text('from django.urls import path\nurlpatterns = []')
 
             registry = ExtensionRegistry(ext_dir)
-            with patch('website.extensions.extension_loader.get_config') as mock_loader_get:
+            with patch('website.extensions.registry.get_config') as mock_loader_get:
                 mock_config = MagicMock()
                 mock_config.extension_settings.return_value = {'enabled': True}
                 mock_loader_get.return_value = mock_config
@@ -1290,7 +1309,7 @@ class TestStaticAssetServingEdgeCases(TestCase):
         """Test that non-existent static files return 404."""
         client = self.client
         
-        url = '/extensions/static/example-extension/src/frontend/dist/nonexistent.css'
+        url = '/extensions/static/example-extension/dist/nonexistent.css'
         response = client.get(url)
         
         assert response.status_code == 404
@@ -1330,7 +1349,7 @@ class TestStaticAssetServingEdgeCases(TestCase):
             assert response.status_code == 404, f"Expected 404 for cross-extension path: {url}"
 
         # Sanity: same file requested with correct extension prefix should succeed when file exists
-        correct_url = '/extensions/static/caltopo/src/frontend/dist/index.css'
+        correct_url = '/extensions/static/caltopo/dist/index.css'
         response_ok = client.get(correct_url)
         if response_ok.status_code == 200:
             # Cross-extension URL must not serve that file
@@ -1353,12 +1372,23 @@ class TestStaticAssetServingEdgeCases(TestCase):
         client = self.client
         
         # Use kebab-case in URL (example-extension)
-        url = '/extensions/static/example-extension/src/frontend/dist/index.css'
+        url = '/extensions/static/example-extension/dist/index.css'
         response = client.get(url)
         
         # Should successfully convert to example_extension directory
         # If file exists, should return 200, otherwise 404
         assert response.status_code in [200, 404]
+
+    def test_static_asset_old_src_frontend_dist_path_is_404(self):
+        """Only dist/ and the declared icon are served; the old nested path is gone."""
+        response = self.client.get(
+            '/extensions/static/example-extension/src/frontend/dist/index.css'
+        )
+        assert response.status_code == 404
+
+    def test_static_asset_unknown_extension_is_404(self):
+        response = self.client.get('/extensions/static/not-an-extension/dist/index.css')
+        assert response.status_code == 404
 
 
 # ============================================================================
@@ -1375,7 +1405,7 @@ class TestMultipleExtensions:
             # Create first extension (enabled)
             ext1_path = ext_dir / 'enabled_ext'
             ext1_path.mkdir()
-            (ext1_path / 'manifest.py').write_text('name = "enabled_ext"\nversion = "1.0.0"')
+            (ext1_path / 'manifest.toml').write_text('name = "enabled_ext"\nversion = "1.0.0"')
             backend1_path = ext1_path / 'src' / 'backend'
             backend1_path.mkdir(parents=True)
             (backend1_path / '__init__.py').write_text('')
@@ -1383,13 +1413,13 @@ class TestMultipleExtensions:
             # Create second extension (disabled)
             ext2_path = ext_dir / 'disabled_ext'
             ext2_path.mkdir()
-            (ext2_path / 'manifest.py').write_text('name = "disabled_ext"\nversion = "1.0.0"')
+            (ext2_path / 'manifest.toml').write_text('name = "disabled_ext"\nversion = "1.0.0"')
             backend2_path = ext2_path / 'src' / 'backend'
             backend2_path.mkdir(parents=True)
             (backend2_path / '__init__.py').write_text('')
             
             registry = ExtensionRegistry(ext_dir)
-            with patch('website.extensions.extension_loader.get_config') as mock_loader_get:
+            with patch('website.extensions.registry.get_config') as mock_loader_get:
                 mock_config = MagicMock()
                 
                 def extension_settings_side_effect(name):
@@ -1409,22 +1439,22 @@ class TestMultipleExtensions:
                 assert 'disabled_ext' not in registry.loaded_extensions
 
     def test_enabled_by_default_false(self):
-        """Test that enabled_by_default = False requires explicit enable."""
+        """Test that enabled_by_default = false requires explicit enable."""
         with tempfile.TemporaryDirectory() as tmpdir:
             ext_dir = Path(tmpdir)
             ext_path = ext_dir / 'default_disabled_ext'
             ext_path.mkdir()
             
-            # Create manifest with enabled_by_default = False
-            manifest_path = ext_path / 'manifest.py'
-            manifest_path.write_text('name = "default_disabled_ext"\nversion = "1.0.0"\nenabled_by_default = False')
+            # Create manifest with enabled_by_default = false
+            manifest_path = ext_path / 'manifest.toml'
+            manifest_path.write_text('name = "default_disabled_ext"\nversion = "1.0.0"\nenabled_by_default = false')
             
             backend_path = ext_path / 'src' / 'backend'
             backend_path.mkdir(parents=True)
             (backend_path / '__init__.py').write_text('')
             
             registry = ExtensionRegistry(ext_dir)
-            with patch('website.extensions.extension_loader.get_config') as mock_loader_get:
+            with patch('website.extensions.registry.get_config') as mock_loader_get:
                 mock_config = MagicMock()
                 # Don't explicitly enable it -- no 'enabled' key, falls back to manifest default
                 mock_config.extension_settings.return_value = {}
@@ -1436,22 +1466,22 @@ class TestMultipleExtensions:
                 assert 'default_disabled_ext' not in registry.loaded_extensions
 
     def test_enabled_by_default_true(self):
-        """Test that enabled_by_default = True loads extension by default."""
+        """Test that enabled_by_default = true loads extension by default."""
         with tempfile.TemporaryDirectory() as tmpdir:
             ext_dir = Path(tmpdir)
             ext_path = ext_dir / 'default_enabled_ext'
             ext_path.mkdir()
             
-            # Create manifest with enabled_by_default = True (or omit it, defaults to True)
-            manifest_path = ext_path / 'manifest.py'
-            manifest_path.write_text('name = "default_enabled_ext"\nversion = "1.0.0"\nenabled_by_default = True')
+            # Create manifest with enabled_by_default = true (or omit it, defaults to True)
+            manifest_path = ext_path / 'manifest.toml'
+            manifest_path.write_text('name = "default_enabled_ext"\nversion = "1.0.0"\nenabled_by_default = true')
             
             backend_path = ext_path / 'src' / 'backend'
             backend_path.mkdir(parents=True)
             (backend_path / '__init__.py').write_text('')
             
             registry = ExtensionRegistry(ext_dir)
-            with patch('website.extensions.extension_loader.get_config') as mock_loader_get:
+            with patch('website.extensions.registry.get_config') as mock_loader_get:
                 mock_config = MagicMock()
                 # No 'enabled' key, falls back to manifest default (True)
                 mock_config.extension_settings.return_value = {}
@@ -1474,7 +1504,7 @@ class TestRegistryStateManagement:
         from website.settings import EXTENSIONS_DIR
         registry = ExtensionRegistry(EXTENSIONS_DIR)
         
-        with patch('website.extensions.extension_loader.get_config') as mock_loader_get:
+        with patch('website.extensions.registry.get_config') as mock_loader_get:
             mock_config = MagicMock()
             mock_config.extension_settings.return_value = {'enabled': True}
             mock_loader_get.return_value = mock_config
@@ -1493,8 +1523,8 @@ class TestRegistryStateManagement:
     def test_get_extension_registry_singleton(self):
         """Test that get_extension_registry() returns the same instance."""
         # Reset global registry
-        import website.extensions.extension_loader
-        website.extensions.extension_loader._registry = None
+        import website.extensions.registry
+        website.extensions.registry._registry = None
         
         registry1 = get_extension_registry()
         registry2 = get_extension_registry()
@@ -1517,7 +1547,7 @@ class TestDuplicateExtensionNames:
             # Create first extension
             ext1_path = ext_dir / 'extension_one'
             ext1_path.mkdir()
-            (ext1_path / 'manifest.py').write_text('name = "duplicate_name"\nversion = "1.0.0"')
+            (ext1_path / 'manifest.toml').write_text('name = "duplicate_name"\nversion = "1.0.0"')
             backend1_path = ext1_path / 'src' / 'backend'
             backend1_path.mkdir(parents=True)
             (backend1_path / '__init__.py').write_text('')
@@ -1525,13 +1555,13 @@ class TestDuplicateExtensionNames:
             # Create second extension with same name
             ext2_path = ext_dir / 'extension_two'
             ext2_path.mkdir()
-            (ext2_path / 'manifest.py').write_text('name = "duplicate_name"\nversion = "2.0.0"')
+            (ext2_path / 'manifest.toml').write_text('name = "duplicate_name"\nversion = "2.0.0"')
             backend2_path = ext2_path / 'src' / 'backend'
             backend2_path.mkdir(parents=True)
             (backend2_path / '__init__.py').write_text('')
             
             registry = ExtensionRegistry(ext_dir)
-            with patch('website.extensions.extension_loader.get_config') as mock_loader_get:
+            with patch('website.extensions.registry.get_config') as mock_loader_get:
                 mock_config = MagicMock()
                 mock_config.extension_settings.return_value = {'enabled': True}
                 mock_loader_get.return_value = mock_config
@@ -1547,32 +1577,26 @@ class TestDuplicateExtensionNames:
                 assert len(registry.loaded_extensions) == 0
 
     def test_extension_name_mismatch_with_folder_name(self):
-        """Test extension where manifest name differs from folder name."""
+        """Folder name must equal manifest.name; mismatch exits."""
         with tempfile.TemporaryDirectory() as tmpdir:
             ext_dir = Path(tmpdir)
-            
-            # Create extension with folder name different from manifest name
             ext_path = ext_dir / 'folder_name'
             ext_path.mkdir()
-            (ext_path / 'manifest.py').write_text('name = "manifest_name"\nversion = "1.0.0"')
+            (ext_path / 'manifest.toml').write_text('name = "manifest_name"\nversion = "1.0.0"')
             backend_path = ext_path / 'src' / 'backend'
             backend_path.mkdir(parents=True)
             (backend_path / '__init__.py').write_text('')
-            
+
             registry = ExtensionRegistry(ext_dir)
-            with patch('website.extensions.extension_loader.get_config') as mock_loader_get:
+            with patch('website.extensions.registry.get_config') as mock_loader_get:
                 mock_config = MagicMock()
                 mock_config.extension_settings.return_value = {'enabled': True}
                 mock_loader_get.return_value = mock_config
-                
-                registry.discover_extensions()
-                
-                # Should use manifest name, not folder name
-                assert 'manifest_name' in registry.loaded_extensions
-                assert 'folder_name' not in registry.loaded_extensions
-                # Module path should use folder name
-                apps = registry.discover_extensions()
-                assert any('folder_name.src.backend' in app for app in apps)
+
+                with pytest.raises(SystemExit) as exc_info:
+                    registry.discover_extensions()
+                assert exc_info.value.code == 1
+                assert len(registry.loaded_extensions) == 0
 
     def test_multiple_duplicates_detected(self):
         """Test that multiple sets of duplicates are all detected and cause SystemExit."""
@@ -1583,13 +1607,13 @@ class TestDuplicateExtensionNames:
             for i, dup_name in enumerate(['dup_one', 'dup_one', 'dup_two', 'dup_two']):
                 ext_path = ext_dir / f'ext_{i}'
                 ext_path.mkdir()
-                (ext_path / 'manifest.py').write_text(f'name = "{dup_name}"\nversion = "1.0.0"')
+                (ext_path / 'manifest.toml').write_text(f'name = "{dup_name}"\nversion = "1.0.0"')
                 backend_path = ext_path / 'src' / 'backend'
                 backend_path.mkdir(parents=True)
                 (backend_path / '__init__.py').write_text('')
             
             registry = ExtensionRegistry(ext_dir)
-            with patch('website.extensions.extension_loader.get_config') as mock_loader_get:
+            with patch('website.extensions.registry.get_config') as mock_loader_get:
                 mock_config = MagicMock()
                 mock_config.extension_settings.return_value = {'enabled': True}
                 mock_loader_get.return_value = mock_config
@@ -1618,7 +1642,7 @@ class TestDynamicAppConfig:
             ext_path = ext_dir / 'dynamic_config_ext'
             ext_path.mkdir()
             
-            manifest_path = ext_path / 'manifest.py'
+            manifest_path = ext_path / 'manifest.toml'
             manifest_path.write_text('name = "dynamic_config_ext"\nversion = "1.0.0"')
             
             backend_path = ext_path / 'src' / 'backend'
@@ -1627,7 +1651,7 @@ class TestDynamicAppConfig:
             # Don't create apps.py - should use dynamic config
             
             registry = ExtensionRegistry(ext_dir)
-            with patch('website.extensions.extension_loader.get_config') as mock_loader_get:
+            with patch('website.extensions.registry.get_config') as mock_loader_get:
                 mock_config = MagicMock()
                 mock_config.extension_settings.return_value = {'enabled': True}
                 mock_loader_get.return_value = mock_config
@@ -1646,7 +1670,7 @@ class TestDynamicAppConfig:
             ext_path = ext_dir / 'existing_apps_ext'
             ext_path.mkdir()
             
-            manifest_path = ext_path / 'manifest.py'
+            manifest_path = ext_path / 'manifest.toml'
             manifest_path.write_text('name = "existing_apps_ext"\nversion = "1.0.0"')
             
             backend_path = ext_path / 'src' / 'backend'
@@ -1656,7 +1680,7 @@ class TestDynamicAppConfig:
             (backend_path / 'apps.py').write_text('from django.apps import AppConfig\n\nclass ExistingAppsExtConfig(AppConfig):\n    name = "existing_apps_ext.src.backend"\n    label = "existing_apps_ext"')
             
             registry = ExtensionRegistry(ext_dir)
-            with patch('website.extensions.extension_loader.get_config') as mock_loader_get:
+            with patch('website.extensions.registry.get_config') as mock_loader_get:
                 mock_config = MagicMock()
                 mock_config.extension_settings.return_value = {'enabled': True}
                 mock_loader_get.return_value = mock_config
@@ -1685,7 +1709,7 @@ class TestExtensionAppConfigIntegration:
             ext_path = ext_dir / 'test_ext'
             ext_path.mkdir()
             
-            manifest_path = ext_path / 'manifest.py'
+            manifest_path = ext_path / 'manifest.toml'
             manifest_path.write_text('name = "test_ext"\nversion = "1.0.0"')
             
             backend_path = ext_path / 'src' / 'backend'
@@ -1694,7 +1718,7 @@ class TestExtensionAppConfigIntegration:
             # Don't create apps.py - should use dynamic config
             
             registry = ExtensionRegistry(ext_dir)
-            with patch('website.extensions.extension_loader.get_config') as mock_loader_get:
+            with patch('website.extensions.registry.get_config') as mock_loader_get:
                 mock_config = MagicMock()
                 mock_config.extension_settings.return_value = {'enabled': True}
                 mock_loader_get.return_value = mock_config
@@ -1721,7 +1745,7 @@ class TestExtensionAppConfigIntegration:
             ext_path = ext_dir / 'custom_apps_ext'
             ext_path.mkdir()
             
-            manifest_path = ext_path / 'manifest.py'
+            manifest_path = ext_path / 'manifest.toml'
             manifest_path.write_text('name = "custom_apps_ext"\nversion = "1.0.0"')
             
             backend_path = ext_path / 'src' / 'backend'
@@ -1740,7 +1764,7 @@ class CustomAppsExtConfig(ExtensionAppConfig):
             (backend_path / 'apps.py').write_text(apps_py_content)
             
             registry = ExtensionRegistry(ext_dir)
-            with patch('website.extensions.extension_loader.get_config') as mock_loader_get:
+            with patch('website.extensions.registry.get_config') as mock_loader_get:
                 mock_config = MagicMock()
                 mock_config.extension_settings.return_value = {'enabled': True}
                 mock_loader_get.return_value = mock_config
@@ -1796,441 +1820,99 @@ class CustomAppsExtConfig(ExtensionAppConfig):
 
 
 # ============================================================================
-# Example Extension Hook Callback Tests
+# Example Extension ImportProvider Tests
 # ============================================================================
 
-@pytest.mark.django_db
-class TestExampleExtensionHookCallback(TestCase):
-    """Test that example extension's handle_import hook is called with real data."""
-    
+class TestExampleExtensionImportProvider(TestCase):
+    """ExampleImportProvider writes a user-scoped ExampleItem after import."""
+
     def setUp(self):
-        """Set up test fixtures."""
         from django.contrib.auth import get_user_model
-        from django.apps import apps
         from django.contrib.gis.geos import Point
         from api.models import ImportQueue, FeatureStore
         from geo_lib.feature_id import generate_geojson_hash
         from geo_lib.processing.hooks import execute_import_hooks
-        from website.extensions.extension_hooks import get_hooks
-        
+        from website.extensions.capabilities import set_extension_context, clear_extension_context
+        from website.extensions.import_provider import (
+            clear_import_providers,
+            list_import_providers,
+            register_import_provider,
+        )
+        from extensions.example_extension.src.backend.import_provider import ExampleImportProvider
+        from extensions.example_extension.src.backend.models import ExampleItem
+
         User = get_user_model()
         self.user = User.objects.create_user(
             username='testuser',
             email='test@example.com',
-            password='testpass123'
+            password='testpass123',
         )
-        
-        # Store imports for use in test methods
         self.ImportQueue = ImportQueue
         self.FeatureStore = FeatureStore
         self.Point = Point
         self.generate_geojson_hash = generate_geojson_hash
         self.execute_import_hooks = execute_import_hooks
-        self.get_hooks = get_hooks
-        self.apps = apps
-    
-    def _ensure_extension_loaded(self):
-        """Ensure the example extension is loaded and initialized."""
-        from website.settings import EXTENSIONS_DIR
-        from website.extensions.extension_loader import ExtensionRegistry
-        from website.extensions.extension_hooks import set_extension_context, clear_extension_context
-        import os
-        
-        # Check if extension is already loaded and hooks are registered
-        hooks = self.get_hooks('import')
-        hook_ids = [h[0] for h in hooks]
-        if 'example_extension.example_import_handler' in hook_ids:
-            # Extension is already initialized, get the app config
-            try:
-                app_config = self.apps.get_app_config('example_extension')
-                return app_config
-            except LookupError:
-                pass
-        
-        # Extension not loaded or not initialized, try to load and initialize it
-        registry = ExtensionRegistry(EXTENSIONS_DIR)
-        with patch('website.extensions.extension_loader.get_config') as mock_loader_get:
-            mock_config = MagicMock()
-            # Enable the extension
-            mock_config.extension_settings.return_value = {'enabled': True}
-            mock_loader_get.return_value = mock_config
-            
-            # Discover extensions (this adds them to INSTALLED_APPS if enabled)
-            apps_list = registry.discover_extensions()
-            
-            # The extension should now be in loaded_extensions
-            if 'example_extension' not in registry.loaded_extensions:
-                pytest.skip("Example extension not found or not enabled")
-        
-        # Try to get the app config
-        try:
-            app_config = self.apps.get_app_config('example_extension')
-        except LookupError:
-            pytest.skip("Example extension AppConfig not found in Django apps")
-        
-        # Ensure ready() has been called to initialize the extension
-        # Check if hooks are registered
-        hooks = self.get_hooks('import')
-        hook_ids = [h[0] for h in hooks]
-        if 'example_extension.example_import_handler' not in hook_ids:
-            # Extension not initialized, manually call ready()
-            # Set environment to allow ready() to run
-            with patch.dict(os.environ, {'RUN_MAIN': 'true'}, clear=False):
-                # Set extension context before calling ready()
-                set_extension_context('example_extension')
-                try:
-                    app_config.ready()
-                finally:
-                    clear_extension_context()
-        
-        # Verify hooks are now registered
-        hooks = self.get_hooks('import')
-        hook_ids = [h[0] for h in hooks]
-        if 'example_extension.example_import_handler' not in hook_ids:
-            pytest.skip("Example extension hook not registered after initialization")
-        
-        return app_config
-    
-    def test_handle_import_called_with_real_import(self):
-        """Test that handle_import callback is called with real import data."""
-        from unittest.mock import patch
-        
-        # Ensure extension is loaded
-        app_config = self._ensure_extension_loaded()
-        
-        # Verify hook is registered
-        hooks = self.get_hooks('import')
-        hook_ids = [h[0] for h in hooks]
-        assert 'example_extension.example_import_handler' in hook_ids, "Hook should be registered"
-        
-        # Get the registered callback
-        hook_callback = None
-        for hook_id, callback in hooks:
-            if hook_id == 'example_extension.example_import_handler':
-                hook_callback = callback
-                break
-        
-        assert hook_callback is not None, "Hook callback should be found"
-        
-        # Spy on the callback function
-        call_tracker = {'called': False, 'args': None, 'kwargs': None}
-        
-        def spy_wrapper(*args, **kwargs):
-            call_tracker['called'] = True
-            call_tracker['args'] = args
-            call_tracker['kwargs'] = kwargs
-            return hook_callback(*args, **kwargs)
-        
-        # Replace the hook with our spy
-        from website.extensions.extension_hooks import unregister_hook, register_hook, set_extension_context, clear_extension_context
-        unregister_hook('import', 'example_extension.example_import_handler')
+        self.ExampleItem = ExampleItem
+
+        clear_import_providers()
         set_extension_context('example_extension')
-        register_hook('import', 'example_import_handler', spy_wrapper)
-        clear_extension_context()
-        
         try:
-            # Create real ImportQueue
-            import_item = self.ImportQueue.objects.create(
-                user=self.user,
-                original_filename='test.kml',
-                raw_file='<kml></kml>',
-                imported=True
-            )
-            
-            # Create real FeatureStore
-            feature_data = {
-                'type': 'Feature',
-                'geometry': {
-                    'type': 'Point',
-                    'coordinates': [-122.4194, 37.7749, 0.0]
-                },
-                'properties': {
-                    'name': 'Test Feature',
-                    'description': 'A test feature created for hook testing'
-                }
-            }
-            feature = self.FeatureStore.objects.create(
-                user=self.user,
-                geojson=feature_data,
-                geometry=self.Point(-122.4194, 37.7749, 0.0),
-                geojson_hash=self.generate_geojson_hash(feature_data),
-                source=import_item
-            )
-            
-            # Execute import hooks
-            self.execute_import_hooks(import_item, self.user.id, [feature])
-            
-            # Verify handle_import was called
-            assert call_tracker['called'], "handle_import callback was not called"
-            
-            # Verify it was called with correct arguments
-            # execute_import_hooks passes: import_item, user_id, created_features=created_features
-            args = call_tracker['args']
-            kwargs = call_tracker['kwargs']
-            
-            assert len(args) >= 1, "handle_import should receive import_item as first argument"
-            assert args[0] == import_item, "First argument should be the ImportQueue instance"
-            
-            assert len(args) >= 2, "handle_import should receive user_id as second argument"
-            assert args[1] == self.user.id, f"Second argument should be user_id {self.user.id}, got {args[1]}"
-            
-            # Check created_features (execute_import_hooks passes it as keyword arg)
-            if 'created_features' in kwargs:
-                created_features = kwargs['created_features']
-            elif len(args) >= 3:
-                created_features = args[2]
-            else:
-                pytest.fail("handle_import should receive created_features")
-            
-            assert isinstance(created_features, list), "created_features should be a list"
-            assert len(created_features) == 1, f"Expected 1 feature, got {len(created_features)}"
-            assert created_features[0] == feature, "Feature in list should match created feature"
+            register_import_provider(ExampleImportProvider())
         finally:
-            # Restore original hook
-            unregister_hook('import', 'example_extension.example_import_handler')
-            set_extension_context('example_extension')
-            register_hook('import', 'example_import_handler', hook_callback)
             clear_extension_context()
-    
-    def test_handle_import_with_multiple_features(self):
-        """Test handle_import callback with multiple features."""
-        # Ensure extension is loaded
-        app_config = self._ensure_extension_loaded()
-        
-        # Verify hook is registered and get callback
-        hooks = self.get_hooks('import')
-        hook_callback = None
-        for hook_id, callback in hooks:
-            if hook_id == 'example_extension.example_import_handler':
-                hook_callback = callback
-                break
-        
-        assert hook_callback is not None, "Hook callback should be found"
-        
-        # Spy on the callback function
-        call_tracker = {'called': False, 'args': None, 'kwargs': None}
-        
-        def spy_wrapper(*args, **kwargs):
-            call_tracker['called'] = True
-            call_tracker['args'] = args
-            call_tracker['kwargs'] = kwargs
-            return hook_callback(*args, **kwargs)
-        
-        # Replace the hook with our spy
-        from website.extensions.extension_hooks import unregister_hook, register_hook, set_extension_context, clear_extension_context
-        unregister_hook('import', 'example_extension.example_import_handler')
-        set_extension_context('example_extension')
-        register_hook('import', 'example_import_handler', spy_wrapper)
-        clear_extension_context()
-        
-        try:
-            # Create real ImportQueue
-            import_item = self.ImportQueue.objects.create(
-                user=self.user,
-                original_filename='test.kml',
-                raw_file='<kml></kml>',
-                imported=True
-            )
-            
-            # Create multiple features
-            features = []
-            coordinates = [
-                [-122.4194, 37.7749, 0.0],
-                [-122.4094, 37.7849, 0.0],
-                [-122.3994, 37.7949, 0.0]
-            ]
-            
-            for i, coord in enumerate(coordinates):
-                feature_data = {
-                    'type': 'Feature',
-                    'geometry': {
-                        'type': 'Point',
-                        'coordinates': coord
-                    },
-                    'properties': {
-                        'name': f'Test Feature {i+1}',
-                        'description': f'Feature number {i+1}'
-                    }
-                }
-                feature = self.FeatureStore.objects.create(
-                    user=self.user,
-                    geojson=feature_data,
-                    geometry=self.Point(coord[0], coord[1], coord[2]),
-                    geojson_hash=self.generate_geojson_hash(feature_data),
-                    source=import_item
-                )
-                features.append(feature)
-            
-            # Execute import hooks
-            self.execute_import_hooks(import_item, self.user.id, features)
-            
-            # Verify handle_import was called
-            assert call_tracker['called'], "handle_import callback was not called"
-            
-            # Verify it received all features
-            args = call_tracker['args']
-            kwargs = call_tracker['kwargs']
-            
-            # Get created_features (execute_import_hooks passes it as keyword arg)
-            if 'created_features' in kwargs:
-                created_features = kwargs['created_features']
-            elif len(args) >= 3:
-                created_features = args[2]
-            else:
-                pytest.fail("handle_import should receive created_features")
-            
-            assert isinstance(created_features, list), "created_features should be a list"
-            assert len(created_features) == 3, f"Expected 3 features, got {len(created_features)}"
-            
-            # Verify all features are present
-            feature_ids = {f.id for f in created_features}
-            expected_ids = {f.id for f in features}
-            assert feature_ids == expected_ids, "Feature IDs don't match"
-        finally:
-            # Restore original hook
-            unregister_hook('import', 'example_extension.example_import_handler')
-            set_extension_context('example_extension')
-            register_hook('import', 'example_import_handler', hook_callback)
-            clear_extension_context()
-    
-    def test_handle_import_with_empty_features(self):
-        """Test handle_import callback with empty features list."""
-        # Ensure extension is loaded
-        app_config = self._ensure_extension_loaded()
-        
-        # Verify hook is registered and get callback
-        hooks = self.get_hooks('import')
-        hook_callback = None
-        for hook_id, callback in hooks:
-            if hook_id == 'example_extension.example_import_handler':
-                hook_callback = callback
-                break
-        
-        assert hook_callback is not None, "Hook callback should be found"
-        
-        # Spy on the callback function
-        call_tracker = {'called': False, 'args': None, 'kwargs': None}
-        
-        def spy_wrapper(*args, **kwargs):
-            call_tracker['called'] = True
-            call_tracker['args'] = args
-            call_tracker['kwargs'] = kwargs
-            return hook_callback(*args, **kwargs)
-        
-        # Replace the hook with our spy
-        from website.extensions.extension_hooks import unregister_hook, register_hook, set_extension_context, clear_extension_context
-        unregister_hook('import', 'example_extension.example_import_handler')
-        set_extension_context('example_extension')
-        register_hook('import', 'example_import_handler', spy_wrapper)
-        clear_extension_context()
-        
-        try:
-            # Create real ImportQueue (but no features created)
-            import_item = self.ImportQueue.objects.create(
-                user=self.user,
-                original_filename='empty.kml',
-                raw_file='<kml></kml>',
-                imported=True
-            )
-            
-            # Execute import hooks with empty features list
-            self.execute_import_hooks(import_item, self.user.id, [])
-            
-            # Verify handle_import was still called
-            assert call_tracker['called'], "handle_import callback should be called even with no features"
-            
-            # Verify it received empty list
-            args = call_tracker['args']
-            kwargs = call_tracker['kwargs']
-            
-            # Get created_features (execute_import_hooks passes it as keyword arg)
-            if 'created_features' in kwargs:
-                created_features = kwargs['created_features']
-            elif len(args) >= 3:
-                created_features = args[2]
-            else:
-                pytest.fail("handle_import should receive created_features")
-            
-            assert isinstance(created_features, list), "created_features should be a list"
-            assert len(created_features) == 0, f"Expected 0 features, got {len(created_features)}"
-        finally:
-            # Restore original hook
-            unregister_hook('import', 'example_extension.example_import_handler')
-            set_extension_context('example_extension')
-            register_hook('import', 'example_import_handler', hook_callback)
-            clear_extension_context()
-    
-    def test_handle_import_logging(self):
-        """Test that handle_import logs expected information."""
-        from unittest.mock import patch
-        import logging
-        
-        # Ensure extension is loaded
-        app_config = self._ensure_extension_loaded()
-        
-        # Import the apps module to get access to its logger
-        # Try both possible module paths since we register with extensions. prefix
-        try:
-            apps_module = importlib.import_module('extensions.example_extension.src.backend.apps')
-        except ImportError:
-            try:
-                apps_module = importlib.import_module('example_extension.src.backend.apps')
-            except ImportError:
-                pytest.skip("Could not import example extension apps module")
-        
-        # Patch the logger on the actual module object
-        with patch.object(apps_module, 'logger') as mock_logger:
-            # Create real ImportQueue
-            import_item = self.ImportQueue.objects.create(
-                user=self.user,
-                original_filename='test.kml',
-                raw_file='<kml></kml>',
-                imported=True
-            )
-            
-            # Create real FeatureStore
-            feature_data = {
-                'type': 'Feature',
-                'geometry': {
-                    'type': 'Point',
-                    'coordinates': [-122.4194, 37.7749, 0.0]
-                },
-                'properties': {
-                    'name': 'Test Feature'
-                }
-            }
-            feature = self.FeatureStore.objects.create(
-                user=self.user,
-                geojson=feature_data,
-                geometry=self.Point(-122.4194, 37.7749, 0.0),
-                geojson_hash=self.generate_geojson_hash(feature_data),
-                source=import_item
-            )
-            
-            # Execute import hooks
-            self.execute_import_hooks(import_item, self.user.id, [feature])
-            
-            # Verify logger.info was called
-            assert mock_logger.info.called, "Logger.info should be called by handle_import"
-            
-            # Check that the log message contains expected information
-            log_calls = mock_logger.info.call_args_list
-            assert len(log_calls) > 0, "At least one log message should be recorded"
-            
-            # Find the log call from handle_import
-            import_logged = False
-            for call in log_calls:
-                args, kwargs = call
-                if len(args) > 0:
-                    log_message = args[0]
-                    if 'Import hook triggered' in log_message:
-                        import_logged = True
-                        # Verify message contains import_item ID
-                        assert str(import_item.id) in log_message, f"Log message should contain import_item ID {import_item.id}"
-                        # Verify message contains user_id
-                        assert str(self.user.id) in log_message, f"Log message should contain user_id {self.user.id}"
-                        # Verify message contains feature count
-                        assert '1 features created' in log_message or '1 feature' in log_message, "Log message should contain feature count"
-                        break
-            
-            assert import_logged, "Expected log message 'Import hook triggered' was not found"
+        assert list_import_providers()
+
+    def tearDown(self):
+        from website.extensions.import_provider import clear_import_providers
+        clear_import_providers()
+
+    def _feature(self, import_item, name='Test Feature'):
+        feature_data = {
+            'type': 'Feature',
+            'geometry': {'type': 'Point', 'coordinates': [10.0, 20.0, 0.0]},
+            'properties': {'name': name},
+        }
+        return self.FeatureStore.objects.create(
+            user=self.user,
+            geojson=feature_data,
+            geometry=self.Point(10.0, 20.0, 0.0),
+            geojson_hash=self.generate_geojson_hash(feature_data),
+            source=import_item,
+            scope='example_extension',
+        )
+
+    def test_import_provider_creates_example_item(self):
+        import_item = self.ImportQueue.objects.create(
+            user=self.user,
+            original_filename='test.kml',
+            raw_file='<kml></kml>',
+            imported=True,
+        )
+        feature = self._feature(import_item)
+        self.execute_import_hooks(import_item, self.user.id, [feature])
+        items = list(self.ExampleItem.objects.filter(user=self.user))
+        assert len(items) == 1
+        assert str(import_item.id) in items[0].name
+        assert '1 features imported' in items[0].description
+
+    def test_import_provider_with_multiple_features(self):
+        import_item = self.ImportQueue.objects.create(
+            user=self.user,
+            original_filename='test.kml',
+            raw_file='<kml></kml>',
+            imported=True,
+        )
+        features = [self._feature(import_item, f'Feature {i}') for i in range(3)]
+        self.execute_import_hooks(import_item, self.user.id, features)
+        item = self.ExampleItem.objects.get(user=self.user)
+        assert '3 features imported' in item.description
+
+    def test_import_provider_skips_empty_features(self):
+        import_item = self.ImportQueue.objects.create(
+            user=self.user,
+            original_filename='empty.kml',
+            raw_file='<kml></kml>',
+            imported=True,
+        )
+        self.execute_import_hooks(import_item, self.user.id, [])
+        assert self.ExampleItem.objects.filter(user=self.user).count() == 0

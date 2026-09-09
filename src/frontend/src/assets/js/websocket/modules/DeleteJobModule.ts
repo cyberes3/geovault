@@ -8,9 +8,7 @@ import { BaseModule } from './BaseModule';
 export class DeleteJobModule extends BaseModule {
     readonly moduleName = 'delete_job';
 
-    initialize(): void {
-        super.initialize();
-
+    protected onInitialize(): void {
         this.subscribe('started', (data: { item_id: number }) => {
             void this.store.dispatch('importQueue/updateImportTableItem', {
                 id: data.item_id,

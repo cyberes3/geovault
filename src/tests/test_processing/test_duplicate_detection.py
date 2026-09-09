@@ -1,40 +1,64 @@
 """
-Comprehensive tests for duplicate detection system.
+Duplicate detection against the closed kernel.
 
-Tests each of the 4 duplicate types individually and their interactions:
-1. Feature store hash duplicate
-2. Feature store geometry duplicate
-3. Cross-queue hash duplicate
-4. Cross-queue geometry duplicate
+Covers each of the 4 duplicate kinds and their priority:
+1. Library hash
+2. Library geometry
+3. Draft-queue hash
+4. Draft-queue geometry
 
-Also tests priority rules:
-- Hash > Geometry (within same source)
-- Feature Store > Cross-Queue (across sources)
+Priority:
+- Hash > Geometry (within the same scope)
+- Library > Draft queue (across scopes)
 """
-from unittest.mock import patch
+from datetime import timedelta
 
-from django.test import TestCase, TransactionTestCase
 from django.contrib.auth import get_user_model
-
-from datetime import datetime, timedelta, timezone
-
 from django.contrib.gis.geos import LineString, Point
+from django.test import TestCase, TransactionTestCase
+from django.utils import timezone
 
 from api.models import FeatureStore, ImportQueue
+from geo_lib.duplicates.adapters.import_draft import build_duplicate_index
+from geo_lib.duplicates.constants import COORDINATE_TOLERANCE
+from geo_lib.duplicates.detector import DuplicateDetector
+from geo_lib.duplicates.identity import GeoJsonHash
+from geo_lib.duplicates.skip_intent import SkipIntent
+from geo_lib.duplicates.verdict import DuplicateVerdict, VerdictKind, VerdictScope
 from geo_lib.feature_id import generate_geojson_hash
-from geo_lib.processing.duplicate_detection.constants import COORDINATE_TOLERANCE
-from geo_lib.processing.duplicate_detection.duplicate_detection import (
-    find_duplicates_for_source,
-)
-# Import private methods directly for testing (common Python testing pattern)
-from geo_lib.processing.duplicate_detection.find import (
-    _find_hash_duplicates as find_hash_duplicates,
-    _find_geometry_duplicates as find_geometry_duplicates,
-)
-from geo_lib.processing.duplicate_detection.models import DuplicateMatchType, DuplicateSource, split_duplicates_by_match_type
+from tests.test_utils.import_queue import create_draft, queue_with_drafts
 
 
 User = get_user_model()
+
+
+def detect(features, user_id, exclude_queue_id=0, uploaded_at=None):
+    uploaded_at = uploaded_at or timezone.now()
+    index = build_duplicate_index(user_id, features, exclude_queue_id or 0, uploaded_at)
+    return DuplicateDetector().detect_two_pass(features, index)
+
+
+def _digest(feature):
+    return GeoJsonHash.of(feature).value
+
+
+def partition(features, verdicts):
+    remaining = []
+    duplicates = []
+    for feature in features:
+        verdict = verdicts[_digest(feature)]
+        if verdict.kind == VerdictKind.NONE:
+            remaining.append(feature)
+        else:
+            duplicates.append((feature, verdict))
+    return remaining, duplicates
+
+
+def existing_id(verdict: DuplicateVerdict):
+    match = verdict.matches[0]
+    if match.feature_store_id is not None:
+        return match.feature_store_id
+    return match.draft_queue_id
 
 
 def _linestring_geometry_3d(coordinates: list) -> LineString:
@@ -50,110 +74,79 @@ def _point_feature(lon: float, lat: float, name: str = 'Test') -> dict:
     }
 
 
-def _duplicate_detection_setting(key: str) -> int:
-    settings = {
-        'DUPLICATE_DETECTION_BATCH_THRESHOLD': 2,
-        'DUPLICATE_DETECTION_BATCH_SIZE': 100,
-    }
-    return settings[key]
-
-
 class TestDuplicateDetectionIndividual(TestCase):
     """Test each duplicate type individually."""
-    
+
     def setUp(self):
-        """Set up test fixtures."""
         self.user = User.objects.create_user(
             email='test@example.com',
             password='testpass123',
-            username='testuser'
+            username='testuser',
         )
-        
-        # Sample features
+
         self.point_feature = {
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
-            'properties': {'name': 'Test Point', 'description': 'A test point'}
+            'properties': {'name': 'Test Point', 'description': 'A test point'},
         }
-        
+
         self.different_point = {
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [-122.5194, 37.8749]},
-            'properties': {'name': 'Different Point', 'description': 'Another point'}
+            'properties': {'name': 'Different Point', 'description': 'Another point'},
         }
-        
-        # Same coordinates, different properties (geometry duplicate only)
+
         self.same_coords_different_props = {
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
-            'properties': {'name': 'Different Name', 'description': 'Different description'}
+            'properties': {'name': 'Different Name', 'description': 'Different description'},
         }
 
     def test_feature_store_hash_duplicate_only(self):
         """Test 1: Feature store hash duplicate detection."""
-        # Create a feature in the store with exact same hash
         feature_hash = generate_geojson_hash(self.point_feature)
         self.point_feature['properties']['geojson_hash'] = feature_hash
-        
-        store_feature = FeatureStore.objects.create(
-            user=self.user,
-            geojson=self.point_feature,
-            geojson_hash=feature_hash
-        )
-        
-        # Try to import the same feature
-        remaining, duplicates, log = find_duplicates_for_source(
-            [self.point_feature],
-            self.user.id,
-            source='feature_store',
-            exclude_queue_id=None,
-            exclude_timestamp=None
-        )
-        
-        # Assertions
-        self.assertEqual(len(remaining), 0, "Feature should be detected as duplicate")
-        self.assertEqual(len(duplicates), 1, "Should have 1 duplicate")
-        self.assertEqual(duplicates[0]['source'], DuplicateSource.FEATURE_STORE)
-        self.assertEqual(duplicates[0]['match_type'], DuplicateMatchType.HASH)
-        self.assertEqual(duplicates[0]['existing_features'][0]['id'], store_feature.id)
-        
-        print("✓ Test 1 passed: Feature store hash duplicate detected correctly")
 
-    def test_feature_store_geometry_duplicate_only(self):
-        """Test 2: Feature store geometry duplicate detection."""
-        
-        # Create a feature with same coordinates but different properties
-        feature_hash = generate_geojson_hash(self.point_feature)
-        self.point_feature['properties']['geojson_hash'] = feature_hash
-        
-        # Create geometry object from coordinates (with Z dimension)
-        coords = self.point_feature['geometry']['coordinates']
-        point_geom = Point(coords[0], coords[1], 0, srid=4326)  # Add Z=0
-        
         store_feature = FeatureStore.objects.create(
             user=self.user,
             geojson=self.point_feature,
             geojson_hash=feature_hash,
-            geometry=point_geom
         )
-        
-        # Try to import feature with same geometry but different properties
-        remaining, duplicates, log = find_duplicates_for_source(
-            [self.same_coords_different_props],
-            self.user.id,
-            source='feature_store',
-            exclude_queue_id=None,
-            exclude_timestamp=None
-        )
-        
-        # Assertions
+
+        features = [self.point_feature]
+        remaining, duplicates = partition(features, detect(features, self.user.id))
+
         self.assertEqual(len(remaining), 0, "Feature should be detected as duplicate")
         self.assertEqual(len(duplicates), 1, "Should have 1 duplicate")
-        self.assertEqual(duplicates[0]['source'], DuplicateSource.FEATURE_STORE)
-        self.assertEqual(duplicates[0]['match_type'], DuplicateMatchType.GEOMETRY)
-        self.assertEqual(duplicates[0]['existing_features'][0]['id'], store_feature.id)
-        
-        print("✓ Test 2 passed: Feature store geometry duplicate detected correctly")
+        _feature, verdict = duplicates[0]
+        self.assertEqual(verdict.scope, VerdictScope.LIBRARY)
+        self.assertEqual(verdict.kind, VerdictKind.HASH)
+        self.assertEqual(existing_id(verdict), store_feature.id)
+
+    def test_feature_store_geometry_duplicate_only(self):
+        """Test 2: Feature store geometry duplicate detection."""
+        feature_hash = generate_geojson_hash(self.point_feature)
+        self.point_feature['properties']['geojson_hash'] = feature_hash
+
+        coords = self.point_feature['geometry']['coordinates']
+        point_geom = Point(coords[0], coords[1], 0, srid=4326)
+
+        store_feature = FeatureStore.objects.create(
+            user=self.user,
+            geojson=self.point_feature,
+            geojson_hash=feature_hash,
+            geometry=point_geom,
+        )
+
+        features = [self.same_coords_different_props]
+        remaining, duplicates = partition(features, detect(features, self.user.id))
+
+        self.assertEqual(len(remaining), 0, "Feature should be detected as duplicate")
+        self.assertEqual(len(duplicates), 1, "Should have 1 duplicate")
+        _feature, verdict = duplicates[0]
+        self.assertEqual(verdict.scope, VerdictScope.LIBRARY)
+        self.assertEqual(verdict.kind, VerdictKind.GEOMETRY)
+        self.assertEqual(existing_id(verdict), store_feature.id)
 
     def test_feature_store_geometry_duplicate_2d_vs_3d(self):
         """2D vs 3D geojson with same lon/lat is a geometry duplicate in the library."""
@@ -178,99 +171,77 @@ class TestDuplicateDetectionIndividual(TestCase):
             geometry=Point(coords[0], coords[1], 0, srid=4326),
         )
 
-        remaining, duplicates, _log = find_duplicates_for_source(
-            [import_point],
-            self.user.id,
-            source='feature_store',
-            exclude_queue_id=None,
-            exclude_timestamp=None,
-        )
+        remaining, duplicates = partition([import_point], detect([import_point], self.user.id))
 
         self.assertEqual(len(remaining), 0)
         self.assertEqual(len(duplicates), 1)
-        self.assertEqual(duplicates[0]['match_type'], DuplicateMatchType.GEOMETRY)
+        self.assertEqual(duplicates[0][1].kind, VerdictKind.GEOMETRY)
 
     def test_cross_queue_hash_duplicate_only(self):
         """Test 3: Cross-queue hash duplicate detection."""
-        # Create an older import queue item with a feature
         feature_hash = generate_geojson_hash(self.point_feature)
         self.point_feature['properties']['geojson_hash'] = feature_hash
-        
-        older_queue = ImportQueue.objects.create(
+
+        older_queue = queue_with_drafts(
             user=self.user,
             original_filename='older.kml',
             raw_file='<kml></kml>',
-            geofeatures=[self.point_feature],
-            imported=False
+            features=[self.point_feature],
+            imported=False,
         )
-        
-        # Create newer queue item
+
         newer_queue = ImportQueue.objects.create(
             user=self.user,
             original_filename='newer.kml',
             raw_file='<kml></kml>',
-            geofeatures=[],
-            imported=False
+            imported=False,
         )
-        
-        # Try to import the same feature (hash duplicate)
-        remaining, duplicates, log = find_duplicates_for_source(
-            [self.point_feature],
-            self.user.id,
-            source='cross_queue',
-            exclude_queue_id=newer_queue.id,
-            exclude_timestamp=newer_queue.timestamp
+
+        features = [self.point_feature]
+        remaining, duplicates = partition(
+            features,
+            detect(features, self.user.id, newer_queue.id, newer_queue.timestamp),
         )
-        
-        # Assertions
+
         self.assertEqual(len(remaining), 0, "Feature should be detected as duplicate")
         self.assertEqual(len(duplicates), 1, "Should have 1 duplicate")
-        self.assertEqual(duplicates[0]['source'], DuplicateSource.CROSS_QUEUE)
-        self.assertEqual(duplicates[0]['match_type'], DuplicateMatchType.HASH)
-        self.assertEqual(duplicates[0]['existing_features'][0]['id'], older_queue.id)
-        
-        print("✓ Test 3 passed: Cross-queue hash duplicate detected correctly")
+        _feature, verdict = duplicates[0]
+        self.assertEqual(verdict.scope, VerdictScope.DRAFT_QUEUE)
+        self.assertEqual(verdict.kind, VerdictKind.HASH)
+        self.assertEqual(existing_id(verdict), older_queue.id)
 
     def test_cross_queue_geometry_duplicate_only(self):
         """Test 4: Cross-queue geometry duplicate detection."""
-        # Create an older import queue item with a feature
         feature_hash = generate_geojson_hash(self.point_feature)
         self.point_feature['properties']['geojson_hash'] = feature_hash
-        
-        older_queue = ImportQueue.objects.create(
+
+        older_queue = queue_with_drafts(
             user=self.user,
             original_filename='older.kml',
             raw_file='<kml></kml>',
-            geofeatures=[self.point_feature],
-            imported=False
+            features=[self.point_feature],
+            imported=False,
         )
-        
-        # Create newer queue item
+
         newer_queue = ImportQueue.objects.create(
             user=self.user,
             original_filename='newer.kml',
             raw_file='<kml></kml>',
-            geofeatures=[],
-            imported=False
+            imported=False,
         )
-        
-        # Try to import feature with same geometry but different properties
-        remaining, duplicates, log = find_duplicates_for_source(
-            [self.same_coords_different_props],
-            self.user.id,
-            source='cross_queue',
-            exclude_queue_id=newer_queue.id,
-            exclude_timestamp=newer_queue.timestamp
+
+        features = [self.same_coords_different_props]
+        remaining, duplicates = partition(
+            features,
+            detect(features, self.user.id, newer_queue.id, newer_queue.timestamp),
         )
-        
-        # Assertions
+
         self.assertEqual(len(remaining), 0, "Feature should be detected as duplicate")
         self.assertEqual(len(duplicates), 1, "Should have 1 duplicate")
-        self.assertEqual(duplicates[0]['source'], DuplicateSource.CROSS_QUEUE)
-        self.assertEqual(duplicates[0]['match_type'], DuplicateMatchType.GEOMETRY)
-        self.assertEqual(duplicates[0]['existing_features'][0]['id'], older_queue.id)
-        
-        print("✓ Test 4 passed: Cross-queue geometry duplicate detected correctly")
+        _feature, verdict = duplicates[0]
+        self.assertEqual(verdict.scope, VerdictScope.DRAFT_QUEUE)
+        self.assertEqual(verdict.kind, VerdictKind.GEOMETRY)
+        self.assertEqual(existing_id(verdict), older_queue.id)
 
     def test_cross_queue_geometry_duplicate_with_precision(self):
         """Cross-queue geometry duplicates use geometries_match tolerance, not exact JSON keys."""
@@ -288,11 +259,11 @@ class TestDuplicateDetectionIndividual(TestCase):
         feature_hash = generate_geojson_hash(feature_low_precision)
         feature_low_precision['properties']['geojson_hash'] = feature_hash
 
-        older_queue = ImportQueue.objects.create(
+        older_queue = queue_with_drafts(
             user=self.user,
             original_filename='older.gpx',
             raw_file='<gpx></gpx>',
-            geofeatures=[feature_low_precision],
+            features=[feature_low_precision],
             imported=False,
         )
 
@@ -300,112 +271,105 @@ class TestDuplicateDetectionIndividual(TestCase):
             user=self.user,
             original_filename='newer.gpx',
             raw_file='<gpx></gpx>',
-            geofeatures=[],
             imported=False,
         )
 
-        remaining, duplicates, _log = find_duplicates_for_source(
+        remaining, duplicates = partition(
             [feature_high_precision],
-            self.user.id,
-            source='cross_queue',
-            exclude_queue_id=newer_queue.id,
-            exclude_timestamp=newer_queue.timestamp,
+            detect([feature_high_precision], self.user.id, newer_queue.id, newer_queue.timestamp),
         )
 
         self.assertEqual(len(remaining), 0)
         self.assertEqual(len(duplicates), 1)
-        self.assertEqual(duplicates[0]['source'], DuplicateSource.CROSS_QUEUE)
-        self.assertEqual(duplicates[0]['match_type'], DuplicateMatchType.GEOMETRY)
-        self.assertEqual(duplicates[0]['existing_features'][0]['id'], older_queue.id)
+        _feature, verdict = duplicates[0]
+        self.assertEqual(verdict.scope, VerdictScope.DRAFT_QUEUE)
+        self.assertEqual(verdict.kind, VerdictKind.GEOMETRY)
+        self.assertEqual(existing_id(verdict), older_queue.id)
 
     def test_coordinate_precision_edge_case(self):
         """
-        Test edge case: Features with same name and slightly different coordinate precision
+        Features with the same name and slightly different coordinate precision
         should still be detected as geometry duplicates.
-        
-        This tests the fix for coordinates with different precision that are within tolerance.
-        Uses the actual coordinates from the user's GPX files:
+
+        Uses public test coordinates:
         - File 1: 38.79543, -105.64053 (5 decimal places)
         - File 2: 38.79542922973633, -105.64053344726562 (14 decimal places)
-        
-        These coordinates are about 0.28 meters apart, which is within the updated
-        tolerance of 5e-6 degrees (≈0.5 meters). The fix ensures that dwithin (spatial
-        tolerance) is used instead of exact coordinate matching.
+
+        These are about 0.28 meters apart, within COORDINATE_TOLERANCE of 5e-6 degrees
+        (≈0.5 meters).
         """
-        # Create first feature with lower precision coordinates (5 decimal places)
-        # From GPX file 1: lat="38.79543" lon="-105.64053"
         feature1 = {
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [-105.64053, 38.79543]},
-            'properties': {'name': "Dick's Peak", 'description': 'First file'}
+            'properties': {'name': "Dick's Peak", 'description': 'First file'},
         }
-        
+
         feature1_hash = generate_geojson_hash(feature1)
         feature1['properties']['geojson_hash'] = feature1_hash
-        
-        # Create geometry object for feature store
+
         coords1 = feature1['geometry']['coordinates']
         point_geom1 = Point(coords1[0], coords1[1], 0, srid=4326)
-        
+
         store_feature = FeatureStore.objects.create(
             user=self.user,
             geojson=feature1,
             geojson_hash=feature1_hash,
-            geometry=point_geom1
+            geometry=point_geom1,
         )
-        
-        # Create second feature with higher precision coordinates (14 decimal places)
-        # From GPX file 2: lat="38.79542922973633" lon="-105.64053344726562"
+
         feature2 = {
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [-105.64053344726562, 38.79542922973633]},
-            'properties': {'name': "Dick's Peak", 'description': 'Second file'}
+            'properties': {'name': "Dick's Peak", 'description': 'Second file'},
         }
-        
-        # These should be detected as geometry duplicates because they're within tolerance
-        # even though the coordinate precision differs
-        remaining, duplicates, log = find_duplicates_for_source(
-            [feature2],
-            self.user.id,
-            source='feature_store',
-            exclude_queue_id=None,
-            exclude_timestamp=None
+
+        remaining, duplicates = partition([feature2], detect([feature2], self.user.id))
+
+        self.assertEqual(
+            len(remaining),
+            0,
+            "Feature with slightly different coordinate precision should be detected as duplicate",
         )
-        
-        # Assertions
-        self.assertEqual(len(remaining), 0, 
-                        "Feature with slightly different coordinate precision should be detected as duplicate")
         self.assertEqual(len(duplicates), 1, "Should have 1 duplicate")
-        self.assertEqual(duplicates[0]['source'], DuplicateSource.FEATURE_STORE)
-        self.assertEqual(duplicates[0]['match_type'], DuplicateMatchType.GEOMETRY,
-                        "Should be detected as geometry duplicate (not hash, since properties differ)")
-        self.assertEqual(duplicates[0]['existing_features'][0]['id'], store_feature.id)
-        
-        # Verify the coordinates are actually different (not exact match)
+        _feature, verdict = duplicates[0]
+        self.assertEqual(verdict.scope, VerdictScope.LIBRARY)
+        self.assertEqual(
+            verdict.kind,
+            VerdictKind.GEOMETRY,
+            "Should be detected as geometry duplicate (not hash, since properties differ)",
+        )
+        self.assertEqual(existing_id(verdict), store_feature.id)
+
         coords1_normalized = feature1['geometry']['coordinates']
         coords2_normalized = feature2['geometry']['coordinates']
-        # They should be different when compared directly
-        self.assertNotEqual(coords1_normalized, coords2_normalized,
-                           "Coordinates should be different to test the edge case")
-        
-        # But they should be within tolerance (less than 5e-6 degrees difference)
+        self.assertNotEqual(
+            coords1_normalized,
+            coords2_normalized,
+            "Coordinates should be different to test the edge case",
+        )
+
         lat_diff = abs(coords1_normalized[1] - coords2_normalized[1])
         lon_diff = abs(coords1_normalized[0] - coords2_normalized[0])
-        # Calculate distance in meters for verification
         lat_meters = lat_diff * 111000
-        lon_meters = lon_diff * 111000 * 0.707  # Approximate cos(38.8°)
+        lon_meters = lon_diff * 111000 * 0.707
         distance_meters = (lat_meters**2 + lon_meters**2)**0.5
-        
-        # Use a small epsilon to account for floating point precision
+
         epsilon = 1e-9
-        self.assertLess(lat_diff, COORDINATE_TOLERANCE + epsilon,
-                       f"Latitude difference ({lat_diff:.2e} degrees, {lat_meters:.3f}m) should be within tolerance ({COORDINATE_TOLERANCE})")
-        self.assertLess(lon_diff, COORDINATE_TOLERANCE + epsilon,
-                       f"Longitude difference ({lon_diff:.2e} degrees, {lon_meters:.3f}m) should be within tolerance ({COORDINATE_TOLERANCE})")
-        self.assertLess(distance_meters, 0.5,
-                       f"Total distance ({distance_meters:.3f}m) should be less than 0.5 meters")
-        
-        print("✓ Test coordinate precision edge case passed: Features with different coordinate precision detected as duplicates")
+        self.assertLess(
+            lat_diff,
+            COORDINATE_TOLERANCE + epsilon,
+            f"Latitude difference ({lat_diff:.2e} degrees, {lat_meters:.3f}m) should be within tolerance ({COORDINATE_TOLERANCE})",
+        )
+        self.assertLess(
+            lon_diff,
+            COORDINATE_TOLERANCE + epsilon,
+            f"Longitude difference ({lon_diff:.2e} degrees, {lon_meters:.3f}m) should be within tolerance ({COORDINATE_TOLERANCE})",
+        )
+        self.assertLess(
+            distance_meters,
+            0.5,
+            f"Total distance ({distance_meters:.3f}m) should be less than 0.5 meters",
+        )
 
     def test_overlapping_linestrings_not_geometry_duplicate(self):
         """Repeat hikes on the same trail must not match when paths differ."""
@@ -438,13 +402,7 @@ class TestDuplicateDetectionIndividual(TestCase):
             geometry=_linestring_geometry_3d(shared_segment),
         )
 
-        remaining, duplicates, _log = find_duplicates_for_source(
-            [longer_line],
-            self.user.id,
-            source='feature_store',
-            exclude_queue_id=None,
-            exclude_timestamp=None,
-        )
+        remaining, duplicates = partition([longer_line], detect([longer_line], self.user.id))
 
         self.assertEqual(len(remaining), 1, "Different paths should not be geometry duplicates")
         self.assertEqual(len(duplicates), 0)
@@ -477,18 +435,12 @@ class TestDuplicateDetectionIndividual(TestCase):
             geometry=_linestring_geometry_3d(coordinates),
         )
 
-        remaining, duplicates, _log = find_duplicates_for_source(
-            [reimport_line],
-            self.user.id,
-            source='feature_store',
-            exclude_queue_id=None,
-            exclude_timestamp=None,
-        )
+        remaining, duplicates = partition([reimport_line], detect([reimport_line], self.user.id))
 
         self.assertEqual(len(remaining), 0)
         self.assertEqual(len(duplicates), 1)
-        self.assertEqual(duplicates[0]['match_type'], DuplicateMatchType.GEOMETRY)
-        self.assertEqual(duplicates[0]['existing_features'][0]['id'], store_feature.id)
+        self.assertEqual(duplicates[0][1].kind, VerdictKind.GEOMETRY)
+        self.assertEqual(existing_id(duplicates[0][1]), store_feature.id)
 
     def test_linestring_coordinate_precision_geometry_duplicate(self):
         """Same path with per-vertex precision differences within tolerance is a duplicate."""
@@ -521,22 +473,15 @@ class TestDuplicateDetectionIndividual(TestCase):
             geometry=_linestring_geometry_3d(stored_coords),
         )
 
-        remaining, duplicates, _log = find_duplicates_for_source(
-            [precise_line],
-            self.user.id,
-            source='feature_store',
-            exclude_queue_id=None,
-            exclude_timestamp=None,
-        )
+        remaining, duplicates = partition([precise_line], detect([precise_line], self.user.id))
 
         self.assertEqual(len(remaining), 0)
         self.assertEqual(len(duplicates), 1)
-        self.assertEqual(duplicates[0]['match_type'], DuplicateMatchType.GEOMETRY)
+        self.assertEqual(duplicates[0][1].kind, VerdictKind.GEOMETRY)
 
 
-@patch('geo_lib.processing.duplicate_detection.find.get_required_setting')
 class TestGeometryDuplicateBatchedPath(TestCase):
-    """Batched geometry duplicate detection (large import files)."""
+    """Geometry duplicate detection against the feature store."""
 
     def setUp(self):
         self.user = User.objects.create_user(
@@ -557,9 +502,8 @@ class TestGeometryDuplicateBatchedPath(TestCase):
             geometry=Point(self.coords[0], self.coords[1], 0, srid=4326),
         )
 
-    def test_batched_path_detects_feature_store_geometry_duplicate(self, mock_settings):
-        """Features above batch threshold use batched PostGIS path and still find library duplicates."""
-        mock_settings.side_effect = _duplicate_detection_setting
+    def test_batched_path_detects_feature_store_geometry_duplicate(self):
+        """Library geometry duplicates are detected for multiple import features."""
         self._seed_library_point()
 
         import_features = [
@@ -567,1244 +511,959 @@ class TestGeometryDuplicateBatchedPath(TestCase):
             for i in range(3)
         ]
 
-        remaining, duplicates, _log = find_geometry_duplicates(
-            import_features,
-            self.user.id,
-            source_filter='feature_store',
-        )
+        remaining, duplicates = partition(import_features, detect(import_features, self.user.id))
 
         self.assertEqual(len(remaining), 0)
         self.assertEqual(len(duplicates), 3)
-        for dup in duplicates:
-            self.assertEqual(dup['source'], DuplicateSource.FEATURE_STORE)
-            self.assertEqual(dup['match_type'], DuplicateMatchType.GEOMETRY)
-
-    @patch('geo_lib.processing.duplicate_detection.find._find_library_matches_for_batch_item')
-    def test_batched_fallback_still_detects_library_duplicate(
-            self,
-            mock_batch_library_lookup,
-            mock_settings,
-    ):
-        """When batched PostGIS lookup fails, per-feature resolve still finds library duplicates."""
-        mock_settings.side_effect = _duplicate_detection_setting
-        mock_batch_library_lookup.side_effect = RuntimeError('simulated batch failure')
-        store_feature = self._seed_library_point()
-
-        import_features = [
-            _point_feature(self.coords[0], self.coords[1], f'Import {i}')
-            for i in range(3)
-        ]
-
-        remaining, duplicates, _log = find_geometry_duplicates(
-            import_features,
-            self.user.id,
-            source_filter='feature_store',
-        )
-
-        self.assertEqual(len(remaining), 0)
-        self.assertEqual(len(duplicates), 3)
-        self.assertGreater(mock_batch_library_lookup.call_count, 0)
-        self.assertEqual(
-            duplicates[0]['existing_features'][0]['id'],
-            store_feature.id,
-        )
+        for _feature, verdict in duplicates:
+            self.assertEqual(verdict.scope, VerdictScope.LIBRARY)
+            self.assertEqual(verdict.kind, VerdictKind.GEOMETRY)
 
 
 class TestDuplicatePriorityRules(TestCase):
-    """Test priority rules: hash > geometry, feature_store > cross_queue."""
-    
+    """Test priority rules: hash > geometry, library > draft queue."""
+
     def setUp(self):
-        """Set up test fixtures."""
         self.user = User.objects.create_user(
             email='test@example.com',
             password='testpass123',
-            username='testuser'
+            username='testuser',
         )
-        
+
         self.point_feature = {
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
-            'properties': {'name': 'Test Point', 'description': 'A test point'}
+            'properties': {'name': 'Test Point', 'description': 'A test point'},
         }
-        
+
         self.same_coords_different_props = {
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
-            'properties': {'name': 'Different Name', 'description': 'Different description'}
+            'properties': {'name': 'Different Name', 'description': 'Different description'},
         }
 
     def test_hash_over_geometry_same_source_feature_store(self):
         """Test 5: Hash takes precedence over geometry in feature store."""
-        # Create exact hash duplicate in feature store
         feature_hash = generate_geojson_hash(self.point_feature)
         self.point_feature['properties']['geojson_hash'] = feature_hash
-        
+
         FeatureStore.objects.create(
             user=self.user,
             geojson=self.point_feature,
-            geojson_hash=feature_hash
+            geojson_hash=feature_hash,
         )
-        
-        # Try to import the same feature (both hash and geometry match)
-        remaining, duplicates, log = find_duplicates_for_source(
+
+        remaining, duplicates = partition(
             [self.point_feature],
-            self.user.id,
-            source='feature_store',
-            exclude_queue_id=None,
-            exclude_timestamp=None
+            detect([self.point_feature], self.user.id),
         )
-        
-        # Should be marked as HASH duplicate only (not geometry)
+
         self.assertEqual(len(duplicates), 1)
-        self.assertEqual(duplicates[0]['match_type'], DuplicateMatchType.HASH,
-                        "Should be marked as hash duplicate, not geometry")
-        
-        print("✓ Test 5 passed: Hash takes precedence over geometry in feature store")
+        self.assertEqual(
+            duplicates[0][1].kind,
+            VerdictKind.HASH,
+            "Should be marked as hash duplicate, not geometry",
+        )
 
     def test_hash_over_geometry_same_source_cross_queue(self):
         """Test 6: Hash takes precedence over geometry in cross-queue."""
-        # Create older queue item with exact same feature
         feature_hash = generate_geojson_hash(self.point_feature)
         self.point_feature['properties']['geojson_hash'] = feature_hash
-        
-        older_queue = ImportQueue.objects.create(
+
+        queue_with_drafts(
             user=self.user,
             original_filename='older.kml',
             raw_file='<kml></kml>',
-            geofeatures=[self.point_feature],
-            imported=False
+            features=[self.point_feature],
+            imported=False,
         )
-        
+
         newer_queue = ImportQueue.objects.create(
             user=self.user,
             original_filename='newer.kml',
             raw_file='<kml></kml>',
-            geofeatures=[],
-            imported=False
+            imported=False,
         )
-        
-        # Try to import the same feature (both hash and geometry match)
-        remaining, duplicates, log = find_duplicates_for_source(
+
+        remaining, duplicates = partition(
             [self.point_feature],
-            self.user.id,
-            source='cross_queue',
-            exclude_queue_id=newer_queue.id,
-            exclude_timestamp=newer_queue.timestamp
+            detect([self.point_feature], self.user.id, newer_queue.id, newer_queue.timestamp),
         )
-        
-        # Should be marked as HASH duplicate only (not geometry)
+
         self.assertEqual(len(duplicates), 1)
-        self.assertEqual(duplicates[0]['match_type'], DuplicateMatchType.HASH,
-                        "Should be marked as hash duplicate, not geometry")
-        
-        print("✓ Test 6 passed: Hash takes precedence over geometry in cross-queue")
+        self.assertEqual(
+            duplicates[0][1].kind,
+            VerdictKind.HASH,
+            "Should be marked as hash duplicate, not geometry",
+        )
 
     def test_feature_store_over_cross_queue_both_hash(self):
         """Test 7: Feature store hash takes precedence over cross-queue hash."""
         feature_hash = generate_geojson_hash(self.point_feature)
         self.point_feature['properties']['geojson_hash'] = feature_hash
-        
-        # Create in BOTH feature store and queue
+
         FeatureStore.objects.create(
             user=self.user,
             geojson=self.point_feature,
-            geojson_hash=feature_hash
+            geojson_hash=feature_hash,
         )
-        
-        older_queue = ImportQueue.objects.create(
+
+        queue_with_drafts(
             user=self.user,
             original_filename='older.kml',
             raw_file='<kml></kml>',
-            geofeatures=[self.point_feature],
-            imported=False
+            features=[self.point_feature],
+            imported=False,
         )
-        
+
         newer_queue = ImportQueue.objects.create(
             user=self.user,
             original_filename='newer.kml',
             raw_file='<kml></kml>',
-            geofeatures=[],
-            imported=False
+            imported=False,
         )
-        
-        # PASS 1: Feature store detection
-        remaining_after_fs, fs_duplicates, fs_log = find_duplicates_for_source(
+
+        remaining, duplicates = partition(
             [self.point_feature],
-            self.user.id,
-            source='feature_store',
-            exclude_queue_id=None,
-            exclude_timestamp=None
+            detect([self.point_feature], self.user.id, newer_queue.id, newer_queue.timestamp),
         )
-        
-        # PASS 2: Cross-queue detection on remaining
-        remaining_after_cq, cq_duplicates, cq_log = find_duplicates_for_source(
-            remaining_after_fs,
-            self.user.id,
-            source='cross_queue',
-            exclude_queue_id=newer_queue.id,
-            exclude_timestamp=newer_queue.timestamp
-        )
-        
-        # Feature store should catch it first
-        self.assertEqual(len(fs_duplicates), 1, "Feature store should detect hash duplicate")
-        self.assertEqual(fs_duplicates[0]['source'], DuplicateSource.FEATURE_STORE)
-        self.assertEqual(len(remaining_after_fs), 0, "No features should remain after feature store check")
-        self.assertEqual(len(cq_duplicates), 0, "Cross-queue should have nothing to check")
-        
-        print("✓ Test 7 passed: Feature store hash takes precedence over cross-queue hash")
+
+        self.assertEqual(len(duplicates), 1, "Feature store should detect hash duplicate")
+        self.assertEqual(duplicates[0][1].scope, VerdictScope.LIBRARY)
+        self.assertEqual(duplicates[0][1].kind, VerdictKind.HASH)
+        self.assertEqual(len(remaining), 0, "No features should remain after two-pass")
 
     def test_feature_store_over_cross_queue_both_geometry(self):
         """Test 8: Feature store geometry takes precedence over cross-queue geometry."""
-        
-        # Feature store has geometry match
         feature_hash1 = generate_geojson_hash(self.point_feature)
         self.point_feature['properties']['geojson_hash'] = feature_hash1
-        
-        # Create geometry object (with Z dimension)
+
         coords = self.point_feature['geometry']['coordinates']
-        point_geom = Point(coords[0], coords[1], 0, srid=4326)  # Add Z=0
-        
+        point_geom = Point(coords[0], coords[1], 0, srid=4326)
+
         FeatureStore.objects.create(
             user=self.user,
             geojson=self.point_feature,
             geojson_hash=feature_hash1,
-            geometry=point_geom
+            geometry=point_geom,
         )
-        
-        # Cross-queue also has geometry match (same coordinates, different name)
+
         older_feature = self.same_coords_different_props.copy()
         feature_hash2 = generate_geojson_hash(older_feature)
         older_feature['properties']['geojson_hash'] = feature_hash2
-        
-        older_queue = ImportQueue.objects.create(
+
+        queue_with_drafts(
             user=self.user,
             original_filename='older.kml',
             raw_file='<kml></kml>',
-            geofeatures=[older_feature],
-            imported=False
+            features=[older_feature],
+            imported=False,
         )
-        
+
         newer_queue = ImportQueue.objects.create(
             user=self.user,
             original_filename='newer.kml',
             raw_file='<kml></kml>',
-            geofeatures=[],
-            imported=False
+            imported=False,
         )
-        
-        # Try to import third version with same coordinates
+
         third_version = {
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
-            'properties': {'name': 'Third Version', 'description': 'Yet another one'}
+            'properties': {'name': 'Third Version', 'description': 'Yet another one'},
         }
-        
-        # PASS 1: Feature store detection
-        remaining_after_fs, fs_duplicates, fs_log = find_duplicates_for_source(
+
+        remaining, duplicates = partition(
             [third_version],
-            self.user.id,
-            source='feature_store',
-            exclude_queue_id=None,
-            exclude_timestamp=None
+            detect([third_version], self.user.id, newer_queue.id, newer_queue.timestamp),
         )
-        
-        # PASS 2: Cross-queue detection on remaining
-        remaining_after_cq, cq_duplicates, cq_log = find_duplicates_for_source(
-            remaining_after_fs,
-            self.user.id,
-            source='cross_queue',
-            exclude_queue_id=newer_queue.id,
-            exclude_timestamp=newer_queue.timestamp
-        )
-        
-        # Feature store should catch it first as geometry duplicate
-        self.assertEqual(len(fs_duplicates), 1, "Feature store should detect geometry duplicate")
-        self.assertEqual(fs_duplicates[0]['source'], DuplicateSource.FEATURE_STORE)
-        self.assertEqual(fs_duplicates[0]['match_type'], DuplicateMatchType.GEOMETRY)
-        self.assertEqual(len(remaining_after_fs), 0, "No features should remain after feature store check")
-        self.assertEqual(len(cq_duplicates), 0, "Cross-queue should have nothing to check")
-        
-        print("✓ Test 8 passed: Feature store geometry takes precedence over cross-queue geometry")
+
+        self.assertEqual(len(duplicates), 1, "Feature store should detect geometry duplicate")
+        self.assertEqual(duplicates[0][1].scope, VerdictScope.LIBRARY)
+        self.assertEqual(duplicates[0][1].kind, VerdictKind.GEOMETRY)
+        self.assertEqual(len(remaining), 0, "No features should remain after two-pass")
 
     def test_feature_store_hash_over_cross_queue_geometry(self):
         """Test 9: Feature store hash takes precedence over cross-queue geometry."""
-        # Feature store has exact hash match
         feature_hash = generate_geojson_hash(self.point_feature)
         self.point_feature['properties']['geojson_hash'] = feature_hash
-        
+
         FeatureStore.objects.create(
             user=self.user,
             geojson=self.point_feature,
-            geojson_hash=feature_hash
+            geojson_hash=feature_hash,
         )
-        
-        # Cross-queue has geometry match (same coordinates, different properties)
+
         queue_feature = self.same_coords_different_props.copy()
         queue_feature['properties']['geojson_hash'] = generate_geojson_hash(queue_feature)
-        
-        older_queue = ImportQueue.objects.create(
+
+        queue_with_drafts(
             user=self.user,
             original_filename='older.kml',
             raw_file='<kml></kml>',
-            geofeatures=[queue_feature],
-            imported=False
+            features=[queue_feature],
+            imported=False,
         )
-        
+
         newer_queue = ImportQueue.objects.create(
             user=self.user,
             original_filename='newer.kml',
             raw_file='<kml></kml>',
-            geofeatures=[],
-            imported=False
+            imported=False,
         )
-        
-        # PASS 1: Feature store detection
-        remaining_after_fs, fs_duplicates, fs_log = find_duplicates_for_source(
+
+        remaining, duplicates = partition(
             [self.point_feature],
-            self.user.id,
-            source='feature_store',
-            exclude_queue_id=None,
-            exclude_timestamp=None
+            detect([self.point_feature], self.user.id, newer_queue.id, newer_queue.timestamp),
         )
-        
-        # PASS 2: Cross-queue detection on remaining
-        remaining_after_cq, cq_duplicates, cq_log = find_duplicates_for_source(
-            remaining_after_fs,
-            self.user.id,
-            source='cross_queue',
-            exclude_queue_id=newer_queue.id,
-            exclude_timestamp=newer_queue.timestamp
-        )
-        
-        # Feature store hash should win
-        self.assertEqual(len(fs_duplicates), 1)
-        self.assertEqual(fs_duplicates[0]['source'], DuplicateSource.FEATURE_STORE)
-        self.assertEqual(fs_duplicates[0]['match_type'], DuplicateMatchType.HASH)
-        self.assertEqual(len(cq_duplicates), 0, "Cross-queue geometry should not be checked")
-        
-        print("✓ Test 9 passed: Feature store hash takes precedence over cross-queue geometry")
+
+        self.assertEqual(len(duplicates), 1)
+        self.assertEqual(duplicates[0][1].scope, VerdictScope.LIBRARY)
+        self.assertEqual(duplicates[0][1].kind, VerdictKind.HASH)
+        self.assertEqual(len(remaining), 0)
 
     def test_feature_store_geometry_over_cross_queue_hash(self):
         """Test 10: Feature store geometry takes precedence over cross-queue hash."""
-        
-        # Feature store has geometry match only
         fs_feature = self.point_feature.copy()
         fs_hash = generate_geojson_hash(fs_feature)
         fs_feature['properties']['geojson_hash'] = fs_hash
-        
-        # Create geometry object (with Z dimension)
+
         coords = fs_feature['geometry']['coordinates']
-        point_geom = Point(coords[0], coords[1], 0, srid=4326)  # Add Z=0
-        
+        point_geom = Point(coords[0], coords[1], 0, srid=4326)
+
         FeatureStore.objects.create(
             user=self.user,
             geojson=fs_feature,
             geojson_hash=fs_hash,
-            geometry=point_geom
+            geometry=point_geom,
         )
-        
-        # Cross-queue has exact hash match with different feature
+
         queue_feature = self.same_coords_different_props.copy()
         queue_hash = generate_geojson_hash(queue_feature)
         queue_feature['properties']['geojson_hash'] = queue_hash
-        
-        older_queue = ImportQueue.objects.create(
+
+        queue_with_drafts(
             user=self.user,
             original_filename='older.kml',
             raw_file='<kml></kml>',
-            geofeatures=[queue_feature],
-            imported=False
+            features=[queue_feature],
+            imported=False,
         )
-        
+
         newer_queue = ImportQueue.objects.create(
             user=self.user,
             original_filename='newer.kml',
             raw_file='<kml></kml>',
-            geofeatures=[],
-            imported=False
+            imported=False,
         )
-        
-        # Try to import the queue feature (geometry match in FS, hash match in queue)
-        # PASS 1: Feature store detection
-        remaining_after_fs, fs_duplicates, fs_log = find_duplicates_for_source(
+
+        remaining, duplicates = partition(
             [queue_feature],
-            self.user.id,
-            source='feature_store',
-            exclude_queue_id=None,
-            exclude_timestamp=None
+            detect([queue_feature], self.user.id, newer_queue.id, newer_queue.timestamp),
         )
-        
-        # PASS 2: Cross-queue detection on remaining
-        remaining_after_cq, cq_duplicates, cq_log = find_duplicates_for_source(
-            remaining_after_fs,
-            self.user.id,
-            source='cross_queue',
-            exclude_queue_id=newer_queue.id,
-            exclude_timestamp=newer_queue.timestamp
-        )
-        
-        # Feature store geometry should win (caught in pass 1)
-        self.assertEqual(len(fs_duplicates), 1)
-        self.assertEqual(fs_duplicates[0]['source'], DuplicateSource.FEATURE_STORE)
-        self.assertEqual(fs_duplicates[0]['match_type'], DuplicateMatchType.GEOMETRY)
-        self.assertEqual(len(cq_duplicates), 0, "Cross-queue hash should not be checked")
-        
-        print("✓ Test 10 passed: Feature store geometry takes precedence over cross-queue hash")
+
+        self.assertEqual(len(duplicates), 1)
+        self.assertEqual(duplicates[0][1].scope, VerdictScope.LIBRARY)
+        self.assertEqual(duplicates[0][1].kind, VerdictKind.GEOMETRY)
+        self.assertEqual(len(remaining), 0)
 
 
 class TestCrossQueueNavigation(TestCase):
     """Test cross-queue duplicate navigation features."""
-    
+
     def setUp(self):
-        """Set up test fixtures."""
         self.user = User.objects.create_user(
             email='test@example.com',
             password='testpass123',
-            username='testuser'
+            username='testuser',
         )
-    
+
     def test_cross_queue_duplicate_includes_feature_index(self):
         """Test 13: Cross-queue duplicates include feature_index for navigation."""
-        # Create older queue with 3 features
         feature1 = {
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [-122.1, 37.7]},
-            'properties': {'name': 'Feature 1'}
+            'properties': {'name': 'Feature 1'},
         }
         feature2 = {
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [-122.2, 37.8]},
-            'properties': {'name': 'Feature 2'}
+            'properties': {'name': 'Feature 2'},
         }
         feature3 = {
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [-122.3, 37.9]},
-            'properties': {'name': 'Feature 3'}
+            'properties': {'name': 'Feature 3'},
         }
-        
-        older_queue = ImportQueue.objects.create(
+
+        older_queue = queue_with_drafts(
             user=self.user,
             original_filename='older.kml',
             raw_file='<kml></kml>',
-            geofeatures=[feature1, feature2, feature3],
-            imported=False
+            features=[feature1, feature2, feature3],
+            imported=False,
         )
-        
+
         newer_queue = ImportQueue.objects.create(
             user=self.user,
             original_filename='newer.kml',
             raw_file='<kml></kml>',
-            geofeatures=[],
-            imported=False
+            imported=False,
         )
-        
-        # Try to import feature that matches feature2 (at index 1)
+
         duplicate_of_feature2 = {
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [-122.2, 37.8]},
-            'properties': {'name': 'Duplicate of Feature 2', 'description': 'Different'}
+            'properties': {'name': 'Duplicate of Feature 2', 'description': 'Different'},
         }
-        
-        # Detect cross-queue geometry duplicate
-        remaining, duplicates, log = find_duplicates_for_source(
+
+        remaining, duplicates = partition(
             [duplicate_of_feature2],
-            self.user.id,
-            source='cross_queue',
-            exclude_queue_id=newer_queue.id,
-            exclude_timestamp=newer_queue.timestamp
+            detect([duplicate_of_feature2], self.user.id, newer_queue.id, newer_queue.timestamp),
         )
-        
-        # Should find 1 duplicate
+
         self.assertEqual(len(duplicates), 1, "Should detect geometry duplicate")
-        self.assertEqual(duplicates[0]['source'], DuplicateSource.CROSS_QUEUE)
-        self.assertEqual(duplicates[0]['match_type'], DuplicateMatchType.GEOMETRY)
-        
-        # CRITICAL: existing_features should include feature_index for navigation
-        existing = duplicates[0]['existing_features'][0]
-        self.assertIn('feature_index', existing, "existing_features must include feature_index")
-        self.assertEqual(existing['feature_index'], 1, 
-                        "Feature index should be 1 (second feature in older queue)")
-        self.assertEqual(existing['id'], older_queue.id,
-                        "Should reference the correct queue item")
-        self.assertEqual(existing['name'], 'older.kml',
-                        "Should include queue item filename")
-        
-        print("✓ Test 13 passed: Cross-queue duplicates include feature_index for navigation")
+        _feature, verdict = duplicates[0]
+        self.assertEqual(verdict.scope, VerdictScope.DRAFT_QUEUE)
+        self.assertEqual(verdict.kind, VerdictKind.GEOMETRY)
+
+        match = verdict.matches[0]
+        self.assertIsNotNone(match.spatial_index, "match must include spatial_index")
+        self.assertEqual(
+            match.spatial_index,
+            1,
+            "Feature index should be 1 (second feature in older queue)",
+        )
+        self.assertEqual(existing_id(verdict), older_queue.id)
+        self.assertEqual(match.name, 'Feature 2')
 
     def test_cross_queue_hash_duplicate_includes_feature_index(self):
         """Test 14: Cross-queue hash duplicates also include feature_index."""
-        # Create older queue with hash duplicate at specific index
         feature1 = {
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [-122.1, 37.7]},
-            'properties': {'name': 'Feature 1', 'description': 'First'}
+            'properties': {'name': 'Feature 1', 'description': 'First'},
         }
         feature2 = {
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [-122.2, 37.8]},
-            'properties': {'name': 'Feature 2', 'description': 'Second'}
+            'properties': {'name': 'Feature 2', 'description': 'Second'},
         }
-        
+
         hash1 = generate_geojson_hash(feature1)
         hash2 = generate_geojson_hash(feature2)
         feature1['properties']['geojson_hash'] = hash1
         feature2['properties']['geojson_hash'] = hash2
-        
-        older_queue = ImportQueue.objects.create(
+
+        queue_with_drafts(
             user=self.user,
             original_filename='older.kml',
             raw_file='<kml></kml>',
-            geofeatures=[feature1, feature2],
-            imported=False
+            features=[feature1, feature2],
+            imported=False,
         )
-        
+
         newer_queue = ImportQueue.objects.create(
             user=self.user,
             original_filename='newer.kml',
             raw_file='<kml></kml>',
-            geofeatures=[],
-            imported=False
+            imported=False,
         )
-        
-        # Try to import exact copy of feature2 (hash duplicate at index 1)
-        hash_duplicates = find_hash_duplicates(
+
+        remaining, hash_duplicates = partition(
             [feature2],
-            self.user.id,
-            exclude_queue_id=newer_queue.id,
-            exclude_timestamp=newer_queue.timestamp,
-            source_filter='cross_queue'
+            detect([feature2], self.user.id, newer_queue.id, newer_queue.timestamp),
         )
-        
-        # Should find 1 hash duplicate
+
         self.assertEqual(len(hash_duplicates), 1, "Should detect hash duplicate")
-        
-        # Verify feature_index is included
-        existing = hash_duplicates[0]['existing_features'][0]
-        self.assertIn('feature_index', existing, "Hash duplicates must also include feature_index")
-        self.assertEqual(existing['feature_index'], 1,
-                        "Feature index should be 1 (second feature)")
-        
-        print("✓ Test 14 passed: Cross-queue hash duplicates include feature_index")
+        match = hash_duplicates[0][1].matches[0]
+        self.assertIsNotNone(match.spatial_index, "Hash duplicates must also include spatial_index")
+        self.assertEqual(match.spatial_index, 1, "Feature index should be 1 (second feature)")
 
 
 class TestSourceIsolation(TestCase):
-    """Test that source_filter correctly isolates feature_store from cross_queue."""
-    
+    """Two-pass isolation: library matches beat draft-queue, and draft-only hits stay draft."""
+
     def setUp(self):
-        """Set up test fixtures."""
         self.user = User.objects.create_user(
             email='test@example.com',
             password='testpass123',
-            username='testuser'
+            username='testuser',
         )
-    
+
     def test_feature_store_filter_ignores_cross_queue(self):
-        """Test 15: source='feature_store' doesn't return cross-queue duplicates."""
-        
-        # Create feature in feature store
+        """Test 15: A library geometry hit is scoped LIBRARY, not DRAFT_QUEUE."""
         feature_in_store = {
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [-122.1, 37.7]},
-            'properties': {'name': 'Store Feature'}
+            'properties': {'name': 'Store Feature'},
         }
         store_hash = generate_geojson_hash(feature_in_store)
         feature_in_store['properties']['geojson_hash'] = store_hash
-        
+
         coords = feature_in_store['geometry']['coordinates']
         FeatureStore.objects.create(
             user=self.user,
             geojson=feature_in_store,
             geojson_hash=store_hash,
-            geometry=Point(coords[0], coords[1], 0, srid=4326)
+            geometry=Point(coords[0], coords[1], 0, srid=4326),
         )
-        
-        # Create DIFFERENT feature in cross-queue (geometry duplicate)
+
         feature_in_queue = {
             'type': 'Feature',
-            'geometry': {'type': 'Point', 'coordinates': [-122.1, 37.7]},  # Same coords
-            'properties': {'name': 'Queue Feature', 'description': 'Different'}
+            'geometry': {'type': 'Point', 'coordinates': [-122.1, 37.7]},
+            'properties': {'name': 'Queue Feature', 'description': 'Different'},
         }
         queue_hash = generate_geojson_hash(feature_in_queue)
         feature_in_queue['properties']['geojson_hash'] = queue_hash
-        
-        queue_item = ImportQueue.objects.create(
+
+        queue_with_drafts(
             user=self.user,
             original_filename='test.kml',
             raw_file='<kml></kml>',
-            geofeatures=[feature_in_queue],
-            imported=False
+            features=[feature_in_queue],
+            imported=False,
         )
-        
+
         newer_queue = ImportQueue.objects.create(
             user=self.user,
             original_filename='newer.kml',
             raw_file='<kml></kml>',
-            geofeatures=[],
-            imported=False
+            imported=False,
         )
-        
-        # Try to import third feature with same coordinates
+
         test_feature = {
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [-122.1, 37.7]},
-            'properties': {'name': 'Test Feature', 'description': 'Third version'}
+            'properties': {'name': 'Test Feature', 'description': 'Third version'},
         }
-        
-        # Check ONLY feature_store (should find geometry duplicate in store, NOT queue)
-        remaining, fs_dups, log = find_duplicates_for_source(
+
+        remaining, fs_dups = partition(
             [test_feature],
-            self.user.id,
-            source='feature_store',
-            exclude_queue_id=newer_queue.id,
-            exclude_timestamp=newer_queue.timestamp
+            detect([test_feature], self.user.id, newer_queue.id, newer_queue.timestamp),
         )
-        
-        # Should find 1 duplicate from feature store ONLY
+
         self.assertEqual(len(fs_dups), 1, "Should find 1 feature store duplicate")
-        self.assertEqual(fs_dups[0]['source'], DuplicateSource.FEATURE_STORE,
-                        "Source must be FEATURE_STORE, not CROSS_QUEUE")
-        
-        # Verify it's NOT reporting the cross-queue duplicate
-        for dup in fs_dups:
-            self.assertNotEqual(dup['source'], DuplicateSource.CROSS_QUEUE,
-                              "feature_store filter must not return cross-queue duplicates")
-        
-        print("✓ Test 15 passed: Source filter correctly isolates feature_store from cross_queue")
-    
+        self.assertEqual(
+            fs_dups[0][1].scope,
+            VerdictScope.LIBRARY,
+            "Source must be LIBRARY, not DRAFT_QUEUE",
+        )
+        for _feature, verdict in fs_dups:
+            self.assertNotEqual(
+                verdict.scope,
+                VerdictScope.DRAFT_QUEUE,
+                "library hit must not be reported as a draft-queue duplicate",
+            )
+
     def test_cross_queue_filter_ignores_feature_store(self):
-        """Test 16: source='cross_queue' doesn't return feature store duplicates."""
-        
-        # Create feature in feature store
+        """Test 16: A draft-only geometry hit is scoped DRAFT_QUEUE, not LIBRARY."""
         feature_in_store = {
             'type': 'Feature',
-            'geometry': {'type': 'Point', 'coordinates': [-122.2, 37.8]},
-            'properties': {'name': 'Store Feature'}
+            'geometry': {'type': 'Point', 'coordinates': [-122.9, 37.1]},
+            'properties': {'name': 'Store Feature'},
         }
         store_hash = generate_geojson_hash(feature_in_store)
         feature_in_store['properties']['geojson_hash'] = store_hash
-        
+
         coords = feature_in_store['geometry']['coordinates']
         FeatureStore.objects.create(
             user=self.user,
             geojson=feature_in_store,
             geojson_hash=store_hash,
-            geometry=Point(coords[0], coords[1], 0, srid=4326)
+            geometry=Point(coords[0], coords[1], 0, srid=4326),
         )
-        
-        # Create different feature in cross-queue
+
         feature_in_queue = {
             'type': 'Feature',
-            'geometry': {'type': 'Point', 'coordinates': [-122.2, 37.8]},  # Same coords
-            'properties': {'name': 'Queue Feature', 'description': 'Different'}
+            'geometry': {'type': 'Point', 'coordinates': [-122.2, 37.8]},
+            'properties': {'name': 'Queue Feature', 'description': 'Different'},
         }
         queue_hash = generate_geojson_hash(feature_in_queue)
         feature_in_queue['properties']['geojson_hash'] = queue_hash
-        
-        older_queue = ImportQueue.objects.create(
+
+        queue_with_drafts(
             user=self.user,
             original_filename='older.kml',
             raw_file='<kml></kml>',
-            geofeatures=[feature_in_queue],
-            imported=False
+            features=[feature_in_queue],
+            imported=False,
         )
-        
+
         newer_queue = ImportQueue.objects.create(
             user=self.user,
             original_filename='newer.kml',
             raw_file='<kml></kml>',
-            geofeatures=[],
-            imported=False
+            imported=False,
         )
-        
-        # Try to import third feature
+
         test_feature = {
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [-122.2, 37.8]},
-            'properties': {'name': 'Test Feature', 'description': 'Third'}
+            'properties': {'name': 'Test Feature', 'description': 'Third'},
         }
-        
-        # Check ONLY cross_queue (should find duplicate in queue, NOT store)
-        remaining, cq_dups, log = find_duplicates_for_source(
+
+        remaining, cq_dups = partition(
             [test_feature],
-            self.user.id,
-            source='cross_queue',
-            exclude_queue_id=newer_queue.id,
-            exclude_timestamp=newer_queue.timestamp
+            detect([test_feature], self.user.id, newer_queue.id, newer_queue.timestamp),
         )
-        
-        # Should find 1 duplicate from cross-queue ONLY
+
         self.assertEqual(len(cq_dups), 1, "Should find 1 cross-queue duplicate")
-        self.assertEqual(cq_dups[0]['source'], DuplicateSource.CROSS_QUEUE,
-                        "Source must be CROSS_QUEUE, not FEATURE_STORE")
-        
-        # Verify it's NOT reporting the feature store duplicate
-        for dup in cq_dups:
-            self.assertNotEqual(dup['source'], DuplicateSource.FEATURE_STORE,
-                              "cross_queue filter must not return feature_store duplicates")
-        
-        print("✓ Test 16 passed: Source filter correctly isolates cross_queue from feature_store")
+        self.assertEqual(
+            cq_dups[0][1].scope,
+            VerdictScope.DRAFT_QUEUE,
+            "Source must be DRAFT_QUEUE, not LIBRARY",
+        )
+        for _feature, verdict in cq_dups:
+            self.assertNotEqual(
+                verdict.scope,
+                VerdictScope.LIBRARY,
+                "draft-queue hit must not be reported as a library duplicate",
+            )
 
 
 class TestTimestampOrdering(TestCase):
-    """Test timestamp-based ordering prevents simultaneous upload conflicts."""
-    
+    """Timestamp-based ordering prevents simultaneous upload conflicts."""
+
     def setUp(self):
-        """Set up test fixtures."""
         self.user = User.objects.create_user(
             email='test@example.com',
             password='testpass123',
-            username='testuser'
+            username='testuser',
         )
-    
+
     def test_simultaneous_uploads_only_newer_shows_duplicates(self):
         """Test 17: Two files uploaded simultaneously - only newer one shows duplicates of older."""
-        
-        # Create identical feature
         feature = {
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
-            'properties': {'name': 'Test Feature', 'description': 'Test'}
+            'properties': {'name': 'Test Feature', 'description': 'Test'},
         }
         feature_hash = generate_geojson_hash(feature)
         feature['properties']['geojson_hash'] = feature_hash
-        
-        # Create first queue item (slightly older timestamp)
-        base_time = datetime.now(timezone.utc)
-        older_queue = ImportQueue.objects.create(
+
+        base_time = timezone.now()
+        older_queue = queue_with_drafts(
             user=self.user,
             original_filename='file1.kml',
             raw_file='<kml></kml>',
-            geofeatures=[feature],
-            imported=False
+            features=[feature],
+            imported=False,
         )
-        # Manually set timestamp to specific time
         older_queue.timestamp = base_time
         older_queue.save()
-        
-        # Create second queue item (1 second later)
-        newer_queue = ImportQueue.objects.create(
+
+        newer_queue = queue_with_drafts(
             user=self.user,
             original_filename='file2.kml',
             raw_file='<kml></kml>',
-            geofeatures=[feature],  # Same feature
-            imported=False
+            features=[feature],
+            imported=False,
         )
         newer_queue.timestamp = base_time + timedelta(seconds=1)
         newer_queue.save()
-        
-        # Check duplicates for OLDER file
-        # Should find NO cross-queue duplicates (newer file shouldn't affect older)
-        remaining_older, dups_older, log_older = find_duplicates_for_source(
+
+        remaining_older, dups_older = partition(
             [feature],
-            self.user.id,
-            source='cross_queue',
-            exclude_queue_id=older_queue.id,
-            exclude_timestamp=older_queue.timestamp  # Only check items OLDER than this
+            detect([feature], self.user.id, older_queue.id, older_queue.timestamp),
         )
-        
-        # CRITICAL: Older file should have NO duplicates
-        self.assertEqual(len(dups_older), 0,
-                        "Older file should NOT see newer file as duplicate "
-                        "(prevents simultaneous uploads from marking each other)")
-        self.assertEqual(len(remaining_older), 1,
-                        "Feature in older file should remain (not marked as duplicate)")
-        
-        # Check duplicates for NEWER file
-        # Should find cross-queue duplicate in older file
-        remaining_newer, dups_newer, log_newer = find_duplicates_for_source(
+
+        self.assertEqual(
+            len(dups_older),
+            0,
+            "Older file should NOT see newer file as duplicate "
+            "(prevents simultaneous uploads from marking each other)",
+        )
+        self.assertEqual(
+            len(remaining_older),
+            1,
+            "Feature in older file should remain (not marked as duplicate)",
+        )
+
+        remaining_newer, dups_newer = partition(
             [feature],
-            self.user.id,
-            source='cross_queue',
-            exclude_queue_id=newer_queue.id,
-            exclude_timestamp=newer_queue.timestamp  # Only check items OLDER than this
+            detect([feature], self.user.id, newer_queue.id, newer_queue.timestamp),
         )
-        
-        # Newer file SHOULD see the older file as duplicate
-        self.assertEqual(len(dups_newer), 1,
-                        "Newer file should detect duplicate in older file")
-        self.assertEqual(dups_newer[0]['source'], DuplicateSource.CROSS_QUEUE)
-        self.assertEqual(dups_newer[0]['match_type'], DuplicateMatchType.HASH)
-        self.assertEqual(dups_newer[0]['existing_features'][0]['id'], older_queue.id,
-                        "Duplicate should reference the OLDER queue item")
-        
-        print("✓ Test 17 passed: Timestamp ordering prevents simultaneous uploads from marking each other")
-    
+
+        self.assertEqual(len(dups_newer), 1, "Newer file should detect duplicate in older file")
+        self.assertEqual(dups_newer[0][1].scope, VerdictScope.DRAFT_QUEUE)
+        self.assertEqual(dups_newer[0][1].kind, VerdictKind.HASH)
+        self.assertEqual(existing_id(dups_newer[0][1]), older_queue.id)
+
     def test_three_sequential_uploads_correct_ordering(self):
         """Test 18: Three files uploaded sequentially - each only sees older ones as duplicates."""
-        
-        # Create identical feature
         feature = {
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [-122.5, 37.8]},
-            'properties': {'name': 'Sequential Test', 'description': 'Test'}
+            'properties': {'name': 'Sequential Test', 'description': 'Test'},
         }
         feature_hash = generate_geojson_hash(feature)
         feature['properties']['geojson_hash'] = feature_hash
-        
-        base_time = datetime.now(timezone.utc)
-        
-        # Create three queue items with sequential timestamps
-        queue1 = ImportQueue.objects.create(
+
+        base_time = timezone.now()
+
+        queue1 = queue_with_drafts(
             user=self.user,
             original_filename='file1.kml',
             raw_file='<kml></kml>',
-            geofeatures=[feature],
-            imported=False
+            features=[feature],
+            imported=False,
         )
         queue1.timestamp = base_time
         queue1.save()
-        
-        queue2 = ImportQueue.objects.create(
+
+        queue2 = queue_with_drafts(
             user=self.user,
             original_filename='file2.kml',
             raw_file='<kml></kml>',
-            geofeatures=[feature],
-            imported=False
+            features=[feature],
+            imported=False,
         )
         queue2.timestamp = base_time + timedelta(seconds=5)
         queue2.save()
-        
-        queue3 = ImportQueue.objects.create(
+
+        queue3 = queue_with_drafts(
             user=self.user,
             original_filename='file3.kml',
             raw_file='<kml></kml>',
-            geofeatures=[feature],
-            imported=False
+            features=[feature],
+            imported=False,
         )
         queue3.timestamp = base_time + timedelta(seconds=10)
         queue3.save()
-        
-        # File 1 (oldest): Should see NO duplicates
-        _, dups1, _ = find_duplicates_for_source(
-            [feature], self.user.id, source='cross_queue',
-            exclude_queue_id=queue1.id, exclude_timestamp=queue1.timestamp
+
+        _remaining1, dups1 = partition(
+            [feature],
+            detect([feature], self.user.id, queue1.id, queue1.timestamp),
         )
         self.assertEqual(len(dups1), 0, "File 1 (oldest) should see no duplicates")
-        
-        # File 2 (middle): Should see only file 1 as duplicate
-        _, dups2, _ = find_duplicates_for_source(
-            [feature], self.user.id, source='cross_queue',
-            exclude_queue_id=queue2.id, exclude_timestamp=queue2.timestamp
+
+        _remaining2, dups2 = partition(
+            [feature],
+            detect([feature], self.user.id, queue2.id, queue2.timestamp),
         )
         self.assertEqual(len(dups2), 1, "File 2 should see 1 duplicate (file 1)")
-        self.assertEqual(dups2[0]['existing_features'][0]['id'], queue1.id,
-                        "File 2 should reference file 1")
-        
-        # File 3 (newest): Should see file 1 as duplicate (not file 2, due to priority)
-        # The hash duplicate from file 1 will be found first, file 2 won't be checked
-        _, dups3, _ = find_duplicates_for_source(
-            [feature], self.user.id, source='cross_queue',
-            exclude_queue_id=queue3.id, exclude_timestamp=queue3.timestamp
+        self.assertEqual(existing_id(dups2[0][1]), queue1.id)
+
+        _remaining3, dups3 = partition(
+            [feature],
+            detect([feature], self.user.id, queue3.id, queue3.timestamp),
         )
         self.assertEqual(len(dups3), 1, "File 3 should see 1 duplicate")
-        # Could be file 1 or file 2, depending on which is found first
-        # Both are valid since they're identical
-        self.assertIn(dups3[0]['existing_features'][0]['id'], [queue1.id, queue2.id],
-                     "File 3 should reference either file 1 or file 2")
-        
-        print("✓ Test 18 passed: Sequential uploads show correct timestamp-based ordering")
+        self.assertIn(
+            existing_id(dups3[0][1]),
+            [queue1.id, queue2.id],
+            "File 3 should reference either file 1 or file 2",
+        )
 
 
 class TestIntegration(TestCase):
-    """Integration tests for full duplicate detection flow through ProcessJob."""
-    
+    """Integration tests for the full two-pass detection flow."""
+
     def setUp(self):
-        """Set up test fixtures."""
         self.user = User.objects.create_user(
             email='test@example.com',
             password='testpass123',
-            username='testuser'
+            username='testuser',
         )
-    
+
     def test_full_processing_flow_with_all_duplicate_types(self):
-        """Test 19: Full ProcessJob integration - all 4 duplicate types in one processing run."""
-        
-        # Setup: Create features in feature store
+        """Test 19: Two-pass detection finds all 4 duplicate types in one run."""
         fs_hash_feature = {
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [-122.1, 37.7]},
-            'properties': {'name': 'FS Hash Match', 'description': 'Will be hash duplicate'}
+            'properties': {'name': 'FS Hash Match', 'description': 'Will be hash duplicate'},
         }
         fs_hash = generate_geojson_hash(fs_hash_feature)
         fs_hash_feature['properties']['geojson_hash'] = fs_hash
-        
+
         FeatureStore.objects.create(
             user=self.user,
             geojson=fs_hash_feature,
             geojson_hash=fs_hash,
-            geometry=Point(-122.1, 37.7, 0, srid=4326)
+            geometry=Point(-122.1, 37.7, 0, srid=4326),
         )
-        
+
         fs_geom_feature = {
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [-122.2, 37.8]},
-            'properties': {'name': 'FS Geom Match', 'description': 'Different props'}
+            'properties': {'name': 'FS Geom Match', 'description': 'Different props'},
         }
         fs_geom_hash = generate_geojson_hash(fs_geom_feature)
-        
+
         FeatureStore.objects.create(
             user=self.user,
             geojson=fs_geom_feature,
             geojson_hash=fs_geom_hash,
-            geometry=Point(-122.2, 37.8, 0, srid=4326)
+            geometry=Point(-122.2, 37.8, 0, srid=4326),
         )
-        
-        # Setup: Create older queue item with features
+
         cq_hash_feature = {
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [-122.3, 37.9]},
-            'properties': {'name': 'CQ Hash Match', 'description': 'Queue hash'}
+            'properties': {'name': 'CQ Hash Match', 'description': 'Queue hash'},
         }
         cq_hash = generate_geojson_hash(cq_hash_feature)
         cq_hash_feature['properties']['geojson_hash'] = cq_hash
-        
+
         cq_geom_feature = {
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [-122.4, 38.0]},
-            'properties': {'name': 'CQ Geom Match', 'description': 'Queue geom'}
+            'properties': {'name': 'CQ Geom Match', 'description': 'Queue geom'},
         }
         cq_geom_hash = generate_geojson_hash(cq_geom_feature)
         cq_geom_feature['properties']['geojson_hash'] = cq_geom_hash
-        
-        older_queue = ImportQueue.objects.create(
+
+        older_queue = queue_with_drafts(
             user=self.user,
             original_filename='older.kml',
             raw_file='<kml></kml>',
-            geofeatures=[cq_hash_feature, cq_geom_feature],
-            imported=False
+            features=[cq_hash_feature, cq_geom_feature],
+            imported=False,
         )
-        older_queue.timestamp = datetime.now(timezone.utc)
+        older_queue.timestamp = timezone.now()
         older_queue.save()
-        
-        # Create test features that will match all 4 types
+
         test_features = [
-            # 1. Hash duplicate in feature store (exact match)
             fs_hash_feature.copy(),
-            
-            # 2. Geometry duplicate in feature store (same coords, different name)
             {
                 'type': 'Feature',
                 'geometry': {'type': 'Point', 'coordinates': [-122.2, 37.8]},
-                'properties': {'name': 'Different Name', 'description': 'Different'}
+                'properties': {'name': 'Different Name', 'description': 'Different'},
             },
-            
-            # 3. Hash duplicate in cross-queue (exact match)
             cq_hash_feature.copy(),
-            
-            # 4. Geometry duplicate in cross-queue (same coords, different name)
             {
                 'type': 'Feature',
                 'geometry': {'type': 'Point', 'coordinates': [-122.4, 38.0]},
-                'properties': {'name': 'Another Name', 'description': 'Different'}
+                'properties': {'name': 'Another Name', 'description': 'Different'},
             },
-            
-            # 5. Unique feature (should pass through)
             {
                 'type': 'Feature',
                 'geometry': {'type': 'Point', 'coordinates': [-122.5, 38.1]},
-                'properties': {'name': 'Unique Feature', 'description': 'No duplicate'}
-            }
+                'properties': {'name': 'Unique Feature', 'description': 'No duplicate'},
+            },
         ]
-        
-        # Simulate the full 2-pass detection flow (like ProcessJob does)
-        
-        # PASS 1: Feature store detection
-        remaining_after_fs, fs_duplicates, fs_log = find_duplicates_for_source(
-            test_features,
-            self.user.id,
-            source='feature_store',
-            exclude_queue_id=None,
-            exclude_timestamp=None
-        )
-        
-        fs_hash_dups, fs_geom_dups = split_duplicates_by_match_type(fs_duplicates)
-        
-        # PASS 2: Cross-queue detection on remaining
-        newer_queue = ImportQueue.objects.create(
+
+        newer_queue = queue_with_drafts(
             user=self.user,
             original_filename='newer.kml',
             raw_file='<kml></kml>',
-            geofeatures=test_features,
-            imported=False
+            features=test_features,
+            imported=False,
         )
-        
-        remaining_after_cq, cq_duplicates, cq_log = find_duplicates_for_source(
-            remaining_after_fs,
-            self.user.id,
-            source='cross_queue',
-            exclude_queue_id=newer_queue.id,
-            exclude_timestamp=newer_queue.timestamp
+
+        remaining, all_duplicates = partition(
+            test_features,
+            detect(test_features, self.user.id, newer_queue.id, newer_queue.timestamp),
         )
-        
-        cq_hash_dups, cq_geom_dups = split_duplicates_by_match_type(cq_duplicates)
-        
-        # Combine all duplicates (like ProcessJob does)
-        all_duplicates = fs_hash_dups + fs_geom_dups + cq_hash_dups + cq_geom_dups
-        
-        # ASSERTIONS: Verify the complete flow
-        
-        # Should have exactly 4 duplicates (one of each type)
-        self.assertEqual(len(all_duplicates), 4,
-                        "Should detect exactly 4 duplicates (1 of each type)")
-        
-        # Verify feature store hash duplicate
+
+        fs_hash_dups = [
+            (f, v) for f, v in all_duplicates
+            if v.scope == VerdictScope.LIBRARY and v.kind == VerdictKind.HASH
+        ]
+        fs_geom_dups = [
+            (f, v) for f, v in all_duplicates
+            if v.scope == VerdictScope.LIBRARY and v.kind == VerdictKind.GEOMETRY
+        ]
+        cq_hash_dups = [
+            (f, v) for f, v in all_duplicates
+            if v.scope == VerdictScope.DRAFT_QUEUE and v.kind == VerdictKind.HASH
+        ]
+        cq_geom_dups = [
+            (f, v) for f, v in all_duplicates
+            if v.scope == VerdictScope.DRAFT_QUEUE and v.kind == VerdictKind.GEOMETRY
+        ]
+
+        self.assertEqual(len(all_duplicates), 4, "Should detect exactly 4 duplicates (1 of each type)")
+
         self.assertEqual(len(fs_hash_dups), 1, "Should have 1 feature store hash duplicate")
-        self.assertEqual(fs_hash_dups[0]['source'], 'feature_store')
-        self.assertEqual(fs_hash_dups[0]['match_type'], 'hash')
-        
-        # Verify feature store geometry duplicate
         self.assertEqual(len(fs_geom_dups), 1, "Should have 1 feature store geometry duplicate")
-        self.assertEqual(fs_geom_dups[0]['source'], 'feature_store')
-        self.assertEqual(fs_geom_dups[0]['match_type'], 'geometry')
-        
-        # Verify cross-queue hash duplicate
+
         self.assertEqual(len(cq_hash_dups), 1, "Should have 1 cross-queue hash duplicate")
-        self.assertEqual(cq_hash_dups[0]['source'], 'cross_queue')
-        self.assertEqual(cq_hash_dups[0]['match_type'], 'hash')
-        self.assertEqual(cq_hash_dups[0]['existing_features'][0]['id'], older_queue.id,
-                        "Should reference older queue item")
-        
-        # Verify cross-queue geometry duplicate
+        self.assertEqual(existing_id(cq_hash_dups[0][1]), older_queue.id)
+
         self.assertEqual(len(cq_geom_dups), 1, "Should have 1 cross-queue geometry duplicate")
-        self.assertEqual(cq_geom_dups[0]['source'], 'cross_queue')
-        self.assertEqual(cq_geom_dups[0]['match_type'], 'geometry')
-        self.assertEqual(cq_geom_dups[0]['existing_features'][0]['id'], older_queue.id,
-                        "Should reference older queue item")
-        
-        # Verify 1 unique feature remains
-        self.assertEqual(len(remaining_after_cq), 1,
-                        "Should have exactly 1 unique feature remaining")
-        self.assertEqual(remaining_after_cq[0]['properties']['name'], 'Unique Feature',
-                        "Unique feature should pass through")
-        
-        # Verify priority ordering in combined list
-        self.assertEqual(all_duplicates[0]['source'], 'feature_store',
-                        "First duplicates should be from feature store")
-        self.assertEqual(all_duplicates[0]['match_type'], 'hash',
-                        "First duplicate should be hash (highest priority)")
-        
-        print("✓ Test 19 passed: Full integration test with all 4 duplicate types")
-    
+        self.assertEqual(existing_id(cq_geom_dups[0][1]), older_queue.id)
+
+        self.assertEqual(len(remaining), 1, "Should have exactly 1 unique feature remaining")
+        self.assertEqual(remaining[0]['properties']['name'], 'Unique Feature')
+
     def test_integration_skipped_feature_ids_only_geometry(self):
-        """Test 20: Integration test verifying skipped_feature_ids only contains geometry duplicates."""
-        
-        # Create features that will be hash and geometry duplicates
+        """Test 20: SkipIntent auto-skips geometry duplicates and blocks hash duplicates."""
         hash_dup_feature = {
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [-122.1, 37.7]},
-            'properties': {'name': 'Hash Dup', 'description': 'Exact match'}
+            'properties': {'name': 'Hash Dup', 'description': 'Exact match'},
         }
         hash_dup_hash = generate_geojson_hash(hash_dup_feature)
         hash_dup_feature['properties']['geojson_hash'] = hash_dup_hash
-        
+
         FeatureStore.objects.create(
             user=self.user,
             geojson=hash_dup_feature,
             geojson_hash=hash_dup_hash,
-            geometry=Point(-122.1, 37.7, 0, srid=4326)
+            geometry=Point(-122.1, 37.7, 0, srid=4326),
         )
-        
+
         geom_dup_in_store = {
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [-122.2, 37.8]},
-            'properties': {'name': 'Store Geom', 'description': 'Store'}
+            'properties': {'name': 'Store Geom', 'description': 'Store'},
         }
         store_geom_hash = generate_geojson_hash(geom_dup_in_store)
-        
+
         FeatureStore.objects.create(
             user=self.user,
             geojson=geom_dup_in_store,
             geojson_hash=store_geom_hash,
-            geometry=Point(-122.2, 37.8, 0, srid=4326)
+            geometry=Point(-122.2, 37.8, 0, srid=4326),
         )
-        
+
         geom_dup_feature = {
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [-122.2, 37.8]},
-            'properties': {'name': 'Geom Dup', 'description': 'Different'}
+            'properties': {'name': 'Geom Dup', 'description': 'Different'},
         }
         geom_dup_hash = generate_geojson_hash(geom_dup_feature)
         geom_dup_feature['properties']['geojson_hash'] = geom_dup_hash
-        
+
         test_features = [hash_dup_feature, geom_dup_feature]
-        
-        # Run detection
-        
-        remaining, fs_dups, log = find_duplicates_for_source(
-            test_features,
-            self.user.id,
-            source='feature_store',
-            exclude_queue_id=None,
-            exclude_timestamp=None
-        )
-        
-        fs_hash_dups, fs_geom_dups = split_duplicates_by_match_type(fs_dups)
-        
-        # Build skipped_feature_ids (like ProcessJob does)
-        skipped_feature_ids = []
-        
-        # Only geometry duplicates go in skipped_feature_ids
-        for dup in fs_geom_dups:
-            dup_hash = dup['feature'].get('properties', {}).get('geojson_hash')
-            if not dup_hash:
-                dup_hash = generate_geojson_hash(dup['feature'])
-            skipped_feature_ids.append(dup_hash)
-        
-        # ASSERTIONS
+        verdicts = detect(test_features, self.user.id)
+        remaining, fs_dups = partition(test_features, verdicts)
+
+        fs_hash_dups = [pair for pair in fs_dups if pair[1].kind == VerdictKind.HASH]
+        fs_geom_dups = [pair for pair in fs_dups if pair[1].kind == VerdictKind.GEOMETRY]
+        intent = SkipIntent.from_verdicts(verdicts)
+        skipped = intent.to_wire()['skipped']
+
         self.assertEqual(len(fs_hash_dups), 1, "Should have 1 hash duplicate")
         self.assertEqual(len(fs_geom_dups), 1, "Should have 1 geometry duplicate")
-        
-        # CRITICAL: Only geometry duplicate should be in skipped_feature_ids
-        self.assertEqual(len(skipped_feature_ids), 1,
-                        "skipped_feature_ids should only contain geometry duplicates")
-        self.assertEqual(skipped_feature_ids[0], geom_dup_hash,
-                        "Should contain geometry duplicate hash")
-        self.assertNotIn(hash_dup_hash, skipped_feature_ids,
-                        "Hash duplicate should NOT be in skipped_feature_ids (it's blocked, not skipped)")
-        
-        print("✓ Test 20 passed: skipped_feature_ids only contains geometry duplicates")
+
+        self.assertEqual(len(skipped), 1, "skipped should only contain geometry duplicates")
+        self.assertEqual(skipped[0], geom_dup_hash)
+        self.assertNotIn(
+            hash_dup_hash,
+            skipped,
+            "Hash duplicate should NOT be in skipped (it's blocked, not skipped)",
+        )
+        self.assertIn(hash_dup_hash, intent.blocked)
+        self.assertIn(geom_dup_hash, intent.auto_skipped_geometry)
 
 
 class TestComplexScenarios(TestCase):
     """Test complex real-world scenarios with multiple duplicates."""
-    
+
     def setUp(self):
-        """Set up test fixtures."""
         self.user = User.objects.create_user(
             email='test@example.com',
             password='testpass123',
-            username='testuser'
+            username='testuser',
         )
 
     def test_multiple_features_mixed_duplicates(self):
         """Test 11: Multiple features with different duplicate types."""
-        
-        # Feature 1: Hash duplicate in feature store
         feature1 = {
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
-            'properties': {'name': 'Feature 1', 'description': 'First'}
+            'properties': {'name': 'Feature 1', 'description': 'First'},
         }
         hash1 = generate_geojson_hash(feature1)
         feature1['properties']['geojson_hash'] = hash1
-        
+
         coords1 = feature1['geometry']['coordinates']
         FeatureStore.objects.create(
             user=self.user,
             geojson=feature1,
             geojson_hash=hash1,
-            geometry=Point(coords1[0], coords1[1], 0, srid=4326)  # Add Z=0
+            geometry=Point(coords1[0], coords1[1], 0, srid=4326),
         )
-        
-        # Feature 2: Geometry duplicate in feature store
+
         feature2_in_store = {
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [-122.5194, 37.8749]},
-            'properties': {'name': 'Store Feature', 'description': 'In store'}
+            'properties': {'name': 'Store Feature', 'description': 'In store'},
         }
         hash2_store = generate_geojson_hash(feature2_in_store)
-        
+
         coords2 = feature2_in_store['geometry']['coordinates']
         FeatureStore.objects.create(
             user=self.user,
             geojson=feature2_in_store,
             geojson_hash=hash2_store,
-            geometry=Point(coords2[0], coords2[1], 0, srid=4326)  # Add Z=0
+            geometry=Point(coords2[0], coords2[1], 0, srid=4326),
         )
-        
+
         feature2 = {
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [-122.5194, 37.8749]},
-            'properties': {'name': 'Feature 2', 'description': 'Second'}
+            'properties': {'name': 'Feature 2', 'description': 'Second'},
         }
-        
-        # Feature 3: Hash duplicate in cross-queue
+
         feature3 = {
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [-122.6194, 37.9749]},
-            'properties': {'name': 'Feature 3', 'description': 'Third'}
+            'properties': {'name': 'Feature 3', 'description': 'Third'},
         }
         hash3 = generate_geojson_hash(feature3)
         feature3['properties']['geojson_hash'] = hash3
-        
-        older_queue = ImportQueue.objects.create(
+
+        older_queue = queue_with_drafts(
             user=self.user,
             original_filename='older.kml',
             raw_file='<kml></kml>',
-            geofeatures=[feature3],
-            imported=False
+            features=[feature3],
+            imported=False,
         )
-        
-        # Feature 4: Geometry duplicate in cross-queue
+
         feature4_in_queue = {
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [-122.7194, 38.0749]},
-            'properties': {'name': 'Queue Feature', 'description': 'In queue'}
+            'properties': {'name': 'Queue Feature', 'description': 'In queue'},
         }
-        
-        older_queue.geofeatures.append(feature4_in_queue)
-        older_queue.save()
-        
+
+        create_draft(older_queue, feature4_in_queue, spatial_index=1)
+
         feature4 = {
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [-122.7194, 38.0749]},
-            'properties': {'name': 'Feature 4', 'description': 'Fourth'}
+            'properties': {'name': 'Feature 4', 'description': 'Fourth'},
         }
-        
-        # Feature 5: No duplicate
+
         feature5 = {
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [-122.8194, 38.1749]},
-            'properties': {'name': 'Feature 5', 'description': 'Unique'}
+            'properties': {'name': 'Feature 5', 'description': 'Unique'},
         }
-        
+
         newer_queue = ImportQueue.objects.create(
             user=self.user,
             original_filename='newer.kml',
             raw_file='<kml></kml>',
-            geofeatures=[],
-            imported=False
+            imported=False,
         )
-        
-        # Import all 5 features
+
         all_features = [feature1, feature2, feature3, feature4, feature5]
-        
-        # PASS 1: Feature store
-        remaining_after_fs, fs_dups, fs_log = find_duplicates_for_source(
+        remaining, duplicates = partition(
             all_features,
-            self.user.id,
-            source='feature_store',
-            exclude_queue_id=None,
-            exclude_timestamp=None
+            detect(all_features, self.user.id, newer_queue.id, newer_queue.timestamp),
         )
-        
-        # PASS 2: Cross-queue
-        remaining_after_cq, cq_dups, cq_log = find_duplicates_for_source(
-            remaining_after_fs,
-            self.user.id,
-            source='cross_queue',
-            exclude_queue_id=newer_queue.id,
-            exclude_timestamp=newer_queue.timestamp
-        )
-        
-        # Verify results
+
+        fs_dups = [(f, v) for f, v in duplicates if v.scope == VerdictScope.LIBRARY]
+        cq_dups = [(f, v) for f, v in duplicates if v.scope == VerdictScope.DRAFT_QUEUE]
+
         self.assertEqual(len(fs_dups), 2, "Should have 2 feature store duplicates")
         self.assertEqual(len(cq_dups), 2, "Should have 2 cross-queue duplicates")
-        self.assertEqual(len(remaining_after_cq), 1, "Should have 1 unique feature")
-        
-        # Check feature store duplicates
-        fs_hash_dups = [d for d in fs_dups if d['match_type'] == DuplicateMatchType.HASH]
-        fs_geom_dups = [d for d in fs_dups if d['match_type'] == DuplicateMatchType.GEOMETRY]
+        self.assertEqual(len(remaining), 1, "Should have 1 unique feature")
+
+        fs_hash_dups = [d for d in fs_dups if d[1].kind == VerdictKind.HASH]
+        fs_geom_dups = [d for d in fs_dups if d[1].kind == VerdictKind.GEOMETRY]
         self.assertEqual(len(fs_hash_dups), 1, "Should have 1 FS hash duplicate")
         self.assertEqual(len(fs_geom_dups), 1, "Should have 1 FS geometry duplicate")
-        
-        # Check cross-queue duplicates
-        cq_hash_dups = [d for d in cq_dups if d['match_type'] == DuplicateMatchType.HASH]
-        cq_geom_dups = [d for d in cq_dups if d['match_type'] == DuplicateMatchType.GEOMETRY]
+
+        cq_hash_dups = [d for d in cq_dups if d[1].kind == VerdictKind.HASH]
+        cq_geom_dups = [d for d in cq_dups if d[1].kind == VerdictKind.GEOMETRY]
         self.assertEqual(len(cq_hash_dups), 1, "Should have 1 CQ hash duplicate")
         self.assertEqual(len(cq_geom_dups), 1, "Should have 1 CQ geometry duplicate")
-        
-        print("✓ Test 11 passed: Multiple features with mixed duplicate types handled correctly")
 
     def test_no_duplicates(self):
         """Test 12: Features with no duplicates should all pass through."""
@@ -1812,203 +1471,140 @@ class TestComplexScenarios(TestCase):
             {
                 'type': 'Feature',
                 'geometry': {'type': 'Point', 'coordinates': [-122.1 + i, 37.7 + i]},
-                'properties': {'name': f'Feature {i}', 'description': f'Description {i}'}
+                'properties': {'name': f'Feature {i}', 'description': f'Description {i}'},
             }
             for i in range(5)
         ]
-        
+
         newer_queue = ImportQueue.objects.create(
             user=self.user,
             original_filename='newer.kml',
             raw_file='<kml></kml>',
-            geofeatures=[],
-            imported=False
+            imported=False,
         )
-        
-        # PASS 1: Feature store
-        remaining_after_fs, fs_dups, fs_log = find_duplicates_for_source(
+
+        remaining, duplicates = partition(
             features,
-            self.user.id,
-            source='feature_store',
-            exclude_queue_id=None,
-            exclude_timestamp=None
+            detect(features, self.user.id, newer_queue.id, newer_queue.timestamp),
         )
-        
-        # PASS 2: Cross-queue
-        remaining_after_cq, cq_dups, cq_log = find_duplicates_for_source(
-            remaining_after_fs,
-            self.user.id,
-            source='cross_queue',
-            exclude_queue_id=newer_queue.id,
-            exclude_timestamp=newer_queue.timestamp
-        )
-        
-        # All should pass through
-        self.assertEqual(len(fs_dups), 0, "Should have no feature store duplicates")
-        self.assertEqual(len(cq_dups), 0, "Should have no cross-queue duplicates")
-        self.assertEqual(len(remaining_after_cq), 5, "All 5 features should remain")
-        
-        print("✓ Test 12 passed: Non-duplicate features pass through correctly")
+
+        self.assertEqual(len(duplicates), 0, "Should have no duplicates")
+        self.assertEqual(len(remaining), 5, "All 5 features should remain")
 
 
 class TestSequentialProcessingIntegration(TransactionTestCase):
-    """Integration tests for sequential processing with Redis queue.
-    
-    Note: Sequential processing is now handled by the queue worker system.
-    See test_sequential_processing.py for queue-specific tests.
-    """
-    
+    """Timestamp ordering used by sequential processing."""
+
     def setUp(self):
-        """Set up test fixtures."""
         self.user = User.objects.create_user(
             email='sequential@example.com',
             password='testpass123',
-            username='sequential_user'
+            username='sequential_user',
         )
-    
+
     def test_timestamp_ordering_enforced_by_sequential_processing(self):
-        """Test that sequential processing enforces timestamp-based duplicate detection."""
-        
-        # Create two queue items with different timestamps
+        """Sequential processing enforces timestamp-based duplicate detection."""
         feature = {
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [-122.5, 37.8]},
-            'properties': {'name': 'Sequential Test', 'description': 'Test'}
+            'properties': {'name': 'Sequential Test', 'description': 'Test'},
         }
         feature_hash = generate_geojson_hash(feature)
         feature['properties']['geojson_hash'] = feature_hash
-        
-        base_time = datetime.now(timezone.utc)
-        
-        # Create older queue item
-        older_queue = ImportQueue.objects.create(
+
+        base_time = timezone.now()
+
+        older_queue = queue_with_drafts(
             user=self.user,
             original_filename='older.kml',
             raw_file='<kml></kml>',
-            geofeatures=[feature],
-            imported=False
+            features=[feature],
+            imported=False,
         )
         older_queue.timestamp = base_time
         older_queue.save()
-        
-        # Create newer queue item
-        newer_queue = ImportQueue.objects.create(
+
+        newer_queue = queue_with_drafts(
             user=self.user,
             original_filename='newer.kml',
             raw_file='<kml></kml>',
-            geofeatures=[feature],
-            imported=False
+            features=[feature],
+            imported=False,
         )
         newer_queue.timestamp = base_time + timedelta(seconds=5)
         newer_queue.save()
-        
-        # Check duplicates for older file (should see nothing)
-        _, dups_older, _ = find_duplicates_for_source(
+
+        _remaining_older, dups_older = partition(
             [feature],
-            self.user.id,
-            source='cross_queue',
-            exclude_queue_id=older_queue.id,
-            exclude_timestamp=older_queue.timestamp
+            detect([feature], self.user.id, older_queue.id, older_queue.timestamp),
         )
-        
-        # Check duplicates for newer file (should see older file)
-        _, dups_newer, _ = find_duplicates_for_source(
+        _remaining_newer, dups_newer = partition(
             [feature],
-            self.user.id,
-            source='cross_queue',
-            exclude_queue_id=newer_queue.id,
-            exclude_timestamp=newer_queue.timestamp
+            detect([feature], self.user.id, newer_queue.id, newer_queue.timestamp),
         )
-        
-        # Assertions
-        self.assertEqual(len(dups_older), 0,
-                        "Older file should not see newer file as duplicate")
-        self.assertEqual(len(dups_newer), 1,
-                        "Newer file should see older file as duplicate")
-        self.assertEqual(dups_newer[0]['existing_features'][0]['id'], older_queue.id,
-                        "Newer file should reference older queue item")
-        
-        print("✓ Timestamp ordering test passed: Sequential processing enforces correct ordering")
+
+        self.assertEqual(len(dups_older), 0, "Older file should not see newer file as duplicate")
+        self.assertEqual(len(dups_newer), 1, "Newer file should see older file as duplicate")
+        self.assertEqual(existing_id(dups_newer[0][1]), older_queue.id)
 
 
 class TestEmptyNameDuplicateDetection(TestCase):
-    """Test that empty feature names don't break duplicate detection."""
-    
+    """Empty feature names must not break duplicate detection."""
+
     def setUp(self):
-        """Set up test fixtures."""
         self.user = User.objects.create_user(
             email='emptyname@example.com',
             password='testpass123',
-            username='emptynameuser'
+            username='emptynameuser',
         )
-    
+
     def test_duplicate_detection_works_with_empty_names(self):
-        """Test that duplicate detection works correctly when features have empty names."""
-        # Create feature with empty name in feature store
+        """Duplicate detection works when features have empty names."""
         feature = {
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [-122.1, 37.7]},
-            'properties': {'name': '', 'description': 'Test'}
+            'properties': {'name': '', 'description': 'Test'},
         }
         feature_hash = generate_geojson_hash(feature)
         feature['properties']['geojson_hash'] = feature_hash
-        
+
         FeatureStore.objects.create(
             user=self.user,
             geojson=feature,
             geojson_hash=feature_hash,
-            geometry=Point(-122.1, 37.7, 0, srid=4326)
+            geometry=Point(-122.1, 37.7, 0, srid=4326),
         )
-        
-        # Try to import same feature (should be detected as hash duplicate)
-        remaining, duplicates, log = find_duplicates_for_source(
-            [feature],
-            self.user.id,
-            source='feature_store',
-            exclude_queue_id=None,
-            exclude_timestamp=None
-        )
-        
-        # Duplicate detection should work normally
+
+        remaining, duplicates = partition([feature], detect([feature], self.user.id))
+
         self.assertEqual(len(remaining), 0, "Feature should be detected as duplicate")
         self.assertEqual(len(duplicates), 1, "Should have 1 duplicate")
-        self.assertEqual(duplicates[0]['match_type'], DuplicateMatchType.HASH)
-        
-        print("✓ Test passed: Duplicate detection works with empty names")
-    
+        self.assertEqual(duplicates[0][1].kind, VerdictKind.HASH)
+
     def test_multiple_empty_names_different_geometry_not_duplicates(self):
-        """Test that multiple features with empty names but different geometry are NOT duplicates."""
+        """Multiple features with empty names but different geometry are NOT duplicates."""
         features = [
             {
                 'type': 'Feature',
                 'geometry': {'type': 'Point', 'coordinates': [-122.1, 37.7]},
-                'properties': {'name': '', 'description': 'First'}
+                'properties': {'name': '', 'description': 'First'},
             },
             {
                 'type': 'Feature',
                 'geometry': {'type': 'Point', 'coordinates': [-122.2, 37.8]},
-                'properties': {'name': '', 'description': 'Second'}
+                'properties': {'name': '', 'description': 'Second'},
             },
             {
                 'type': 'Feature',
                 'geometry': {'type': 'Point', 'coordinates': [-122.3, 37.9]},
-                'properties': {'name': '', 'description': 'Third'}
-            }
+                'properties': {'name': '', 'description': 'Third'},
+            },
         ]
-        
+
         for feature in features:
             feature['properties']['geojson_hash'] = generate_geojson_hash(feature)
-        
-        remaining, duplicates, log = find_duplicates_for_source(
-            features,
-            self.user.id,
-            source='feature_store',
-            exclude_queue_id=None,
-            exclude_timestamp=None
-        )
-        
-        # Should not incorrectly group all empty-named features together
+
+        remaining, duplicates = partition(features, detect(features, self.user.id))
+
         self.assertEqual(len(remaining), 3, "All 3 features should remain (no duplicates)")
         self.assertEqual(len(duplicates), 0, "Should have no duplicates")
-        
-        print("✓ Test passed: Multiple empty name features with different geometry are not duplicates")

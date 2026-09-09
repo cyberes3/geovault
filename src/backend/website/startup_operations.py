@@ -20,11 +20,10 @@ def clear_default_cache():
     """
     Clear Django's default cache on startup.
 
-    This ensures fresh data after server restarts and prevents stale
-    cached data (especially important for reverse geocoding which caches
-    results for 30 days). Despite the name of Django's CACHES['default'] backend
-    (Redis), this clears whichever backend is configured as 'default', not
-    all Redis-backed caches (e.g. Channels' Redis layer is untouched).
+    LocMem `default` is process-local scratch only. Shared Redis aliases
+    (social preview, geocode, Hauk, activity) are left intact so workers
+    do not wipe each other's entries on restart. Channels' Redis layer
+    is untouched.
     """
     try:
         cache.clear()

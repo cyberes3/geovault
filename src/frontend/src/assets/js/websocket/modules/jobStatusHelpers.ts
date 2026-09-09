@@ -8,7 +8,7 @@
 
 import type { ImportTableItem } from '../../types/import-types';
 
-export type JobStatus = string;
+export type JobStatus = 'queued' | 'processing' | 'completed' | 'failed' | 'canceled';
 
 /**
  * Builds the item patch for a status, EXCLUDING the terminal 'completed' case: a completed job
@@ -36,5 +36,5 @@ export function buildStatusUpdateFields(status: JobStatus): Partial<ImportTableI
 }
 
 export function isTerminalStatus(status: JobStatus): boolean {
-    return status === 'completed' || status === 'failed';
+    return status === 'completed' || status === 'failed' || status === 'canceled';
 }

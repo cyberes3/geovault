@@ -42,12 +42,11 @@ def get_geojson_data(request):
         except (ValueError, TypeError):
             return error_response('Invalid collection ID. Expected UUID', code=400)
 
-    # Get tags and match mode parameters
     tags = request.GET.getlist('tags')
     tags = [tag.strip() for tag in tags if tag.strip()] or None
     match_mode = request.GET.get('match_mode', 'AND').upper()
-    if match_mode not in ['AND', 'OR']:
-        match_mode = 'AND'
+    if tags and match_mode not in ['AND', 'OR']:
+        return error_response('match_mode must be either AND or OR', code=400)
 
     # Fetch data from database with optimized single query
     query_result = get_features_in_bbox(bbox, request.user.id, tags=tags, match_mode=match_mode, collection_id=collection_id)

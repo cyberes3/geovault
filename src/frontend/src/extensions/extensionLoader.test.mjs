@@ -5,7 +5,7 @@ import { createScopedRouter, createScopedRegistry, prefetchExtensions } from './
 
 test('createScopedRouter prefixes route paths with the extension prefix', () => {
   const router = { addRoute: mock.fn(), push: mock.fn() };
-  const scoped = createScopedRouter(router, '/extensions/my-ext');
+  const scoped = createScopedRouter(router, '/extensions/my-ext', 'my-ext', false, false);
 
   scoped.addRoute({ path: '/settings', name: 'settings' });
 
@@ -15,7 +15,7 @@ test('createScopedRouter prefixes route paths with the extension prefix', () => 
 
 test('createScopedRouter treats an empty/root path as just the prefix', () => {
   const router = { addRoute: mock.fn(), push: mock.fn() };
-  const scoped = createScopedRouter(router, '/extensions/my-ext');
+  const scoped = createScopedRouter(router, '/extensions/my-ext', 'my-ext', false, false);
 
   scoped.addRoute({ path: '', name: 'root' });
 
@@ -24,7 +24,7 @@ test('createScopedRouter treats an empty/root path as just the prefix', () => {
 
 test('createScopedRouter.navigate pushes the prefixed path onto the main router', () => {
   const router = { addRoute: mock.fn(), push: mock.fn() };
-  const scoped = createScopedRouter(router, '/extensions/my-ext');
+  const scoped = createScopedRouter(router, '/extensions/my-ext', 'my-ext', false, false);
 
   scoped.navigate('/settings');
 
@@ -34,7 +34,7 @@ test('createScopedRouter.navigate pushes the prefixed path onto the main router'
 
 test('createScopedRegistry stamps fullPath with the extension prefix for nav links and tools', () => {
   const registry = { registerNavLink: mock.fn(), registerSettingsTab: mock.fn(), registerTool: mock.fn() };
-  const scoped = createScopedRegistry(registry, '/extensions/my-ext');
+  const scoped = createScopedRegistry(registry, '/extensions/my-ext', 'my-ext');
 
   scoped.registerNavLink({ label: 'My Ext', path: '/home' });
   scoped.registerTool({ label: 'Do Thing', path: '/do-thing' });
@@ -43,15 +43,16 @@ test('createScopedRegistry stamps fullPath with the extension prefix for nav lin
   assert.equal(registry.registerTool.mock.calls[0].arguments[0].fullPath, '/extensions/my-ext/do-thing');
 });
 
-test('createScopedRegistry.registerSettingsTab passes the tab through unscoped', () => {
+test('createScopedRegistry.registerSettingsTab namespaces the tab id', () => {
   const registry = { registerNavLink: mock.fn(), registerSettingsTab: mock.fn(), registerTool: mock.fn() };
-  const scoped = createScopedRegistry(registry, '/extensions/my-ext');
-  const tab = { id: 'my-ext', label: 'My Ext', component: {} };
+  const scoped = createScopedRegistry(registry, '/extensions/my-ext', 'my-ext');
+  const tab = { id: 'settings', label: 'My Ext', component: {} };
 
   scoped.registerSettingsTab(tab);
 
   assert.equal(registry.registerSettingsTab.mock.callCount(), 1);
-  assert.equal(registry.registerSettingsTab.mock.calls[0].arguments[0], tab);
+  assert.equal(registry.registerSettingsTab.mock.calls[0].arguments[0].id, 'my-ext:settings');
+  assert.equal(registry.registerSettingsTab.mock.calls[0].arguments[0].label, 'My Ext');
 });
 
 test('prefetchExtensions fires every bundle/icon fetch immediately instead of waiting on prior extensions', () => {

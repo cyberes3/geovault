@@ -1,4 +1,4 @@
-import type { ExtensionSetupContext } from './types/extension-setup'
+import type { ExtensionSetupContext } from '@geovault/extension-sdk'
 import CaltopoSettings from './CaltopoSettings.vue'
 
 async function setup({ router, mainRouter, registry, api, metadata }: ExtensionSetupContext): Promise<void> {

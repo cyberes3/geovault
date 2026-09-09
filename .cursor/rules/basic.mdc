@@ -39,7 +39,7 @@ Make sure to explicitly define responses via pydantic for the backend and typesc
 
 We have a bunch of common frontend components in the `parts/` folder. Please use those where possible.
 
-DO NOT MANUALLY CREATE OR EDIT DJANGO MIGRATIONS!!!!! Use `manage.py` to generate them.
+DO NOT MANUALLY CREATE OR EDIT DJANGO MIGRATIONS!!!!! Use `manage.py` to generate them. If you need to migrate data you can manually edit it after generating one.
 
 When writing commit messages for this large monorepo, always prepend the systems that were touched (ie. frontend or backend or any of the Android apps).
 

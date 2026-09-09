@@ -13,7 +13,7 @@ import { setupMapFollowListeners } from './mapFollowLock';
 import { isHiddenOwnedTracker } from './sharingSelectors';
 import { createCoalescedTask } from './asyncTaskCoalescer';
 import type { LiveTrack, LiveTrackGroup } from './types/track';
-import type { TileSource } from './types/gv-core';
+import type { TileSource } from '@geovault/extension-sdk';
 
 type LonLat = [number, number];
 

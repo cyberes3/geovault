@@ -1,26 +1,13 @@
 import { normalizeTimestampMs } from './activeButDeadTrack';
 import type { LiveTrack, PointParams, TrackCoordinate } from './types/track';
 
-function lastTimeSortedGeometry(track: LiveTrack): TrackCoordinate | undefined {
-  const coords = track.geometry?.coordinates ?? [];
-  if (coords.length === 0) return undefined;
-  if (coords.length === 1) return coords[0];
-  const sorted = [...coords].sort((a, b) => {
-    const ta = typeof a[2] === 'number' ? a[2] : 0;
-    const tb = typeof b[2] === 'number' ? b[2] : 0;
-    return ta - tb;
-  });
-  return sorted[sorted.length - 1];
-}
-
 function timestampMsOf(coord: TrackCoordinate | undefined): number | null {
   if (!coord || coord.length < 3) return null;
   return normalizeTimestampMs(coord[2]);
 }
 
 /**
- * Freshest last coordinate. Missing timestamps lose to dated ones. Ties and all-missing
- * prefer time-sorted geometry, then last_position, then last_point.
+ * Freshest last coordinate. Missing timestamps lose to dated ones. Ties use later array order.
  */
 export function latestCoordByTime(coordinates: TrackCoordinate[]): TrackCoordinate | null {
   let best: TrackCoordinate | null = null;
@@ -49,32 +36,13 @@ export function latestCoordByTime(coordinates: TrackCoordinate[]): TrackCoordina
 
 export function resolveTrackLastCoordinate(track: LiveTrack | null | undefined): TrackCoordinate | null {
   if (!track) return null;
-  const geomLast = lastTimeSortedGeometry(track);
-  const lastPos = track.last_position;
-  const lastPosCoord: TrackCoordinate | undefined =
-    lastPos != null && Number.isFinite(lastPos.lon) && Number.isFinite(lastPos.lat)
-      ? [lastPos.lon, lastPos.lat, track.last_timestamp_ms ?? undefined]
-      : undefined;
-  const lastPoint = track.last_point;
-
-  const candidates: Array<{ coord: TrackCoordinate; ts: number | null; rank: number }> = [];
-  if (geomLast && geomLast.length >= 2) {
-    candidates.push({ coord: geomLast, ts: timestampMsOf(geomLast), rank: 0 });
-  }
-  if (lastPosCoord && lastPosCoord.length >= 2) {
-    candidates.push({ coord: lastPosCoord, ts: timestampMsOf(lastPosCoord), rank: 1 });
-  }
-  if (lastPoint && lastPoint.length >= 2) {
-    candidates.push({ coord: lastPoint, ts: timestampMsOf(lastPoint), rank: 2 });
-  }
-  if (candidates.length === 0) return null;
-  return candidates.reduce((best, current) => {
-    const bestTs = best.ts ?? Number.NEGATIVE_INFINITY;
-    const currentTs = current.ts ?? Number.NEGATIVE_INFINITY;
-    if (currentTs > bestTs) return current;
-    if (currentTs === bestTs && current.rank < best.rank) return current;
-    return best;
-  }).coord;
+  const fromGeometry = latestCoordByTime(track.geometry?.coordinates ?? []);
+  const lastPoint = track.last_point && track.last_point.length >= 2 ? track.last_point : null;
+  if (!fromGeometry) return lastPoint;
+  if (!lastPoint) return fromGeometry;
+  const geomTs = timestampMsOf(fromGeometry) ?? Number.NEGATIVE_INFINITY;
+  const pointTs = timestampMsOf(lastPoint) ?? Number.NEGATIVE_INFINITY;
+  return pointTs > geomTs ? lastPoint : fromGeometry;
 }
 
 export function latestParamsForCoordinate(

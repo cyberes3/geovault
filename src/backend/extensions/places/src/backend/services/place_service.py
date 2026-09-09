@@ -54,13 +54,12 @@ class PlaceService:
         return self._to_response(feature)
 
     def create_place(self, user, payload_dict):
-        normalized_feature, geometry, geojson_hash = self._normalize_payload(payload_dict)
+        normalized_feature, _geometry, geojson_hash = self._normalize_payload(payload_dict)
         try:
-            feature = FeatureStore.objects.create(
-                user=user,
+            feature = FeatureService.create(
+                user,
+                normalized_feature,
                 scope=PLACES_SCOPE,
-                geojson=normalized_feature,
-                geometry=geometry,
                 geojson_hash=geojson_hash,
             )
         except IntegrityError as exc:
@@ -74,9 +73,9 @@ class PlaceService:
 
     def update_place(self, user, feature_id, payload_dict):
         feature = self._get_place_feature(user, feature_id)
-        normalized_feature, geometry, geojson_hash = self._normalize_payload(payload_dict)
+        normalized_feature, _geometry, geojson_hash = self._normalize_payload(payload_dict)
         feature.geojson = normalized_feature
-        feature.geometry = geometry
+        feature.geometry = FeatureService.geometry_from_geojson(normalized_feature)
         feature.geojson_hash = geojson_hash
         try:
             feature.save()

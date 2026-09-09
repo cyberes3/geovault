@@ -16,6 +16,9 @@ from geo_lib.processing.jobs.import_job import ImportJob
 from geo_lib.processing.jobs.helpers.status_tracker import ProcessingStatus, status_tracker
 
 
+from tests.test_utils.import_queue import queue_with_drafts, draft_geojson, draft_duplicate_infos, skipped_hashes
+
+
 def _create_feature(user, name="Replacement Target", lon=-122.4194, lat=37.7749):
     geojson = {
         'type': 'Feature',
@@ -59,6 +62,14 @@ class TestImportAPI(TransactionTestCase):
             time.sleep(0.5)
         
         raise TimeoutError(f"Job {job_id} did not complete within {timeout} seconds")
+
+    def _recheck_and_wait(self, queue):
+        response = self.client.post(f'/api/item/import/recheck-duplicates/{queue.id}')
+        self.assertEqual(response.status_code, 202)
+        data = json.loads(response.content)
+        self._wait_for_job_completion(data['job_id'])
+        queue.refresh_from_db()
+        return data
 
     def test_upload_kml_file(self):
         """Test uploading a KML file with real backend processing."""
@@ -305,7 +316,6 @@ class TestImportAPI(TransactionTestCase):
             user=self.user,
             original_filename='test.kml',
             raw_file='<kml></kml>',
-            geofeatures=[]
         )
 
         response = self.client.get(f'/api/item/import/get/history/{import_queue.id}')
@@ -326,7 +336,6 @@ class TestImportAPI(TransactionTestCase):
             user=other_user,
             original_filename='test.kml',
             raw_file='<kml></kml>',
-            geofeatures=[]
         )
 
         response = self.client.get(f'/api/item/import/get/history/{import_queue.id}')
@@ -339,18 +348,18 @@ class TestImportAPI(TransactionTestCase):
             'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
             'properties': {'name': 'Test'}
         }]
-        import_queue = ImportQueue.objects.create(
+        import_queue = queue_with_drafts(
             user=self.user,
             original_filename='test.kml',
             raw_file='<kml></kml>',
-            geofeatures=geofeatures
+            features=geofeatures
         )
 
         response = self.client.get(f'/api/item/import/get/features/{import_queue.id}')
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
-        self.assertIn('geofeatures', data)
-        self.assertEqual(len(data['geofeatures']), 1)
+        self.assertIn('items', data)
+        self.assertEqual(len(data['items']), 1)
 
     def test_get_import_queue_item_features_not_found(self):
         """Test getting features from non-existent import queue item."""
@@ -371,11 +380,11 @@ class TestImportAPI(TransactionTestCase):
                 'properties': {'name': 'Other Feature', 'description': 'Another test'}
             }
         ]
-        import_queue = ImportQueue.objects.create(
+        import_queue = queue_with_drafts(
             user=self.user,
             original_filename='test.kml',
             raw_file='<kml></kml>',
-            geofeatures=geofeatures
+            features=geofeatures
         )
 
         response = self.client.get(
@@ -393,7 +402,6 @@ class TestImportAPI(TransactionTestCase):
             user=self.user,
             original_filename='test.kml',
             raw_file='<kml></kml>',
-            geofeatures=[]
         )
 
         response = self.client.get(f'/api/item/import/search/{import_queue.id}')
@@ -408,7 +416,6 @@ class TestImportAPI(TransactionTestCase):
             user=self.user,
             original_filename='test.kml',
             raw_file='<kml></kml>',
-            geofeatures=[]
         )
 
         response = self.client.delete(f'/api/item/import/delete/{import_queue.id}')
@@ -435,11 +442,11 @@ class TestImportAPI(TransactionTestCase):
             'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
             'properties': {'geojson_hash': 'test-id', 'name': 'Original'}
         }]
-        import_queue = ImportQueue.objects.create(
+        import_queue = queue_with_drafts(
             user=self.user,
             original_filename='test.kml',
             raw_file='<kml></kml>',
-            geofeatures=geofeatures,
+            features=geofeatures,
             imported=False
         )
 
@@ -456,7 +463,7 @@ class TestImportAPI(TransactionTestCase):
         )
         self.assertEqual(response.status_code, 200)
         import_queue.refresh_from_db()
-        self.assertEqual(import_queue.geofeatures[0]['properties']['name'], 'Updated')
+        self.assertEqual(draft_geojson(import_queue)[0]['properties']['name'], 'Updated')
 
     def test_update_import_item_already_imported(self):
         """Test updating an already imported item."""
@@ -464,7 +471,6 @@ class TestImportAPI(TransactionTestCase):
             user=self.user,
             original_filename='test.kml',
             raw_file='<kml></kml>',
-            geofeatures=[],
             imported=True
         )
 
@@ -482,7 +488,6 @@ class TestImportAPI(TransactionTestCase):
             user=self.user,
             original_filename='test.kml',
             raw_file='<kml></kml>',
-            geofeatures=[],
             imported=False
         )
         update_data = {}
@@ -495,11 +500,11 @@ class TestImportAPI(TransactionTestCase):
     
     def test_update_import_item_empty_features(self):
         """Test updating import item with empty features list (should succeed)."""
-        import_queue = ImportQueue.objects.create(
+        import_queue = queue_with_drafts(
             user=self.user,
             original_filename='test.kml',
             raw_file='<kml></kml>',
-            geofeatures=[{
+            features=[{
                 'type': 'Feature',
                 'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
                 'properties': {'geojson_hash': 'test-id', 'name': 'Original'}
@@ -518,7 +523,7 @@ class TestImportAPI(TransactionTestCase):
         self.assertEqual(data['updated_count'], 0)
         # Verify original features are unchanged
         import_queue.refresh_from_db()
-        self.assertEqual(import_queue.geofeatures[0]['properties']['name'], 'Original')
+        self.assertEqual(draft_geojson(import_queue)[0]['properties']['name'], 'Original')
     
     def test_update_import_item_missing_properties(self):
         """Test updating import item with missing properties."""
@@ -526,7 +531,6 @@ class TestImportAPI(TransactionTestCase):
             user=self.user,
             original_filename='test.kml',
             raw_file='<kml></kml>',
-            geofeatures=[],
             imported=False
         )
         update_data = {'features': [{}]}
@@ -544,11 +548,11 @@ class TestImportAPI(TransactionTestCase):
             'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
             'properties': {'geojson_hash': 'test-id', 'name': 'Original'}
         }]
-        import_queue = ImportQueue.objects.create(
+        import_queue = queue_with_drafts(
             user=self.user,
             original_filename='test.kml',
             raw_file='<kml></kml>',
-            geofeatures=geofeatures,
+            features=geofeatures,
             imported=False
         )
         update_data = {
@@ -573,11 +577,11 @@ class TestImportAPI(TransactionTestCase):
             'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
             'properties': {'geojson_hash': 'test-id', 'name': 'Original'}
         }]
-        import_queue = ImportQueue.objects.create(
+        import_queue = queue_with_drafts(
             user=self.user,
             original_filename='test.kml',
             raw_file='<kml></kml>',
-            geofeatures=geofeatures,
+            features=geofeatures,
             imported=False
         )
         update_data = {
@@ -602,11 +606,11 @@ class TestImportAPI(TransactionTestCase):
             'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
             'properties': {'geojson_hash': 'test-id', 'name': 'Original'}
         }]
-        import_queue = ImportQueue.objects.create(
+        import_queue = queue_with_drafts(
             user=self.user,
             original_filename='test.kml',
             raw_file='<kml></kml>',
-            geofeatures=geofeatures,
+            features=geofeatures,
             imported=False
         )
         update_data = {
@@ -632,11 +636,11 @@ class TestImportAPI(TransactionTestCase):
             'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
             'properties': {'geojson_hash': 'test-id', 'name': 'Original'}
         }]
-        import_queue = ImportQueue.objects.create(
+        import_queue = queue_with_drafts(
             user=self.user,
             original_filename='test.kml',
             raw_file='<kml></kml>',
-            geofeatures=geofeatures,
+            features=geofeatures,
             imported=False
         )
         update_data = {
@@ -661,11 +665,11 @@ class TestImportAPI(TransactionTestCase):
             'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
             'properties': {'geojson_hash': 'test-id', 'name': 'Test Feature', 'description': 'Original description'}
         }]
-        import_queue = ImportQueue.objects.create(
+        import_queue = queue_with_drafts(
             user=self.user,
             original_filename='test.kml',
             raw_file='<kml></kml>',
-            geofeatures=geofeatures,
+            features=geofeatures,
             imported=False
         )
 
@@ -685,9 +689,9 @@ class TestImportAPI(TransactionTestCase):
         )
         self.assertEqual(response.status_code, 200)
         import_queue.refresh_from_db()
-        self.assertEqual(import_queue.geofeatures[0]['properties']['description'], 'Updated description')
+        self.assertEqual(draft_geojson(import_queue)[0]['properties']['description'], 'Updated description')
         # Verify name was not changed
-        self.assertEqual(import_queue.geofeatures[0]['properties']['name'], 'Test Feature')
+        self.assertEqual(draft_geojson(import_queue)[0]['properties']['name'], 'Test Feature')
 
     def test_update_import_item_tags_valid_list(self):
         """Test updating tags field with valid list."""
@@ -696,11 +700,11 @@ class TestImportAPI(TransactionTestCase):
             'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
             'properties': {'geojson_hash': 'test-id', 'name': 'Test Feature', 'tags': ['original-tag']}
         }]
-        import_queue = ImportQueue.objects.create(
+        import_queue = queue_with_drafts(
             user=self.user,
             original_filename='test.kml',
             raw_file='<kml></kml>',
-            geofeatures=geofeatures,
+            features=geofeatures,
             imported=False
         )
 
@@ -720,7 +724,7 @@ class TestImportAPI(TransactionTestCase):
         )
         self.assertEqual(response.status_code, 200)
         import_queue.refresh_from_db()
-        updated_tags = import_queue.geofeatures[0]['properties']['tags']
+        updated_tags = draft_geojson(import_queue)[0]['properties']['tags']
         # Tags should be lowercased and deduplicated
         self.assertIn('new-tag-1', updated_tags)
         self.assertIn('new-tag-2', updated_tags)
@@ -741,11 +745,11 @@ class TestImportAPI(TransactionTestCase):
                 'tags': ['original-tag']
             }
         }]
-        import_queue = ImportQueue.objects.create(
+        import_queue = queue_with_drafts(
             user=self.user,
             original_filename='test.kml',
             raw_file='<kml></kml>',
-            geofeatures=geofeatures,
+            features=geofeatures,
             imported=False
         )
 
@@ -768,7 +772,7 @@ class TestImportAPI(TransactionTestCase):
         )
         self.assertEqual(response.status_code, 200)
         import_queue.refresh_from_db()
-        props = import_queue.geofeatures[0]['properties']
+        props = draft_geojson(import_queue)[0]['properties']
         self.assertEqual(props['name'], 'Updated Name')
         self.assertEqual(props['description'], 'Updated Description')
         self.assertEqual(props['created'], '2024-12-25T15:30:00Z')
@@ -803,11 +807,11 @@ class TestImportAPI(TransactionTestCase):
         feature3['properties']['geojson_hash'] = feature3_hash
 
         geofeatures = [feature1, feature2, feature3]
-        import_queue = ImportQueue.objects.create(
+        import_queue = queue_with_drafts(
             user=self.user,
             original_filename='test.kml',
             raw_file='<kml></kml>',
-            geofeatures=geofeatures,
+            features=geofeatures,
             imported=False
         )
 
@@ -842,16 +846,16 @@ class TestImportAPI(TransactionTestCase):
 
         import_queue.refresh_from_db()
         # Verify feature 1 was updated
-        self.assertEqual(import_queue.geofeatures[0]['properties']['name'], 'Updated Feature 1')
-        self.assertEqual(import_queue.geofeatures[0]['properties']['description'], 'Updated Description 1')
+        self.assertEqual(draft_geojson(import_queue)[0]['properties']['name'], 'Updated Feature 1')
+        self.assertEqual(draft_geojson(import_queue)[0]['properties']['description'], 'Updated Description 1')
         
         # Verify feature 2 was NOT updated
-        self.assertEqual(import_queue.geofeatures[1]['properties']['name'], 'Feature 2')
-        self.assertEqual(import_queue.geofeatures[1]['properties']['description'], 'Original 2')
+        self.assertEqual(draft_geojson(import_queue)[1]['properties']['name'], 'Feature 2')
+        self.assertEqual(draft_geojson(import_queue)[1]['properties']['description'], 'Original 2')
         
         # Verify feature 3 was updated
-        self.assertEqual(import_queue.geofeatures[2]['properties']['name'], 'Updated Feature 3')
-        self.assertIn('new-tag-for-3', import_queue.geofeatures[2]['properties']['tags'])
+        self.assertEqual(draft_geojson(import_queue)[2]['properties']['name'], 'Updated Feature 3')
+        self.assertIn('new-tag-for-3', draft_geojson(import_queue)[2]['properties']['tags'])
 
     def test_update_import_item_partial_update(self):
         """Test that partial updates only change specified fields, leaving others unchanged."""
@@ -866,11 +870,11 @@ class TestImportAPI(TransactionTestCase):
                 'tags': ['tag1', 'tag2']
             }
         }]
-        import_queue = ImportQueue.objects.create(
+        import_queue = queue_with_drafts(
             user=self.user,
             original_filename='test.kml',
             raw_file='<kml></kml>',
-            geofeatures=geofeatures,
+            features=geofeatures,
             imported=False
         )
 
@@ -891,7 +895,7 @@ class TestImportAPI(TransactionTestCase):
         )
         self.assertEqual(response.status_code, 200)
         import_queue.refresh_from_db()
-        props = import_queue.geofeatures[0]['properties']
+        props = draft_geojson(import_queue)[0]['properties']
         
         # Name should be updated
         self.assertEqual(props['name'], 'Updated Name Only')
@@ -902,8 +906,8 @@ class TestImportAPI(TransactionTestCase):
         self.assertEqual(set(props['tags']), {'tag1', 'tag2'})
         
         # Geometry should be preserved
-        self.assertEqual(import_queue.geofeatures[0]['geometry']['type'], 'Point')
-        self.assertEqual(import_queue.geofeatures[0]['geometry']['coordinates'], [-122.4194, 37.7749])
+        self.assertEqual(draft_geojson(import_queue)[0]['geometry']['type'], 'Point')
+        self.assertEqual(draft_geojson(import_queue)[0]['geometry']['coordinates'], [-122.4194, 37.7749])
 
     def test_update_import_item_system_tags_preservation(self):
         """Test that system_tags are preserved when updating features."""
@@ -916,11 +920,11 @@ class TestImportAPI(TransactionTestCase):
                 'system_tags': ['import-year-2024', 'import-month-12', 'geometry-type-point']
             }
         }]
-        import_queue = ImportQueue.objects.create(
+        import_queue = queue_with_drafts(
             user=self.user,
             original_filename='test.kml',
             raw_file='<kml></kml>',
-            geofeatures=geofeatures,
+            features=geofeatures,
             imported=False
         )
 
@@ -942,7 +946,7 @@ class TestImportAPI(TransactionTestCase):
         )
         self.assertEqual(response.status_code, 200)
         import_queue.refresh_from_db()
-        props = import_queue.geofeatures[0]['properties']
+        props = draft_geojson(import_queue)[0]['properties']
         
         # Verify system_tags were preserved
         self.assertIn('system_tags', props)
@@ -982,11 +986,11 @@ class TestImportAPI(TransactionTestCase):
         feature2['properties']['geojson_hash'] = feature2_hash
 
         geofeatures = [feature1, feature2]
-        import_queue = ImportQueue.objects.create(
+        import_queue = queue_with_drafts(
             user=self.user,
             original_filename='test.kml',
             raw_file='<kml></kml>',
-            geofeatures=geofeatures,
+            features=geofeatures,
             imported=False
         )
 
@@ -1018,12 +1022,12 @@ class TestImportAPI(TransactionTestCase):
         import_queue.refresh_from_db()
         
         # Verify feature 1 system_tags preserved
-        props1 = import_queue.geofeatures[0]['properties']
+        props1 = draft_geojson(import_queue)[0]['properties']
         self.assertEqual(set(props1['system_tags']), {'import-year-2024', 'geometry-type-point'})
         self.assertEqual(props1['name'], 'Updated Feature 1')
         
         # Verify feature 2 system_tags preserved
-        props2 = import_queue.geofeatures[1]['properties']
+        props2 = draft_geojson(import_queue)[1]['properties']
         self.assertEqual(set(props2['system_tags']), {'import-year-2024', 'geometry-type-linestring'})
         self.assertEqual(props2['name'], 'Updated Feature 2')
         self.assertEqual(props2['description'], 'New Description')
@@ -1039,11 +1043,11 @@ class TestImportAPI(TransactionTestCase):
                 'system_tags': []  # Empty list
             }
         }]
-        import_queue = ImportQueue.objects.create(
+        import_queue = queue_with_drafts(
             user=self.user,
             original_filename='test.kml',
             raw_file='<kml></kml>',
-            geofeatures=geofeatures,
+            features=geofeatures,
             imported=False
         )
 
@@ -1063,7 +1067,7 @@ class TestImportAPI(TransactionTestCase):
         )
         self.assertEqual(response.status_code, 200)
         import_queue.refresh_from_db()
-        props = import_queue.geofeatures[0]['properties']
+        props = draft_geojson(import_queue)[0]['properties']
         
         # Empty system_tags list should be preserved
         self.assertIn('system_tags', props)
@@ -1080,11 +1084,11 @@ class TestImportAPI(TransactionTestCase):
                 # No system_tags field
             }
         }]
-        import_queue = ImportQueue.objects.create(
+        import_queue = queue_with_drafts(
             user=self.user,
             original_filename='test.kml',
             raw_file='<kml></kml>',
-            geofeatures=geofeatures,
+            features=geofeatures,
             imported=False
         )
 
@@ -1104,7 +1108,7 @@ class TestImportAPI(TransactionTestCase):
         )
         self.assertEqual(response.status_code, 200)
         import_queue.refresh_from_db()
-        props = import_queue.geofeatures[0]['properties']
+        props = draft_geojson(import_queue)[0]['properties']
         
         # system_tags should be present (empty list or normalized)
         self.assertIn('system_tags', props)
@@ -1117,7 +1121,6 @@ class TestImportAPI(TransactionTestCase):
             user=self.user,
             original_filename='test.kml',
             raw_file='<kml></kml>',
-            geofeatures=[]
         )
 
         bulk_ops = {
@@ -1150,11 +1153,11 @@ class TestImportAPI(TransactionTestCase):
             'geometry': {'type': 'Point', 'coordinates': [-122.4094, 37.7849]},
             'properties': {'id': 'feature-2', 'name': 'Test Feature 2'}
         }]
-        import_queue = ImportQueue.objects.create(
+        import_queue = queue_with_drafts(
             user=self.user,
             original_filename='test.kml',
             raw_file='<kml></kml>',
-            geofeatures=geofeatures,
+            features=geofeatures,
             imported=False
         )
         
@@ -1174,9 +1177,9 @@ class TestImportAPI(TransactionTestCase):
         
         # Verify features remain unchanged
         import_queue.refresh_from_db()
-        self.assertEqual(len(import_queue.geofeatures), 2)
-        self.assertEqual(import_queue.geofeatures[0]['properties']['name'], 'Test Feature 1')
-        self.assertEqual(import_queue.geofeatures[1]['properties']['name'], 'Test Feature 2')
+        self.assertEqual(len(draft_geojson(import_queue)), 2)
+        self.assertEqual(draft_geojson(import_queue)[0]['properties']['name'], 'Test Feature 1')
+        self.assertEqual(draft_geojson(import_queue)[1]['properties']['name'], 'Test Feature 2')
 
     def test_get_bulk_operations(self):
         """Test getting bulk operations for an import item."""
@@ -1188,7 +1191,6 @@ class TestImportAPI(TransactionTestCase):
             user=self.user,
             original_filename='test.kml',
             raw_file='<kml></kml>',
-            geofeatures=[],
             bulk_operations=bulk_ops
         )
 
@@ -1216,16 +1218,16 @@ class TestImportAPI(TransactionTestCase):
         feature2_hash = generate_geojson_hash(feature2)
         feature2['properties']['geojson_hash'] = feature2_hash
         
-        import_queue = ImportQueue.objects.create(
+        import_queue = queue_with_drafts(
             user=self.user,
             original_filename='test.kml',
             raw_file='<kml></kml>',
-            geofeatures=[feature1, feature2],
+            features=[feature1, feature2],
             imported=False
         )
         
         skip_data = {
-            'skipped_feature_ids': [feature1_hash]
+            'skipped': [feature1_hash]
         }
         
         response = self.client.put(
@@ -1240,7 +1242,7 @@ class TestImportAPI(TransactionTestCase):
         
         # Verify skip state was saved
         import_queue.refresh_from_db()
-        self.assertEqual(import_queue.skipped_feature_ids, [feature1_hash])
+        self.assertEqual(skipped_hashes(import_queue), [feature1_hash])
 
     def test_save_skip_state_empty_list(self):
         """Test saving empty skip state."""
@@ -1248,12 +1250,11 @@ class TestImportAPI(TransactionTestCase):
             user=self.user,
             original_filename='test.kml',
             raw_file='<kml></kml>',
-            geofeatures=[],
             imported=False
         )
         
         skip_data = {
-            'skipped_feature_ids': []
+            'skipped': []
         }
         
         response = self.client.put(
@@ -1264,7 +1265,7 @@ class TestImportAPI(TransactionTestCase):
         
         self.assertEqual(response.status_code, 200)
         import_queue.refresh_from_db()
-        self.assertEqual(import_queue.skipped_feature_ids, [])
+        self.assertEqual(skipped_hashes(import_queue), [])
 
     def test_save_skip_state_invalid_feature_ids(self):
         """Test saving skip state with non-existent feature IDs."""
@@ -1276,16 +1277,16 @@ class TestImportAPI(TransactionTestCase):
         feature_hash = generate_geojson_hash(feature)
         feature['properties']['geojson_hash'] = feature_hash
         
-        import_queue = ImportQueue.objects.create(
+        import_queue = queue_with_drafts(
             user=self.user,
             original_filename='test.kml',
             raw_file='<kml></kml>',
-            geofeatures=[feature],
+            features=[feature],
             imported=False
         )
         
         skip_data = {
-            'skipped_feature_ids': ['nonexistent-id-12345']
+            'skipped': ['nonexistent-id-12345']
         }
         
         response = self.client.put(
@@ -1304,12 +1305,11 @@ class TestImportAPI(TransactionTestCase):
             user=self.user,
             original_filename='test.kml',
             raw_file='<kml></kml>',
-            geofeatures=[],
             imported=True  # Already imported
         )
         
         skip_data = {
-            'skipped_feature_ids': []
+            'skipped': []
         }
         
         response = self.client.put(
@@ -1335,12 +1335,11 @@ class TestImportAPI(TransactionTestCase):
             user=other_user,
             original_filename='test.kml',
             raw_file='<kml></kml>',
-            geofeatures=[],
             imported=False
         )
         
         skip_data = {
-            'skipped_feature_ids': []
+            'skipped': []
         }
         
         response = self.client.put(
@@ -1354,7 +1353,7 @@ class TestImportAPI(TransactionTestCase):
     def test_save_skip_state_not_found(self):
         """Test saving skip state for non-existent item."""
         skip_data = {
-            'skipped_feature_ids': []
+            'skipped': []
         }
         
         response = self.client.put(
@@ -1371,7 +1370,6 @@ class TestImportAPI(TransactionTestCase):
             user=self.user,
             original_filename='test.kml',
             raw_file='<kml></kml>',
-            geofeatures=[],
             imported=False
         )
         
@@ -1389,7 +1387,6 @@ class TestImportAPI(TransactionTestCase):
             user=self.user,
             original_filename='test.kml',
             raw_file='<kml></kml>',
-            geofeatures=[],
             imported=False
         )
         
@@ -1408,12 +1405,11 @@ class TestImportAPI(TransactionTestCase):
             user=self.user,
             original_filename='test.kml',
             raw_file='<kml></kml>',
-            geofeatures=[],
             imported=False
         )
         
         skip_data = {
-            'skipped_feature_ids': 'not-a-list'
+            'skipped': 'not-a-list'
         }
         
         response = self.client.put(
@@ -1440,17 +1436,17 @@ class TestImportAPI(TransactionTestCase):
             features.append(feature)
             feature_hashes.append(feature_hash)
         
-        import_queue = ImportQueue.objects.create(
+        import_queue = queue_with_drafts(
             user=self.user,
             original_filename='test.kml',
             raw_file='<kml></kml>',
-            geofeatures=features,
+            features=features,
             imported=False
         )
         
         # Skip first 3 features
         skip_data = {
-            'skipped_feature_ids': feature_hashes[:3]
+            'skipped': feature_hashes[:3]
         }
         
         response = self.client.put(
@@ -1461,8 +1457,8 @@ class TestImportAPI(TransactionTestCase):
         
         self.assertEqual(response.status_code, 200)
         import_queue.refresh_from_db()
-        self.assertEqual(len(import_queue.skipped_feature_ids), 3)
-        self.assertEqual(set(import_queue.skipped_feature_ids), set(feature_hashes[:3]))
+        self.assertEqual(len(skipped_hashes(import_queue)), 3)
+        self.assertEqual(set(skipped_hashes(import_queue)), set(feature_hashes[:3]))
 
     def test_save_skip_state_patch_method(self):
         """Test that PATCH method works for saving skip state."""
@@ -1470,12 +1466,11 @@ class TestImportAPI(TransactionTestCase):
             user=self.user,
             original_filename='test.kml',
             raw_file='<kml></kml>',
-            geofeatures=[],
             imported=False
         )
         
         skip_data = {
-            'skipped_feature_ids': []
+            'skipped': []
         }
         
         response = self.client.patch(
@@ -1491,7 +1486,7 @@ class TestImportAPI(TransactionTestCase):
         self.client.logout()
         
         skip_data = {
-            'skipped_feature_ids': []
+            'skipped': []
         }
         
         response = self.client.put(
@@ -1512,17 +1507,17 @@ class TestImportAPI(TransactionTestCase):
         feature_hash = generate_geojson_hash(feature)
         feature['properties']['geojson_hash'] = feature_hash
         
-        import_queue = ImportQueue.objects.create(
+        import_queue = queue_with_drafts(
             user=self.user,
             original_filename='test.kml',
             raw_file='<kml></kml>',
-            geofeatures=[feature],
+            features=[feature],
             imported=False
         )
         
         # Include duplicate IDs
         skip_data = {
-            'skipped_feature_ids': [feature_hash, feature_hash, feature_hash]
+            'skipped': [feature_hash, feature_hash, feature_hash]
         }
         
         response = self.client.put(
@@ -1544,11 +1539,11 @@ class TestImportAPI(TransactionTestCase):
         }
         feature['properties']['geojson_hash'] = generate_geojson_hash(feature)
         
-        import_queue = ImportQueue.objects.create(
+        import_queue = queue_with_drafts(
             user=self.user,
             original_filename='test.kml',
             raw_file='<kml></kml>',
-            geofeatures=[feature],
+            features=[feature],
             imported=False
         )
 
@@ -1579,7 +1574,6 @@ class TestImportAPI(TransactionTestCase):
             user=self.user,
             original_filename='test.kml',
             raw_file='<kml></kml>',
-            geofeatures=[],
             imported=False
         )
         
@@ -1596,7 +1590,6 @@ class TestImportAPI(TransactionTestCase):
             user=self.user,
             original_filename='test.kml',
             raw_file='<kml></kml>',
-            geofeatures=[],
             imported=False
         )
         
@@ -1611,19 +1604,18 @@ class TestImportAPI(TransactionTestCase):
         self.assertEqual(response.status_code, 400)
 
     def test_import_to_featurestore_invalid_skipped_ids_type(self):
-        """Test importing with invalid skipped_feature_ids type."""
+        """Test importing with invalid skipped type."""
         import_queue = ImportQueue.objects.create(
             user=self.user,
             original_filename='test.kml',
             raw_file='<kml></kml>',
-            geofeatures=[],
             imported=False
         )
         
         response = self.client.post(
             f'/api/item/import/perform/{import_queue.id}',
             data=json.dumps({
-                'skipped_feature_ids': 'not-a-list'
+                'skipped': 'not-a-list'
             }),
             content_type='application/json'
         )
@@ -1678,26 +1670,16 @@ class TestImportAPI(TransactionTestCase):
         }
         feature2['properties']['geojson_hash'] = generate_geojson_hash(feature2)
         
-        import_queue = ImportQueue.objects.create(
+        import_queue = queue_with_drafts(
             user=self.user,
             original_filename='test.kml',
             raw_file='<kml></kml>',
-            geofeatures=[feature1, feature2],
+            features=[feature1, feature2],
             imported=False
         )
 
-        # Recheck duplicates with real duplicate detection
-        response = self.client.post(f'/api/item/import/recheck-duplicates/{import_queue.id}')
-        self.assertEqual(response.status_code, 200)
-        data = json.loads(response.content)
-        
-        # Should have found 1 duplicate (feature1 matches existing_feature)
-        self.assertGreaterEqual(data['duplicate_count'], 1)
-        self.assertIn('Duplicates rechecked successfully', data.get('msg', ''))
-        
-        # Verify import queue was updated with duplicates
-        import_queue.refresh_from_db()
-        self.assertGreaterEqual(len(import_queue.duplicate_features), 1)
+        self._recheck_and_wait(import_queue)
+        self.assertGreaterEqual(len(draft_duplicate_infos(import_queue)), 1)
         
         # Real WebSocket notifications are sent (not mocked)
 
@@ -1722,21 +1704,16 @@ class TestImportAPI(TransactionTestCase):
         )
         
         # Create import queue item with the same feature
-        import_queue = ImportQueue.objects.create(
+        import_queue = queue_with_drafts(
             user=self.user,
             original_filename='test.kml',
             raw_file='<kml></kml>',
-            geofeatures=[test_feature],
+            features=[test_feature],
             imported=False
         )
 
-        # Use real duplicate detection
-        response = self.client.post(f'/api/item/import/recheck-duplicates/{import_queue.id}')
-        self.assertEqual(response.status_code, 200)
-        
-        # Verify duplicate was detected
-        import_queue.refresh_from_db()
-        self.assertGreaterEqual(len(import_queue.duplicate_features), 1,
+        self._recheck_and_wait(import_queue)
+        self.assertGreaterEqual(len(draft_duplicate_infos(import_queue)), 1,
                         "Feature should be marked as duplicate")
         
         # Real duplicate detection determines match type (hash vs geometry)
@@ -1752,11 +1729,11 @@ class TestImportAPI(TransactionTestCase):
         }
         feature1['properties']['geojson_hash'] = generate_geojson_hash(feature1)
         
-        import_queue1 = ImportQueue.objects.create(
+        import_queue1 = queue_with_drafts(
             user=self.user,
             original_filename='test1.kml',
             raw_file='<kml></kml>',
-            geofeatures=[feature1],
+            features=[feature1],
             imported=False
         )
         
@@ -1768,26 +1745,16 @@ class TestImportAPI(TransactionTestCase):
         }
         feature2['properties']['geojson_hash'] = generate_geojson_hash(feature2)
         
-        import_queue2 = ImportQueue.objects.create(
+        import_queue2 = queue_with_drafts(
             user=self.user,
             original_filename='test2.kml',
             raw_file='<kml></kml>',
-            geofeatures=[feature2],
+            features=[feature2],
             imported=False
         )
 
-        # Recheck duplicates for the second item using real duplicate detection
-        response = self.client.post(f'/api/item/import/recheck-duplicates/{import_queue2.id}')
-        self.assertEqual(response.status_code, 200)
-        
-        # Verify cross-queue duplicate detection ran successfully
-        import_queue2.refresh_from_db()
-        # Real duplicate detection may or may not find cross-queue duplicates depending on implementation
-        # This test verifies the endpoint works without errors
-        # We don't assert on skipped_feature_ids since cross-queue geometry duplicate behavior
-        # depends on the implementation and may vary
-        self.assertIsNotNone(import_queue2.skipped_feature_ids,
-                           "Skipped feature IDs field should exist (even if empty)")
+        self._recheck_and_wait(import_queue2)
+        self.assertIsNotNone(skipped_hashes(import_queue2))
 
     def test_recheck_duplicates_cross_queue_hash_is_blocked(self):
         """Test that cross-queue hash duplicates are BLOCKED (not skipped/restorable)."""
@@ -1802,54 +1769,36 @@ class TestImportAPI(TransactionTestCase):
         test_feature['properties']['geojson_hash'] = feature_hash
         
         # Create older queue item with exact same feature (hash duplicate)
-        older_queue = ImportQueue.objects.create(
+        older_queue = queue_with_drafts(
             user=self.user,
             original_filename='older.kml',
             raw_file='<kml></kml>',
-            geofeatures=[test_feature],
+            features=[test_feature],
             imported=False
         )
         
         # Create newer queue item
-        newer_queue = ImportQueue.objects.create(
+        newer_queue = queue_with_drafts(
             user=self.user,
             original_filename='newer.kml',
             raw_file='<kml></kml>',
-            geofeatures=[test_feature],  # Same feature
+            features=[test_feature],  # Same feature
             imported=False
         )
         
-        # Recheck duplicates on the newer queue item
-        response = self.client.post(f'/api/item/import/recheck-duplicates/{newer_queue.id}')
-        self.assertEqual(response.status_code, 200,
-                        "Recheck duplicates should succeed")
-        
-        data = json.loads(response.content)
-        self.assertIn('duplicate_count', data)
-        self.assertGreater(data['duplicate_count'], 0,
-                          "Should detect cross-queue hash duplicate")
-        
-        # Verify the newer queue item has duplicates detected
-        newer_queue.refresh_from_db()
-        self.assertGreater(len(newer_queue.duplicate_features), 0,
+        self._recheck_and_wait(newer_queue)
+        self.assertGreater(len(draft_duplicate_infos(newer_queue)), 0,
                           "Newer queue should have duplicate features detected")
-        
-        # Verify the duplicate is marked as a hash duplicate from another queue
-        # Note: Cross-queue hash duplicate detection may vary by implementation
-        # The important thing is that duplicates are detected
-        found_cross_queue_hash_dup = False
-        found_any_hash_dup = False
-        for dup_info in newer_queue.duplicate_features:
-            if dup_info.get('match_type') == 'hash':
-                found_any_hash_dup = True
-                if dup_info.get('source') == 'import_queue':
-                    found_cross_queue_hash_dup = True
-                    break
-        
-        # At minimum, hash duplicates should be detected
-        # Cross-queue detection depends on implementation
-        self.assertTrue(found_any_hash_dup or data['duplicate_count'] > 0,
-                       "Should detect hash duplicates (cross-queue detection may vary)")
+        found_any_hash_dup = any(
+            dup_info.get('match_type') == 'hash'
+            for dup_info in draft_duplicate_infos(newer_queue)
+        )
+        self.assertTrue(
+            found_any_hash_dup or (newer_queue.duplicate_counts or {}).get('hash', 0) > 0,
+            "Should detect hash duplicates",
+        )
+
+
 class TestImportJobWebSocket(TestCase):
     """Test ImportJob WebSocket broadcasting methods."""
 
@@ -2035,7 +1984,6 @@ class TestSequentialProcessing(TestCase):
                 user=self.user,
                 original_filename=f'test_{i}.kml',
                 raw_file='<kml></kml>',
-                geofeatures=[],
                 imported=True,
                 timestamp=timezone.now()
             )
@@ -2045,40 +1993,33 @@ class TestSequentialProcessing(TestCase):
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
         self.assertIn('items', data)
-        self.assertIn('pagination', data)
         self.assertEqual(len(data['items']), 10)
-        self.assertEqual(data['pagination']['page'], 1)
-        self.assertEqual(data['pagination']['page_size'], 10)
-        self.assertEqual(data['pagination']['total_items'], 25)
-        self.assertEqual(data['pagination']['total_pages'], 3)
-        self.assertTrue(data['pagination']['has_next'])
-        self.assertFalse(data['pagination']['has_previous'])
+        self.assertEqual(data['page'], 1)
+        self.assertEqual(data['page_size'], 10)
+        self.assertEqual(data['total_items'], 25)
+        self.assertEqual(data['total_pages'], 3)
         
         # Test page 2
         response = self.client.get('/api/item/import/history?page=2')
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
         self.assertEqual(len(data['items']), 10)
-        self.assertEqual(data['pagination']['page'], 2)
-        self.assertTrue(data['pagination']['has_next'])
-        self.assertTrue(data['pagination']['has_previous'])
+        self.assertEqual(data['page'], 2)
         
         # Test page 3 (last page)
         response = self.client.get('/api/item/import/history?page=3')
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
         self.assertEqual(len(data['items']), 5)
-        self.assertEqual(data['pagination']['page'], 3)
-        self.assertFalse(data['pagination']['has_next'])
-        self.assertTrue(data['pagination']['has_previous'])
+        self.assertEqual(data['page'], 3)
         
-        # Test custom page-size
-        response = self.client.get('/api/item/import/history?page-size=5')
+        # Test custom page_size
+        response = self.client.get('/api/item/import/history?page_size=5')
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
         self.assertEqual(len(data['items']), 5)
-        self.assertEqual(data['pagination']['page_size'], 5)
-        self.assertEqual(data['pagination']['total_pages'], 5)
+        self.assertEqual(data['page_size'], 5)
+        self.assertEqual(data['total_pages'], 5)
 
     def test_list_import_history_page_boundaries(self):
         """Test pagination boundary conditions."""
@@ -2088,7 +2029,6 @@ class TestSequentialProcessing(TestCase):
                 user=self.user,
                 original_filename=f'test_{i}.kml',
                 raw_file='<kml></kml>',
-                geofeatures=[],
                 imported=True
             )
         
@@ -2111,24 +2051,20 @@ class TestSequentialProcessing(TestCase):
         self.assertEqual(response.status_code, 400)
 
     def test_list_import_history_max_page_size(self):
-        """Test max page-size validation."""
-        # Test page-size > 100
-        response = self.client.get('/api/item/import/history?page-size=101')
+        """Test max page_size validation."""
+        response = self.client.get('/api/item/import/history?page_size=101')
         self.assertEqual(response.status_code, 400)
         data = json.loads(response.content)
         self.assertIn('error', data)
         self.assertIn('100', data['error'])
         
-        # Test page-size = 100 (should work)
-        response = self.client.get('/api/item/import/history?page-size=100')
+        response = self.client.get('/api/item/import/history?page_size=100')
         self.assertEqual(response.status_code, 200)
         
-        # Test page-size = 0
-        response = self.client.get('/api/item/import/history?page-size=0')
+        response = self.client.get('/api/item/import/history?page_size=0')
         self.assertEqual(response.status_code, 400)
         
-        # Test invalid page-size
-        response = self.client.get('/api/item/import/history?page-size=invalid')
+        response = self.client.get('/api/item/import/history?page_size=invalid')
         self.assertEqual(response.status_code, 400)
 
     def test_list_import_history_excludes_replacements(self):
@@ -2138,7 +2074,6 @@ class TestSequentialProcessing(TestCase):
             user=self.user,
             original_filename='regular.kml',
             raw_file='<kml></kml>',
-            geofeatures=[],
             imported=True
         )
         
@@ -2147,7 +2082,6 @@ class TestSequentialProcessing(TestCase):
             user=self.user,
             original_filename='replacement.kml',
             raw_file='<kml></kml>',
-            geofeatures=[],
             imported=True,
             replacement=regular_item.id
         )
@@ -2160,7 +2094,7 @@ class TestSequentialProcessing(TestCase):
         item_ids = [item['id'] for item in data['items']]
         self.assertIn(regular_item.id, item_ids)
         self.assertNotIn(replacement_item.id, item_ids)
-        self.assertEqual(data['pagination']['total_items'], 1)
+        self.assertEqual(data['total_items'], 1)
 
     def test_list_import_history_empty(self):
         """Test paginated history with no items."""
@@ -2168,10 +2102,8 @@ class TestSequentialProcessing(TestCase):
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
         self.assertEqual(len(data['items']), 0)
-        self.assertEqual(data['pagination']['total_items'], 0)
-        self.assertEqual(data['pagination']['total_pages'], 0)
-        self.assertFalse(data['pagination']['has_next'])
-        self.assertFalse(data['pagination']['has_previous'])
+        self.assertEqual(data['total_items'], 0)
+        self.assertEqual(data['total_pages'], 0)
 
     def test_list_import_history_unauthorized(self):
         """Test that users can only see their own history."""
@@ -2187,14 +2119,12 @@ class TestSequentialProcessing(TestCase):
             user=self.user,
             original_filename='mine.kml',
             raw_file='<kml></kml>',
-            geofeatures=[],
             imported=True
         )
         ImportQueue.objects.create(
             user=other_user,
             original_filename='theirs.kml',
             raw_file='<kml></kml>',
-            geofeatures=[],
             imported=True
         )
         
@@ -2203,5 +2133,5 @@ class TestSequentialProcessing(TestCase):
         data = json.loads(response.content)
         
         # Should only see own items
-        self.assertEqual(data['pagination']['total_items'], 1)
+        self.assertEqual(data['total_items'], 1)
         self.assertEqual(data['items'][0]['original_filename'], 'mine.kml')

@@ -3,6 +3,7 @@ from typing import Any, Dict, List, Tuple
 
 from config import SCHEMA
 from .lookup_common import get_name_from_tags, get_table_stats, normalize_name_for_response
+from .lookup_water import TABLE_NAME as WATER_TABLE_NAME
 
 TABLE_NAME = "protected_areas"
 
@@ -34,49 +35,50 @@ def build_protected_list(rows: List[Tuple[Any, ...]]) -> List[Dict[str, str]]:
     return out
 
 
-def run_protected_single(conn: Any, lat: float, lon: float) -> List[Tuple[Any, ...]]:
-    with conn.cursor() as cur:
-        cur.execute(
-            f"""
-            SELECT osm_id, name, tags
-            FROM {SCHEMA}.{TABLE_NAME}
-            WHERE public.ST_Contains(geom, public.ST_SetSRID(public.ST_MakePoint(%s, %s), 4326))
-            LIMIT %s
-            """,
-            (lon, lat, PROTECTED_LIMIT_PER_POINT),
-        )
-        return cur.fetchall()
-
-
-def run_protected_batch(
-        conn: Any,
-        indices: List[int],
-        lons: List[float],
-        lats: List[float],
-) -> List[Tuple[int, Any, Any, Any]]:
-    """Returns (point_idx, osm_id, name, tags). Limited per point for scale."""
-    with conn.cursor() as cur:
-        cur.execute(
-            f"""
-            WITH p AS (
-                SELECT * FROM unnest(%s::bigint[], %s::double precision[], %s::double precision[])
-                AS t(point_idx, lon, lat)
-            ),
-            ranked AS (
-                SELECT p.point_idx, a.osm_id, a.name, a.tags,
-                       ROW_NUMBER() OVER (PARTITION BY p.point_idx ORDER BY a.osm_id) AS rn
-                FROM p
-                JOIN {SCHEMA}.{TABLE_NAME} a
-                    ON public.ST_Contains(a.geom, public.ST_SetSRID(public.ST_MakePoint(p.lon, p.lat), 4326))
-            )
-            SELECT point_idx, osm_id, name, tags
-            FROM ranked
-            WHERE rn <= %s
-            ORDER BY point_idx, rn
-            """,
-            (indices, lons, lats, PROTECTED_LIMIT_PER_POINT),
-        )
-        return cur.fetchall()
+def sql_fragment(*, batch: bool) -> str:
+    """UNION ALL branch for protected areas (contains + on-water park touch). Cap is SQL-only."""
+    payload = "jsonb_build_object('osm_id', a.osm_id, 'name', a.name, 'tags', a.tags)"
+    if batch:
+        return f"""
+        SELECT point_idx, 'protected' AS layer, payload FROM (
+            SELECT pt.point_idx, {payload} AS payload,
+                   ROW_NUMBER() OVER (PARTITION BY pt.point_idx ORDER BY a.osm_id) AS rn
+            FROM pt
+            CROSS JOIN LATERAL (
+                (SELECT a.osm_id, a.name, a.tags
+                 FROM {SCHEMA}.{TABLE_NAME} a
+                 WHERE a.geom && pt.geom AND public.ST_Contains(a.geom, pt.geom)
+                 LIMIT {PROTECTED_LIMIT_PER_POINT})
+                UNION
+                (SELECT a.osm_id, a.name, a.tags
+                 FROM {SCHEMA}.{WATER_TABLE_NAME} w
+                 JOIN {SCHEMA}.{TABLE_NAME} a
+                      ON a.geom && w.geom AND public.ST_Touches(a.geom, w.geom)
+                      AND public.ST_Contains(public.ST_ConvexHull(a.geom), pt.geom)
+                 WHERE w.geom && pt.geom AND public.ST_Contains(w.geom, pt.geom)
+                 LIMIT {PROTECTED_LIMIT_PER_POINT})
+            ) a
+        ) sub WHERE rn <= {PROTECTED_LIMIT_PER_POINT}
+        """
+    return f"""
+        (SELECT 'protected' AS layer, jsonb_build_object('osm_id', p.osm_id, 'name', p.name, 'tags', p.tags) AS payload
+        FROM (
+            (SELECT p.osm_id, p.name, p.tags
+             FROM {SCHEMA}.{TABLE_NAME} p, pt
+             WHERE p.geom && pt.geom AND public.ST_Contains(p.geom, pt.geom)
+             LIMIT {PROTECTED_LIMIT_PER_POINT})
+            UNION
+            (SELECT a.osm_id, a.name, a.tags
+             FROM pt
+             JOIN {SCHEMA}.{WATER_TABLE_NAME} w
+                  ON w.geom && pt.geom AND public.ST_Contains(w.geom, pt.geom)
+             JOIN {SCHEMA}.{TABLE_NAME} a
+                  ON a.geom && w.geom AND public.ST_Touches(a.geom, w.geom)
+                  AND public.ST_Contains(public.ST_ConvexHull(a.geom), pt.geom)
+             LIMIT {PROTECTED_LIMIT_PER_POINT})
+        ) p
+        LIMIT {PROTECTED_LIMIT_PER_POINT})
+        """
 
 
 def get_protected_stats(conn: Any) -> Dict[str, Any]:

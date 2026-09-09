@@ -69,6 +69,16 @@ class FakeRedis:
         all_keys = list(self._kv.keys()) + list(self._lists.keys())
         return [k for k in all_keys if fnmatch(k, pattern)]
 
+    def scan_iter(self, match=None, count=None):
+        for key in self.keys(match or "*"):
+            yield key
+
+    def incr(self, key, amount=1):
+        current = int(self._kv.get(key, 0) or 0)
+        current += amount
+        self._kv[key] = current
+        return current
+
 
 class FakeChannelLayer:
     def __init__(self):
@@ -88,13 +98,11 @@ class TestLiveTrackCeleryFlush:
             user=owner,
             visibility="private",
             share_params_with_recipients=False,
-            geometry={"type": "LineString", "coordinates": []},
-            point_params=[],
         )
         redis = FakeRedis()
 
         with patch(
-            "extensions.live_track.src.backend.helpers.get_redis_connection",
+            "extensions.live_track.src.backend.realtime.get_redis_connection",
             return_value=redis,
         ), patch(
             "website.celery_app.celery_app.send_task"
@@ -115,8 +123,6 @@ class TestLiveTrackCeleryFlush:
             user=owner,
             visibility="private",
             share_params_with_recipients=False,
-            geometry={"type": "LineString", "coordinates": []},
-            point_params=[],
         )
         LiveTrackSubscription.objects.create(user=subscriber, track=track)
 
@@ -145,13 +151,13 @@ class TestLiveTrackCeleryFlush:
         redis.rpush(f"live_track_pending:{track.id}", json.dumps(payload_2))
 
         with patch(
-            "extensions.live_track.src.backend.helpers.get_redis_connection",
+            "extensions.live_track.src.backend.realtime.get_redis_connection",
             return_value=redis,
         ), patch(
-            "extensions.live_track.src.backend.helpers.get_channel_layer",
+            "extensions.live_track.src.backend.realtime.get_channel_layer",
             return_value=fake_layer,
         ), patch(
-            "extensions.live_track.src.backend.helpers.async_to_sync",
+            "extensions.live_track.src.backend.realtime.async_to_sync",
             side_effect=lambda func: func,
         ):
             flushed = flush_pending_broadcasts()
@@ -164,3 +170,6 @@ class TestLiveTrackCeleryFlush:
         assert len(owner_msg["data"]["updates"]) == 2
         assert len(sub_msg["data"]["updates"]) == 2
         assert sub_msg["data"]["updates"][0]["props"] == {}
+        assert "point" not in owner_msg["data"]
+        assert "revision" in owner_msg["data"]
+        assert f"live_track_pending:{track.id}" not in redis._lists

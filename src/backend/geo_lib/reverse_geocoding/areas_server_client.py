@@ -16,6 +16,11 @@ def _get_areas_server_params():
     return {
         "city-radius-miles": get_setting("AREAS_SERVER_CITY_RADIUS_MILES", 3.0),
         "lake-radius-miles": get_setting("LAKE_PROXIMITY_MILES", 1.0),
+        "ocean-radius-miles": get_setting("AREAS_SERVER_OCEAN_RADIUS_MILES", 1.0),
+        "waterway-radius-miles": get_setting(
+            "AREAS_SERVER_WATERWAY_RADIUS_MILES",
+            300 / 5280.0,
+        ),
     }
 
 

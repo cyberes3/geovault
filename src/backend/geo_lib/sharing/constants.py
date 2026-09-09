@@ -1,0 +1,31 @@
+DOMAIN_MAP = "map"
+DOMAIN_LIVE_TRACK = "live_track"
+
+KIND_TAG = "tag"
+KIND_COLLECTION = "collection"
+KIND_FEATURE = "feature"
+KIND_LIVE_TRACK = "live_track"
+KIND_LIVE_TRACK_GROUP = "live_track_group"
+
+MAP_KINDS = frozenset({KIND_TAG, KIND_COLLECTION, KIND_FEATURE})
+TRACKER_KINDS = frozenset({KIND_LIVE_TRACK, KIND_LIVE_TRACK_GROUP})
+SHARE_KINDS = MAP_KINDS | TRACKER_KINDS
+
+AUDIENCE_WORLD = "world"
+AUDIENCE_AUTHENTICATED = "authenticated"
+SHARE_AUDIENCES = frozenset({AUDIENCE_WORLD, AUDIENCE_AUTHENTICATED})
+
+CAP_ALLOW_DOWNLOADS = "allow_downloads"
+CAP_INCLUDE_TAGS = "include_tags"
+CAP_SCOPE_FILTER = "scope_filter"
+
+TAG_MODE_NONE = "none"
+TAG_MODE_USER = "user"
+
+ACTION_INFO = "info"
+ACTION_FEATURES = "features"
+ACTION_TRACK = "track"
+ACTION_ELEVATIONS = "elevations"
+ACTION_DOWNLOAD = "download"
+
+INVALID_SHARE_LINK = "Invalid share link"

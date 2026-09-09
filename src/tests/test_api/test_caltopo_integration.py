@@ -102,14 +102,16 @@ class TestCalTopoIntegration(TestCase):
         
         self.assertEqual(response.status_code, 201)
         
-        # Verify feature was created
+        # Verify feature was created without leftover caltopo_* property keys
         feature = FeatureStore.objects.get(user=self.user)
-        self.assertEqual(feature.geojson['properties']['caltopo_feature_id'], 'feature1')
+        self.assertNotIn('caltopo_feature_id', feature.geojson['properties'])
+        self.assertNotIn('caltopo_map_id', feature.geojson['properties'])
         
         # Verify mapping was updated
         caltopo_user = CalTopoUser.objects.get(user=self.user)
         self.assertIn('map1', caltopo_user.imported_features)
         self.assertIn('feature1', caltopo_user.imported_features['map1'])
+        self.assertEqual(caltopo_user.imported_features['map1']['feature1'], feature.id)
     
     @patch('extensions.caltopo.src.backend.views.single_import.get_feature')
     @patch('extensions.caltopo.src.backend.views.single_import.convert_caltopo_to_geojson')
@@ -400,7 +402,8 @@ class TestCalTopoIntegration(TestCase):
         # and execute the hook to verify the mapping would be updated
         from api.models import FeatureStore
         from django.contrib.gis.geos import Point
-        from extensions.caltopo.src.backend.apps import CaltopoExtensionConfig
+        from extensions.caltopo.src.backend.import_provider import CaltopoImportProvider
+        from website.extensions.import_provider import ExternalIds, ImportHookPayload
         
         # Create the import queue item that would normally be created by ProcessJob.enqueue_job
         # Since we're mocking enqueue_job, we need to create it manually
@@ -409,7 +412,6 @@ class TestCalTopoIntegration(TestCase):
             original_filename='caltopo_map_map1.geojson',
             imported=False,
             unparsable=False,
-            geofeatures=[]
         )
         
         # Create mock features that would be created by processing
@@ -445,9 +447,15 @@ class TestCalTopoIntegration(TestCase):
             geojson_hash=generate_geojson_hash(feature2_data)
         )
         
-        # Execute the actual hook function directly (not through execute_import_hooks since it's mocked)
-        config = CaltopoExtensionConfig('extensions.caltopo.src.backend', None)
-        config.handle_import(import_queue, self.user.id, [feature1, feature2])
+        CaltopoImportProvider().on_import_finalized(ImportHookPayload(
+            import_item=import_queue,
+            user_id=self.user.id,
+            created_features=[feature1, feature2],
+            external_ids=[
+                ExternalIds(by_provider={'caltopo': {'map_id': 'map1', 'feature_id': 'feature1'}}),
+                ExternalIds(by_provider={'caltopo': {'map_id': 'map1', 'feature_id': 'feature2'}}),
+            ],
+        ))
         
         # Verify the mapping was updated
         caltopo_user.refresh_from_db()

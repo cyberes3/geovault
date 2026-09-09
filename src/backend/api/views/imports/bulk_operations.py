@@ -2,13 +2,13 @@
 
 from django.views.decorators.http import require_http_methods
 
-from api.models import ImportQueue
+from api.models import ImportDraftFeature, ImportQueue
 from api.utils.authorization import get_object_or_404_for_user
 from api.utils.responses import error_response, success_response, handle_404
 from api.validation.decorators import validate_payload
 from api.validation.payloads.bulk_operations import SaveBulkOperationsPayload
 from api.validation.payloads.imports import SkipStatePayload
-from geo_lib.feature_id import generate_geojson_hash
+from geo_lib.duplicates.skip_intent import SkipIntent
 from geo_lib.logging.console import get_tagged_logger
 from website.auth_decorators import api_or_login_required_401
 
@@ -69,29 +69,25 @@ def save_skip_state(request, item_id, validated_data):
             code=400
         )
 
-    skipped_feature_ids = validated_data.get('skipped_feature_ids', [])
-
-    # Validate that all feature IDs exist in the item's geofeatures
-    if skipped_feature_ids:
-        # Get all feature IDs from geofeatures
-        existing_feature_ids = set()
-        for feature in import_item.geofeatures:
-            geojson_hash = generate_geojson_hash(feature)
-            existing_feature_ids.add(geojson_hash)
-            # Also check if feature has an id property
-            if feature.get('properties', {}).get('geojson_hash'):
-                existing_feature_ids.add(feature.get('properties', {}).get('geojson_hash'))
-
-        # Validate all skipped IDs exist
-        invalid_ids = [fid for fid in skipped_feature_ids if fid not in existing_feature_ids]
+    skipped = validated_data.get('skipped', [])
+    restored = validated_data.get('restored', [])
+    existing_feature_ids = set(
+        ImportDraftFeature.objects.filter(queue=import_item).values_list('geojson_hash', flat=True)
+    )
+    incoming = set(skipped) | set(restored)
+    if incoming:
+        invalid_ids = [fid for fid in incoming if fid not in existing_feature_ids]
         if invalid_ids:
             return error_response(
                 f'Invalid feature IDs: {invalid_ids}',
                 code=400
             )
 
-    # Save skip state to the import queue item
-    import_item.skipped_feature_ids = skipped_feature_ids
-    import_item.save(update_fields=['skipped_feature_ids'])
+    intent = SkipIntent.from_stored(import_item.skip_intent)
+    intent.user_restored_geometry = set(restored) - intent.blocked
+    intent.auto_skipped_geometry -= intent.user_restored_geometry
+    intent.user_skipped = set(skipped) - intent.blocked - intent.auto_skipped_geometry
+    import_item.skip_intent = intent.to_stored()
+    import_item.save(update_fields=['skip_intent'])
 
     return success_response({'msg': 'Skip state saved successfully'})

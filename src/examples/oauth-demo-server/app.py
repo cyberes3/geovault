@@ -297,7 +297,7 @@ def data():
     <p><a href="/">Home</a> | <a href="/refresh">Refresh token</a> | <a href="/logout">Disconnect</a></p>
     <h2>User status</h2>
     <pre>{json.dumps(status_data, indent=2)}</pre>
-    <h2>Features (all)</h2>
+    <h2>Feature catalog</h2>
     <pre>{json.dumps(features_data, indent=2)}</pre>
     </body></html>
     """

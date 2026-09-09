@@ -2,57 +2,57 @@ import { AxiosHeaders } from 'axios';
 import { httpClient } from '../httpClient';
 import { normalizeBboxError, parseBboxAxiosResponse, type BboxResponseData } from '@/utils/format/geobuf';
 import type { GeoJsonFeatureCollection } from '@/types/geospatial';
+import type { ListPage } from '@/contracts/envelope';
+import type { CreateSharePayload, PublicShare, ShareListItem, ShareType } from '@/contracts/share';
+import { ApiError } from '@/utils/apiError';
 
-export type ShareType = 'tag' | 'collection' | 'feature';
+export type { CreateSharePayload, ShareType, ShareListItem, PublicShare };
 
-export interface ShareRecord {
-    share_id: string;
-    share_type: ShareType;
-    url: string;
-    tag?: string;
-    collection_id?: string;
-    collection_name?: string;
-    allow_downloads?: boolean;
-    include_tags?: boolean;
-    created_at: string;
-    access_count?: number;
-}
-
-export interface CreateSharePayload {
-    share_type: ShareType;
+export interface ShareListFilters {
+    type?: ShareType;
     tag?: string;
     collection_id?: string;
     feature_id?: string | number;
-    include_tags: boolean;
-    allow_downloads: boolean;
+    audience?: 'world' | 'authenticated';
+    page?: number;
+    page_size?: number;
 }
 
-/** GET /api/sharing/list/ - every tag/collection share owned by the current user. */
-export async function listShares(): Promise<ShareRecord[]> {
-    const response = await httpClient.get<{ shares?: ShareRecord[] }>('/api/sharing/list/');
-    return response.data.shares ?? [];
-}
-
-/** GET /api/sharing/features/:featureId/ - the single share for a feature, if any. */
-export async function getFeatureShare(featureId: string | number): Promise<ShareRecord> {
-    const response = await httpClient.get<ShareRecord>(`/api/sharing/features/${featureId}/`);
+export async function listSharesPage(filters: ShareListFilters = {}): Promise<ListPage<ShareListItem>> {
+    const response = await httpClient.get<ListPage<ShareListItem>>('/api/shares/', { params: filters });
     return response.data;
 }
 
-export interface PublicShareInfoResponse {
-    share_type: ShareType;
-    tag?: string | null;
-    collection_name?: string | null;
-    collection_id?: string | null;
-    feature_name?: string | null;
-    feature_id?: string | null;
-    include_tags?: boolean;
-    allow_downloads?: boolean;
+export async function listShares(filters: ShareListFilters = {}): Promise<ShareListItem[]> {
+    const items: ShareListItem[] = [];
+    let page = 1;
+    while (true) {
+        const result = await listSharesPage({ ...filters, page, page_size: filters.page_size ?? 100 });
+        items.push(...result.items);
+        if (page >= result.total_pages) {
+            break;
+        }
+        page += 1;
+    }
+    return items;
 }
 
-/** GET /api/sharing/public/info/:shareId/ - public (unauthenticated) share metadata. */
-export async function getPublicShareInfo(shareId: string, signal?: AbortSignal): Promise<PublicShareInfoResponse> {
-    const response = await httpClient.get<PublicShareInfoResponse>(`/api/sharing/public/info/${shareId}/`, { signal });
+export async function getFeatureShare(featureId: string | number): Promise<ShareListItem> {
+    const page = await listSharesPage({ type: 'feature', feature_id: featureId, page_size: 1 });
+    const item = page.items[0];
+    if (!item) {
+        throw new ApiError('No share exists for this feature', { status: 404 });
+    }
+    return item;
+}
+
+export async function getShare(shareId: string): Promise<ShareListItem> {
+    const response = await httpClient.get<ShareListItem>(`/api/shares/${shareId}/`);
+    return response.data;
+}
+
+export async function getPublicShareInfo(shareId: string, signal?: AbortSignal): Promise<PublicShare> {
+    const response = await httpClient.get<PublicShare>(`/api/shares/${shareId}/info/`, { signal });
     return response.data;
 }
 
@@ -69,41 +69,41 @@ async function getShareBboxFeatures(url: string, bboxString: string, zoom: numbe
     }
 }
 
-/** GET /api/sharing/public/:shareId/ - bbox-scoped feature query for a public tag share. */
 export async function getPublicShareTagFeatures(shareId: string, bboxString: string, zoom: number, signal?: AbortSignal): Promise<BboxResponseData> {
-    return getShareBboxFeatures(`/api/sharing/public/${shareId}/`, bboxString, zoom, signal);
+    return getShareBboxFeatures(`/api/shares/${shareId}/features/`, bboxString, zoom, signal);
 }
 
-/** GET /api/sharing/public/collection/:shareId/ - bbox-scoped feature query for a public collection share. */
 export async function getPublicShareCollectionFeatures(shareId: string, bboxString: string, zoom: number, signal?: AbortSignal): Promise<BboxResponseData> {
-    return getShareBboxFeatures(`/api/sharing/public/collection/${shareId}/`, bboxString, zoom, signal);
+    return getShareBboxFeatures(`/api/shares/${shareId}/features/`, bboxString, zoom, signal);
 }
 
-/** GET /api/sharing/public/feature/:shareId/ - single shared feature (loaded once, no bbox semantics). */
-export async function getPublicShareFeature(shareId: string, signal?: AbortSignal): Promise<{ features: GeoJsonFeatureCollection['features'] }> {
-    const response = await httpClient.get<{ features: GeoJsonFeatureCollection['features'] }>(`/api/sharing/public/feature/${shareId}/`, { signal });
+export async function getPublicShareFeature(shareId: string, signal?: AbortSignal): Promise<GeoJsonFeatureCollection> {
+    const response = await httpClient.get<GeoJsonFeatureCollection>(`/api/shares/${shareId}/features/`, { signal });
     return response.data;
 }
 
-/** POST /api/sharing/create/ */
-export async function createShare(payload: CreateSharePayload): Promise<ShareRecord> {
-    const response = await httpClient.post<ShareRecord>('/api/sharing/create/', payload);
+export async function createShare(payload: CreateSharePayload): Promise<ShareListItem> {
+    const response = await httpClient.post<ShareListItem>('/api/shares/', payload);
     return response.data;
 }
 
-/** DELETE /api/sharing/:shareId/ - handles both tag and collection shares. */
 export async function deleteShare(shareId: string): Promise<void> {
-    await httpClient.delete(`/api/sharing/${shareId}/`);
+    await httpClient.delete(`/api/shares/${shareId}/`);
 }
 
-/** PATCH /api/sharing/features/:featureId/update/ - toggle allow_downloads/include_tags. */
-export async function updateFeatureShare(featureId: string | number, fields: Partial<Pick<ShareRecord, 'allow_downloads' | 'include_tags'>>) {
-    const response = await httpClient.patch(`/api/sharing/features/${featureId}/update/`, fields);
-    return response.data as ShareRecord;
+export async function updateShare(shareId: string, fields: Partial<Pick<ShareListItem, 'allow_downloads' | 'include_tags'>>): Promise<ShareListItem> {
+    const response = await httpClient.patch<ShareListItem>(`/api/shares/${shareId}/`, fields);
+    return response.data;
 }
 
-/** GET /api/sharing/public/feature/:shareId/elevations/internal/ - GPS elevations for a publicly shared feature. */
-export async function getPublicFeatureElevations(shareId: string): Promise<{ coordinates?: number[][] } | null> {
-    const response = await httpClient.get(`/api/sharing/public/feature/${shareId}/elevations/internal/`);
+export async function updateFeatureShare(featureId: string | number, fields: Partial<Pick<ShareListItem, 'allow_downloads' | 'include_tags'>>): Promise<ShareListItem> {
+    const share = await getFeatureShare(featureId);
+    return updateShare(share.share_id, fields);
+}
+
+export async function getPublicFeatureElevations(shareId: string, featureRef?: string | number): Promise<{ coordinates?: number[][] } | null> {
+    const response = await httpClient.get(`/api/shares/${shareId}/elevations/`, {
+        params: featureRef == null ? undefined : { feature_ref: featureRef },
+    });
     return response.data as { coordinates?: number[][] } | null;
 }

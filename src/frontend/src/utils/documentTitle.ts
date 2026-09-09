@@ -1,4 +1,4 @@
-import { isRef, onMounted, unref, watch, type MaybeRefOrGetter } from 'vue';
+import { isRef, onActivated, onDeactivated, onMounted, onUnmounted, unref, watch, type MaybeRefOrGetter, type WatchStopHandle } from 'vue';
 
 export function setGeoVaultPageTitle(label: string): void {
     document.title = `GeoVault | ${label}`;
@@ -22,9 +22,24 @@ export function useDocumentTitle(titleSource: MaybeRefOrGetter<string>): void {
         }
     };
 
-    if (isRef(titleSource) || typeof titleSource === 'function') {
-        watch(titleSource, applyTitle, { immediate: true });
-    } else {
-        onMounted(applyTitle);
-    }
+    let stopWatch: WatchStopHandle | null = null;
+
+    const start = () => {
+        if (stopWatch) return;
+        if (isRef(titleSource) || typeof titleSource === 'function') {
+            stopWatch = watch(titleSource, applyTitle, { immediate: true });
+        } else {
+            applyTitle();
+        }
+    };
+
+    const stop = () => {
+        stopWatch?.();
+        stopWatch = null;
+    };
+
+    onMounted(start);
+    onActivated(start);
+    onDeactivated(stop);
+    onUnmounted(stop);
 }

@@ -1,5 +1,6 @@
 import type { Module } from 'vuex';
 import { getUserSettings } from '@/api/services/userApi';
+import { settingsReady, type SettingsReadyStatus } from '@/utils/settings/SettingsReady';
 import type { RootState } from '../rootState';
 
 export interface HiddenFeature {
@@ -11,6 +12,7 @@ export interface HiddenFeature {
 export interface UserSettingsState {
     userSettings: Record<string, any> | null;
     hiddenFeatures: HiddenFeature[];
+    status: SettingsReadyStatus;
 }
 
 function normalizeHiddenFeatures(payload: unknown): HiddenFeature[] {
@@ -42,14 +44,19 @@ export const userSettingsModule: Module<UserSettingsState, RootState> = {
     state: (): UserSettingsState => ({
         userSettings: null,
         hiddenFeatures: [],
+        status: 'idle',
     }),
     getters: {
         userSettings: (state) => state.userSettings,
         hiddenFeatures: (state) => state.hiddenFeatures,
+        settingsStatus: (state) => state.status,
     },
     mutations: {
         SET_USER_SETTINGS(state, payload: Record<string, any> | null) {
             state.userSettings = payload;
+        },
+        SET_SETTINGS_STATUS(state, payload: SettingsReadyStatus) {
+            state.status = payload;
         },
         SET_HIDDEN_FEATURES(state, payload: unknown) {
             state.hiddenFeatures = normalizeHiddenFeatures(payload);
@@ -70,29 +77,44 @@ export const userSettingsModule: Module<UserSettingsState, RootState> = {
         },
     },
     actions: {
-        async fetchUserSettings({ commit, rootGetters }) {
+        async fetchUserSettings({ commit, state, rootGetters }) {
             const getters = rootGetters as Record<string, unknown>;
             if (!getters['auth/userInfo']) {
+                settingsReady.reset();
+                commit('SET_SETTINGS_STATUS', 'idle');
                 commit('SET_USER_SETTINGS', null);
                 return null;
             }
+            if (settingsReady.status === 'ready') {
+                return state.userSettings;
+            }
 
+            let loaded: Record<string, unknown> | null = null;
             try {
-                const data = await getUserSettings();
-                commit('SET_USER_SETTINGS', data.settings ?? {});
-                commit('SET_HIDDEN_FEATURES', data.hidden_features ?? []);
-                return data.settings ?? {};
+                await settingsReady.run(async () => {
+                    const data = await getUserSettings();
+                    loaded = data.settings ?? {};
+                    commit('SET_USER_SETTINGS', loaded);
+                    commit('SET_HIDDEN_FEATURES', data.hidden_features ?? []);
+                });
+                commit('SET_SETTINGS_STATUS', settingsReady.status);
+                return loaded;
             } catch (error) {
                 console.error('Error fetching user settings:', error);
-                commit('SET_USER_SETTINGS', {});
-                commit('SET_HIDDEN_FEATURES', []);
-                return {};
+                commit('SET_SETTINGS_STATUS', 'error');
+                return null;
             }
         },
         setUserSettings({ commit }, settings: Record<string, any> | null) {
             commit('SET_USER_SETTINGS', settings);
+            if (settings != null) {
+                settingsReady.status = 'ready';
+                commit('SET_SETTINGS_STATUS', 'ready');
+            }
         },
         clearUserSettings({ commit }) {
+            settingsReady.reset();
+            commit('SET_SETTINGS_STATUS', 'idle');
             commit('SET_USER_SETTINGS', null);
             commit('SET_HIDDEN_FEATURES', []);
         },

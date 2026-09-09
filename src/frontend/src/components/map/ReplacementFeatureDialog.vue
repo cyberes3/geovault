@@ -146,54 +146,45 @@
                   </div>
                 </div>
               </div>
-              <div class="space-y-2 max-h-96 overflow-y-auto">
-                <div
-                  v-for="(feature, index) in sortedFeatures"
-                  :key="index"
-                  @click="selectedFeatureIndex = index"
-                  :class="[
-                    'p-4 border-2 rounded-lg cursor-pointer transition-colors',
-                    selectedFeatureIndex === index
-                      ? 'border-blue-500 bg-blue-50'
-                      : 'border-gray-200 hover:border-gray-300'
-                  ]"
-                >
-                  <div class="flex items-start gap-4">
-                    <!-- Map Preview -->
-                    <div class="flex-shrink-0 relative">
-                      <div
-                        :ref="el => setMapRef(el, index)"
-                        :id="`feature-map-${index}`"
-                        class="w-32 h-32 border border-gray-300 rounded-md overflow-hidden"
-                        @click.stop
-                      ></div>
-                      <!-- Expand Map Button -->
-                      <button
-                        @click.stop="expandMap(index)"
-                        class="absolute top-1 right-1 bg-white bg-opacity-90 hover:bg-opacity-100 rounded p-1 shadow-sm border border-gray-300 transition-all"
-                        title="Expand Map Preview"
-                      >
-                        <ArrowsPointingOutIcon class="w-4 h-4 text-gray-700" />
-                      </button>
-                    </div>
-
-                    <!-- Feature Info -->
-                    <div class="flex-1 min-w-0">
-                      <div class="flex items-start justify-between">
-                        <div class="flex-1 min-w-0">
-                          <h5 class="text-sm font-medium text-gray-900">
-                            {{ feature.properties?.name || `Feature ${index + 1}` }}
-                          </h5>
-                          <p v-if="feature.properties?.description" class="text-xs text-gray-600 mt-1 line-clamp-2">
-                            {{ feature.properties.description }}
-                          </p>
-                        </div>
-                        <div v-if="selectedFeatureIndex === index" class="ml-4 flex-shrink-0">
-                          <CheckIcon class="h-5 w-5 text-blue-500" />
-                        </div>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="space-y-2 max-h-96 overflow-y-auto">
+                  <div
+                    v-for="(feature, index) in sortedFeatures"
+                    :key="index"
+                    @click="selectedFeatureIndex = index"
+                    :class="[
+                      'p-4 border-2 rounded-lg cursor-pointer transition-colors',
+                      selectedFeatureIndex === index
+                        ? 'border-blue-500 bg-blue-50'
+                        : 'border-gray-200 hover:border-gray-300'
+                    ]"
+                  >
+                    <div class="flex items-start justify-between">
+                      <div class="flex-1 min-w-0">
+                        <h5 class="text-sm font-medium text-gray-900">
+                          {{ feature.properties?.name || `Feature ${index + 1}` }}
+                        </h5>
+                        <p class="text-xs text-gray-500 mt-1">{{ feature.geometry.type }}</p>
+                        <p v-if="feature.properties?.description" class="text-xs text-gray-600 mt-1 line-clamp-2">
+                          {{ feature.properties.description }}
+                        </p>
+                      </div>
+                      <div v-if="selectedFeatureIndex === index" class="ml-4 flex-shrink-0">
+                        <CheckIcon class="h-5 w-5 text-blue-500" />
                       </div>
                     </div>
                   </div>
+                </div>
+                <div class="relative min-h-64 border border-gray-300 rounded-md overflow-hidden">
+                  <div ref="previewContainer" class="absolute inset-0"></div>
+                  <button
+                    v-if="selectedFeatureIndex !== null"
+                    @click="expandMap(selectedFeatureIndex)"
+                    class="absolute top-2 right-2 bg-white bg-opacity-90 hover:bg-opacity-100 rounded p-1 shadow-sm border border-gray-300"
+                    title="Expand Map Preview"
+                  >
+                    <ArrowsPointingOutIcon class="w-4 h-4 text-gray-700" />
+                  </button>
                 </div>
               </div>
             </div>
@@ -281,7 +272,7 @@
   >
     <div class="flex-1 min-h-0 flex flex-col p-6 h-full">
       <div
-        id="expanded-feature-map"
+        ref="expandedMapContainer"
         class="flex-1 min-h-0 w-full border border-gray-300 rounded-md overflow-hidden"
       ></div>
     </div>
@@ -291,12 +282,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onBeforeUnmount, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
-import { Style, Fill, Stroke, Circle } from 'ol/style'
-import { DragPan, MouseWheelZoom } from 'ol/interaction'
-import type { FeatureLike } from 'ol/Feature'
-import { openLayersBasemap } from '@/utils/map/openlayers/index.js'
-import { useOpenLayersPreviewMap } from '@/composables/useOpenLayersPreviewMap'
-import { getDefaultBasemapFromStore } from '@/utils/map/mapConfigUtils'
+import { MapLibrePreviewMap } from '@/utils/map/common/MapLibrePreviewMap'
 import { getFeature, applyFeatureReplacement } from '@/api/services/featuresApi'
 import { uploadImportFile, getImportJobStatus, getImportQueueFeatures, deleteImportItem } from '@/api/services/importApi'
 import { getApiErrorMessage } from '@/utils/apiError'
@@ -321,7 +307,7 @@ interface ImportJobStatusResponse {
 }
 
 interface ImportQueueFeaturesResponse {
-  geofeatures?: GeoJsonFeature[]
+  items?: GeoJsonFeature[]
   error?: string
 }
 
@@ -347,9 +333,6 @@ const emit = defineEmits<{
   (e: 'applied'): void
 }>()
 
-const METERS_PER_MILE = 1609.34
-const FIFTY_MILE_BUFFER_METERS = 50 * METERS_PER_MILE
-
 const importQueueId = ref<number | string | null>(null)
 const jobId = ref<string | null>(null)
 const processing = ref(false)
@@ -367,11 +350,12 @@ const existingFeatureGeometryType = ref<string | null>(null)
 const expandedMapIndex = ref<number | null>(null)
 const isDragOver = ref(false)
 const fileInput = ref<HTMLInputElement | null>(null)
+const previewContainer = ref<HTMLDivElement | null>(null)
+const expandedMapContainer = ref<HTMLDivElement | null>(null)
 
 let pollingInterval: ReturnType<typeof setInterval> | null = null
-/** Index -> mini-map composable instance. Plain Map (not reactive) since it just holds OL objects. */
-const featureMapInstances = new Map<number, ReturnType<typeof createReplacementMapInstance>>()
-let expandedMapInitialized = false
+const preview = new MapLibrePreviewMap()
+const expandedPreview = new MapLibrePreviewMap()
 
 const sortedFeatures = computed(() => {
   let filtered = features.value
@@ -392,68 +376,6 @@ const dropzoneClasses = computed(() => {
     ? 'border-blue-600 bg-blue-50'
     : 'border-gray-300 hover:border-blue-600 hover:bg-blue-50'
 })
-
-/**
- * Get color value and convert to rgba with optional opacity.
- * @param color - Hex color value (e.g., '#163D8A')
- * @param opacity - Optional opacity (0-1), defaults to 1
- */
-function getColorWithOpacity(color: string, opacity = 1): string {
-  if (color.startsWith('#')) {
-    const hex = color.replace('#', '')
-    const r = parseInt(hex.substring(0, 2), 16)
-    const g = parseInt(hex.substring(2, 4), 16)
-    const b = parseInt(hex.substring(4, 6), 16)
-    return opacity === 1 ? color : `rgba(${r}, ${g}, ${b}, ${opacity})`
-  }
-
-  const rgbMatch = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/)
-  if (rgbMatch) {
-    const r = parseInt(rgbMatch[1])
-    const g = parseInt(rgbMatch[2])
-    const b = parseInt(rgbMatch[3])
-    return `rgba(${r}, ${g}, ${b}, ${opacity})`
-  }
-
-  return opacity === 1 ? '#163D8A' : `rgba(22, 61, 138, ${opacity})`
-}
-
-/** Shared style for both the mini candidate-feature maps and the expanded preview map. */
-function getReplacementFeatureStyle(feature: FeatureLike, pointRadius: number): Style {
-  const geometryType = feature.getGeometry()?.getType()
-  if (geometryType === 'Point' || geometryType === 'MultiPoint') {
-    return new Style({
-      image: new Circle({
-        radius: pointRadius,
-        fill: new Fill({ color: '#fbbf24' }),
-        stroke: new Stroke({ color: '#000000', width: 2 })
-      })
-    })
-  } else if (geometryType === 'LineString' || geometryType === 'MultiLineString') {
-    return new Style({ stroke: new Stroke({ color: getColorWithOpacity('#163D8A'), width: 3 }) })
-  } else if (geometryType === 'Polygon' || geometryType === 'MultiPolygon') {
-    return new Style({
-      fill: new Fill({ color: getColorWithOpacity('#163D8A', 0.3) }),
-      stroke: new Stroke({ color: getColorWithOpacity('#163D8A'), width: 2 })
-    })
-  }
-  return new Style({
-    stroke: new Stroke({ color: getColorWithOpacity('#163D8A'), width: 2 }),
-    fill: new Fill({ color: getColorWithOpacity('#163D8A', 0.3) })
-  })
-}
-
-function createReplacementMapInstance(pointRadius: number) {
-  return useOpenLayersPreviewMap({
-    getFeatureStyle: (feature) => getReplacementFeatureStyle(feature, pointRadius),
-    controls: [],
-    interactions: [new DragPan(), new MouseWheelZoom()],
-    maxZoom: 18,
-    tileSourceId: getDefaultBasemapFromStore()
-  })
-}
-
-const expandedMapInstance = createReplacementMapInstance(8)
 
 function resetDialog(): void {
   cleanupMaps()
@@ -479,40 +401,19 @@ function resetDialog(): void {
 }
 
 function cleanupMaps(): void {
-  featureMapInstances.forEach((instance) => { instance.cleanup() })
-  featureMapInstances.clear()
-
-  expandedMapInstance.cleanup()
-  expandedMapInitialized = false
+  preview.destroy()
+  expandedPreview.destroy()
 }
 
-function setMapRef(el: Element | { $el?: Element } | null, index: number): void {
-  if (el instanceof HTMLElement && !featureMapInstances.has(index)) {
-    void nextTick(() => {
-      void initializeFeatureMap(el, index)
-    })
-  }
-}
-
-async function initializeFeatureMap(container: HTMLElement, index: number): Promise<void> {
-  if (featureMapInstances.has(index)) return
-
-  const feature = sortedFeatures.value[index] as GeoJsonFeature | undefined
+async function showSelectedPreview(): Promise<void> {
+  if (selectedFeatureIndex.value === null || !previewContainer.value) return
+  const feature = sortedFeatures.value[selectedFeatureIndex.value]
   if (!feature) return
-
-  try {
-    const instance = createReplacementMapInstance(6)
-    await instance.initMap(container)
-    const [olFeature] = instance.loadFeatures([{ geometry: feature.geometry, properties: feature.properties }])
-    instance.zoomToFeature(olFeature, {
-      forceBufferMeters: FIFTY_MILE_BUFFER_METERS,
-      padding: [10, 10, 10, 10],
-      duration: 0
-    })
-    featureMapInstances.set(index, instance)
-  } catch (error) {
-    console.error(`Error initializing map for feature ${index}:`, error)
+  if (!preview.map) {
+    await preview.create(previewContainer.value)
   }
+  preview.loadFeatures([feature])
+  preview.fitToFeatures([feature], { padding: 16, duration: 0, maxZoom: 12 })
 }
 
 function expandMap(index: number): void {
@@ -524,26 +425,12 @@ function closeExpandedMap(): void {
 }
 
 async function initializeExpandedMap(): Promise<void> {
-  if (expandedMapIndex.value === null || expandedMapInitialized) return
-
-  const container = document.getElementById('expanded-feature-map')
-  if (!container) return
-
-  const feature = sortedFeatures.value[expandedMapIndex.value] as GeoJsonFeature | undefined
+  if (expandedMapIndex.value === null || !expandedMapContainer.value) return
+  const feature = sortedFeatures.value[expandedMapIndex.value]
   if (!feature) return
-
-  try {
-    await expandedMapInstance.initMap(container)
-    const [olFeature] = expandedMapInstance.loadFeatures([{ geometry: feature.geometry, properties: feature.properties }])
-    expandedMapInstance.zoomToFeature(olFeature, {
-      forceBufferMeters: FIFTY_MILE_BUFFER_METERS,
-      padding: [20, 20, 20, 20],
-      duration: 0
-    })
-    expandedMapInitialized = true
-  } catch (error) {
-    console.error('Error initializing expanded map:', error)
-  }
+  await expandedPreview.create(expandedMapContainer.value)
+  expandedPreview.loadFeatures([feature])
+  expandedPreview.fitToFeatures([feature], { padding: 24, duration: 0, maxZoom: 15 })
 }
 
 async function fetchExistingFeatureGeometryType(): Promise<void> {
@@ -559,16 +446,9 @@ async function fetchExistingFeatureGeometryType(): Promise<void> {
   }
 }
 
-function normalizeGeometryType(type: string | null | undefined): string | null | undefined {
-  if (type === 'Point' || type === 'MultiPoint') return 'Point'
-  if (type === 'LineString' || type === 'MultiLineString') return 'LineString'
-  if (type === 'Polygon' || type === 'MultiPolygon') return 'Polygon'
-  return type
-}
-
 function geometryTypesMatch(existingType: string | null | undefined, replacementType: string | null | undefined): boolean {
   if (!existingType || !replacementType) return false
-  return normalizeGeometryType(existingType) === normalizeGeometryType(replacementType)
+  return existingType.toLowerCase() === replacementType.toLowerCase()
 }
 
 function cleanup(): void {
@@ -730,8 +610,8 @@ async function fetchFeatures(): Promise<void> {
 
   try {
     const data = await getImportQueueFeatures(importQueueId.value) as ImportQueueFeaturesResponse
-    if (data.geofeatures) {
-      features.value = data.geofeatures
+    if (data.items) {
+      features.value = data.items
       processing.value = false
     } else {
       errorMessage.value = data.error || 'Failed to load features'
@@ -801,9 +681,6 @@ function formatFileSize(bytes: number): string {
 
 watch(() => props.isOpen, (newVal) => {
   if (newVal) {
-    openLayersBasemap.prefetch().catch((error: unknown) => {
-      console.error('Error prefetching OpenLayers basemap tile sources:', error)
-    })
     void nextTick(() => {
       resetDialog()
       void fetchExistingFeatureGeometryType()
@@ -816,26 +693,29 @@ watch(() => props.isOpen, (newVal) => {
 watch(expandedMapIndex, (newVal) => {
   if (newVal !== null) {
     void nextTick(() => {
-      setTimeout(() => {
-        void initializeExpandedMap()
-      }, 100)
+      void initializeExpandedMap()
     })
   } else {
-    expandedMapInstance.cleanup()
-    expandedMapInitialized = false
+    expandedPreview.destroy()
+  }
+})
+
+watch(selectedFeatureIndex, () => {
+  if (props.isOpen) {
+    void nextTick(() => {
+      void showSelectedPreview()
+    })
   }
 })
 
 watch(sortedFeatures, () => {
+  if (props.isOpen && selectedFeatureIndex.value === null && sortedFeatures.value.length > 0) {
+    selectedFeatureIndex.value = 0
+  }
   void nextTick(() => {
-    sortedFeatures.value.forEach((_feature, index) => {
-      const container = document.getElementById(`feature-map-${index}`)
-      if (container && !featureMapInstances.has(index)) {
-        void initializeFeatureMap(container, index)
-      }
-    })
+    void showSelectedPreview()
   })
-}, { deep: true })
+})
 
 const route = useRoute()
 watch(() => route.fullPath, () => {

@@ -1,18 +1,6 @@
 import type { AxiosProgressEvent } from 'axios';
 import { httpClient } from '../httpClient';
 
-/** GET /api/item/import/get - paginated import queue listing. */
-export async function getImportQueue(page = 1, pageSize = 10): Promise<unknown> {
-    const response = await httpClient.get<unknown>('/api/item/import/get', { params: { page, page_size: pageSize } });
-    return response.data;
-}
-
-/** GET /api/item/import/get/:id - a single queued import's items, paginated. */
-export async function getImportQueueItem(importId: number | string, page = 1, pageSize = 10): Promise<unknown> {
-    const response = await httpClient.get<unknown>(`/api/item/import/get/${importId}`, { params: { page, page_size: pageSize } });
-    return response.data;
-}
-
 /** GET /api/item/import/get/features/:importQueueId - all features for a queued import (no pagination). */
 export async function getImportQueueFeatures(importQueueId: number | string): Promise<unknown> {
     const response = await httpClient.get<unknown>(`/api/item/import/get/features/${importQueueId}`);
@@ -21,14 +9,19 @@ export async function getImportQueueFeatures(importQueueId: number | string): Pr
 
 /** GET /api/item/import/history - paginated history of completed/discarded imports. */
 export async function getImportHistory(page = 1, pageSize = 10): Promise<unknown> {
-    const response = await httpClient.get<unknown>('/api/item/import/history', { params: { page, 'page-size': pageSize } });
+    const response = await httpClient.get<unknown>('/api/item/import/history', { params: { page, page_size: pageSize } });
     return response.data;
 }
 
-/** GET /api/item/import/logs/:id */
-export async function getImportLogs(importId: number | string): Promise<unknown> {
-    const response = await httpClient.get<unknown>(`/api/item/import/logs/${importId}`);
-    return response.data;
+export interface ImportJobAccepted {
+    job_id?: string;
+    status?: string;
+    msg?: string;
+}
+
+export interface SkipIntentPayload {
+    skipped: string[];
+    restored: string[];
 }
 
 /** GET /api/item/import/status/:jobId - lightweight polling endpoint for an in-flight upload job. */
@@ -38,8 +31,8 @@ export async function getImportJobStatus(jobId: string): Promise<unknown> {
 }
 
 /** PUT /api/item/import/skip-state/:id */
-export async function updateImportSkipState(importId: number | string, skippedFeatureIds: string[]): Promise<unknown> {
-    const response = await httpClient.put<unknown>(`/api/item/import/skip-state/${importId}`, { skipped_feature_ids: skippedFeatureIds });
+export async function updateImportSkipState(importId: number | string, intent: SkipIntentPayload): Promise<unknown> {
+    const response = await httpClient.put<unknown>(`/api/item/import/skip-state/${importId}`, intent);
     return response.data;
 }
 
@@ -50,14 +43,17 @@ export async function updateImportFeatures(importId: number | string, features: 
 }
 
 /** POST /api/item/import/perform/:id - commits a queued import into the feature store. */
-export async function performImport(importId: number | string, payload: { import_custom_icons?: boolean; skipped_feature_ids?: string[] } = {}): Promise<unknown> {
-    const response = await httpClient.post<unknown>(`/api/item/import/perform/${importId}`, payload);
+export async function performImport(
+    importId: number | string,
+    payload: { import_custom_icons?: boolean; skipped?: string[]; restored?: string[] } = {},
+): Promise<ImportJobAccepted> {
+    const response = await httpClient.post<ImportJobAccepted>(`/api/item/import/perform/${importId}`, payload);
     return response.data;
 }
 
-/** POST /api/item/import/recheck-duplicates/:id */
-export async function recheckImportDuplicates(importId: number | string): Promise<unknown> {
-    const response = await httpClient.post<unknown>(`/api/item/import/recheck-duplicates/${importId}`, {});
+/** POST /api/item/import/recheck-duplicates/:id — starts a Celery recheck; poll job status. */
+export async function recheckImportDuplicates(importId: number | string, page = 1): Promise<ImportJobAccepted> {
+    const response = await httpClient.post<ImportJobAccepted>(`/api/item/import/recheck-duplicates/${importId}`, { page });
     return response.data;
 }
 

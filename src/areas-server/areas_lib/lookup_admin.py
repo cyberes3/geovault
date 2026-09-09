@@ -99,60 +99,23 @@ def build_admin_hierarchy(rows: List[Tuple[Any, ...]]) -> Dict[str, Optional[str
     return result
 
 
-def run_admin_single(conn: Any, lat: float, lon: float) -> List[Tuple[Any, ...]]:
-    with conn.cursor() as cur:
-        cur.execute(
-            f"""
-            SELECT a.osm_id, a.admin_level, a.name, a.tags
-            FROM {SCHEMA}.{TABLE_NAME} a
-            WHERE public.ST_Contains(a.geom, public.ST_SetSRID(public.ST_MakePoint(%s, %s), 4326))
-            ORDER BY a.admin_level ASC,
-                     public.ST_Distance(
-                         public.ST_PointOnSurface(a.geom),
-                         public.ST_SetSRID(public.ST_MakePoint(%s, %s), 4326)
-                     ),
-                     a.osm_id
-            """,
-            (lon, lat, lon, lat),
-        )
-        return cur.fetchall()
-
-
-def run_admin_batch(
-        conn: Any,
-        indices: List[int],
-        lons: List[float],
-        lats: List[float],
-) -> List[Tuple[int, Any, Any, Any, Any]]:
-    """Returns (point_idx, osm_id, admin_level, name, tags). At most one row per (point_idx, admin_level)."""
-    with conn.cursor() as cur:
-        cur.execute(
-            f"""
-            WITH p AS (
-                SELECT * FROM unnest(%s::bigint[], %s::double precision[], %s::double precision[])
-                AS t(point_idx, lon, lat)
-            ),
-            pt AS (
-                SELECT point_idx,
-                       public.ST_SetSRID(public.ST_MakePoint(lon, lat), 4326) AS geom
-                FROM p
-            ),
-            joined AS (
-                    SELECT pt.point_idx, a.osm_id, a.admin_level, a.name, a.tags,
-                           public.ST_Distance(
-                               public.ST_PointOnSurface(a.geom),
-                               pt.geom
-                           ) AS dist
-                FROM pt
-                JOIN {SCHEMA}.{TABLE_NAME} a ON public.ST_Contains(a.geom, pt.geom)
-            )
-            SELECT DISTINCT ON (point_idx, admin_level) point_idx, osm_id, admin_level, name, tags
-            FROM joined
-            ORDER BY point_idx, admin_level, dist ASC, osm_id
-            """,
-            (indices, lons, lats),
-        )
-        return cur.fetchall()
+def sql_fragment(*, batch: bool) -> str:
+    """UNION ALL branch for admin. Uses pt CTE; named params %(lon)s/%(lat)s are in the CTE."""
+    payload = "jsonb_build_object('osm_id', a.osm_id, 'admin_level', a.admin_level, 'name', a.name, 'tags', a.tags)"
+    dist = "public.ST_Distance(public.ST_PointOnSurface(a.geom)::geography, public.geography(pt.geom))"
+    if batch:
+        return f"""
+        (SELECT pt.point_idx, 'admin' AS layer, {payload} AS payload
+        FROM pt
+        JOIN {SCHEMA}.{TABLE_NAME} a ON public.ST_Contains(a.geom, pt.geom)
+        ORDER BY pt.point_idx, a.admin_level, {dist}, a.osm_id)
+        """
+    return f"""
+        (SELECT 'admin' AS layer, {payload} AS payload
+        FROM {SCHEMA}.{TABLE_NAME} a, pt
+        WHERE public.ST_Contains(a.geom, pt.geom)
+        ORDER BY a.admin_level, {dist}, a.osm_id)
+        """
 
 
 def get_admin_stats(conn: Any) -> Dict[str, Any]:

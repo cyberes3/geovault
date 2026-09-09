@@ -1,0 +1,6 @@
+name = "example_extension"
+version = "1.0.0"
+description = "Demonstration extension: scoped items, FeatureService.create, and ImportProvider."
+icon = "CogIcon"
+enabled_by_default = false
+umd_global = "ExampleExtension"

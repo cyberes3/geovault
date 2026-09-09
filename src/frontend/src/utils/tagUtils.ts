@@ -1,88 +1,34 @@
 import { fetchConfig } from './configService';
+import { isProtectedTag } from './tags/protected';
 
-// System tag prefixes that identify automatically generated tags.
-// Fetched from backend config on initialization
-let SYSTEM_TAG_PREFIXES: string[] = [];
+export { ensureSystemTagsInitialized, getSystemTagPrefixes } from './tags/protected';
 
-// Tag priorities mapping (prefix -> priority 1-10)
-// Fetched from backend config on initialization
+export function isSystemTag(tag: unknown): boolean {
+  return isProtectedTag(tag);
+}
+
 let TAG_PRIORITIES: Record<string, number> = {};
+let priorityInitPromise: Promise<void> | null = null;
 
-// Initialize system tags and tag priorities from config
-// This is called once when the module loads
-let initPromise: Promise<void> | null = null;
-
-/** Initialize system tag prefixes and tag priorities from server config. */
-function initializeSystemTags(): Promise<void> {
-  if (initPromise) {
-    return initPromise;
+function initializeTagPriorities(): Promise<void> {
+  if (priorityInitPromise) {
+    return priorityInitPromise;
   }
-
-  initPromise = fetchConfig()
+  priorityInitPromise = fetchConfig()
     .then((config) => {
-      SYSTEM_TAG_PREFIXES = config.systemTagPrefixes;
       TAG_PRIORITIES = config.tagPriorities;
     })
     .catch((error: unknown) => {
-      console.error('Error initializing system tags from config:', error);
-      // Fallback to empty array/object if config fetch fails
-      SYSTEM_TAG_PREFIXES = [];
+      console.error('Error initializing tag priorities from config:', error);
       TAG_PRIORITIES = {};
     })
     .finally(() => {
-      initPromise = null;
+      priorityInitPromise = null;
     });
-
-  return initPromise;
+  return priorityInitPromise;
 }
 
-// Start initialization immediately
-void initializeSystemTags();
-
-/**
- * Check if a tag is a system tag (protected tag).
- * Matches the backend's is_protected_tag logic.
- */
-export function isSystemTag(tag: unknown): boolean {
-  if (!tag || typeof tag !== 'string') {
-    return false;
-  }
-
-  // If system tags haven't been loaded yet, return false
-  // This is a defensive check - in practice, config should load quickly
-  if (SYSTEM_TAG_PREFIXES.length === 0) {
-    // Try to initialize if not already in progress
-    if (!initPromise) {
-      void initializeSystemTags();
-    }
-    return false;
-  }
-
-  const lowerTag = tag.toLowerCase();
-
-  for (const prefix of SYSTEM_TAG_PREFIXES) {
-    // Exact match
-    if (lowerTag === prefix) {
-      return true;
-    }
-    // Prefix match (e.g., "type:point" matches "type")
-    if (lowerTag.startsWith(`${prefix}:`)) {
-      return true;
-    }
-  }
-
-  return false;
-}
-
-/** Get the current system tag prefixes (for debugging or other uses). */
-export function getSystemTagPrefixes(): string[] {
-  return [...SYSTEM_TAG_PREFIXES];
-}
-
-/** Ensure system tags are initialized (useful for components that need to wait). */
-export function ensureSystemTagsInitialized(): Promise<void> {
-  return initializeSystemTags();
-}
+void initializeTagPriorities();
 
 /** Filter out system tags from a list of tags. */
 export function filterSystemTags(tags: unknown): string[] {

@@ -1,7 +1,6 @@
 """Bulk operations on features (styling, tags, etc.)"""
 
 from django.db import transaction
-from django.db.models import Q
 from django.views.decorators.http import require_http_methods
 
 from api.models import FeatureStore
@@ -10,6 +9,7 @@ from api.utils.responses import error_response, success_response
 from api.validation.decorators import validate_payload
 from api.validation.payloads.bulk_operations import SaveBulkOperationsPayload
 from geo_lib.logging.console import get_tagged_logger
+from geo_lib.tags.tag_query import TagQuery, TagQueryError
 from website.auth_decorators import api_or_login_required_401
 
 _logger = get_tagged_logger()
@@ -45,9 +45,12 @@ def apply_bulk_operations_to_tag(request, tag_name: str, validated_data):
     # (e.g. `places`) manage their own styling and must never be touched by this endpoint,
     # even if one happens to share the same tag text.
     # Search in both user tags and system tags
+    try:
+        query = TagQuery.parse([tag_name], match_mode='OR', prefix=False, scope=None)
+    except TagQueryError as exc:
+        return error_response(exc.message, 400)
     features_qs = FeatureStore.objects.owned_by(request.user).main_map().filter(
-        Q(geojson__properties__tags__contains=[tag_name]) |
-        Q(geojson__properties__system_tags__contains=[tag_name])
+        query.to_django_q(request.user.id)
     ).only('id', 'geojson')
 
     if not features_qs.exists():

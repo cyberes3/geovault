@@ -172,6 +172,9 @@ class TestBulkOperations:
         result = apply_bulk_operations(features, bulk_ops)
         assert len(result) == 1
         assert result[0]['properties']['icon'] == 'assets/icons/test.png'
+        assert 'icon_url' not in result[0]['properties']
+        assert 'iconUrl' not in result[0]['properties']
+        assert 'icon-href' not in result[0]['properties']
 
     def test_apply_bulk_operations_empty(self):
         """Test applying empty bulk operations."""

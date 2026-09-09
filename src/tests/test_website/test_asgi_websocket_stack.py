@@ -18,7 +18,7 @@ from channels.testing import WebsocketCommunicator
 from django.contrib.auth import get_user_model
 from django.test import TransactionTestCase, override_settings
 
-from api.routing import websocket_urlpatterns
+from api.routing import get_websocket_urlpatterns
 from users.api_keys import create_user_api_key
 from website.websocket_origin_validation import SessionOriginValidator
 from website.websocket_token_auth import WebSocketTokenAuthMiddleware
@@ -28,7 +28,7 @@ User = get_user_model()
 application = WebSocketTokenAuthMiddleware(
     SessionOriginValidator(
         AuthMiddlewareStack(
-            URLRouter(websocket_urlpatterns)
+            URLRouter(get_websocket_urlpatterns())
         )
     )
 )

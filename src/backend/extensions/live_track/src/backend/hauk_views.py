@@ -6,18 +6,19 @@ proxying root to the extension base so clients see /api/create.php etc.
 
 import secrets
 
-from django.core.cache import cache
 from django.http import HttpResponse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 from django.contrib.auth import get_user_model
+
+from geo_lib.perf.shared_cache import get_shared_cache
 from website.public_url import public_base_url
 
 from .helpers import parse_ingress_body
-from .ingress_views import append_point_to_track
 from .models import LiveTrack
+from .writer import append_point_to_track
 
 User = get_user_model()
 
@@ -52,13 +53,13 @@ def _resolve_hauk_user_track(usr: str, pwd: str) -> tuple[User | None, LiveTrack
 
 
 def _get_hauk_session(sid: str) -> dict | None:
-    data = cache.get(HAUK_SESSION_CACHE_PREFIX + sid)
+    data = get_shared_cache().get(HAUK_SESSION_CACHE_PREFIX + sid)
     return data if isinstance(data, dict) else None
 
 
 def _set_hauk_session(sid: str, track_id: str, duration_seconds: int) -> None:
     timeout = min(max(1, duration_seconds), HAUK_SESSION_CACHE_TIMEOUT_MAX)
-    cache.set(
+    get_shared_cache().set(
         HAUK_SESSION_CACHE_PREFIX + sid,
         {"track_id": str(track_id)},
         timeout=timeout,
@@ -66,7 +67,7 @@ def _set_hauk_session(sid: str, track_id: str, duration_seconds: int) -> None:
 
 
 def _delete_hauk_session(sid: str) -> None:
-    cache.delete(HAUK_SESSION_CACHE_PREFIX + sid)
+    get_shared_cache().delete(HAUK_SESSION_CACHE_PREFIX + sid)
 
 
 @require_http_methods(["POST"])

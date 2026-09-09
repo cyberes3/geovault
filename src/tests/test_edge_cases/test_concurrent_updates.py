@@ -15,6 +15,7 @@ from api.models import FeatureStore, Collection, ImportQueue
 from geo_lib.feature_id import generate_geojson_hash
 
 
+from tests.test_utils.import_queue import queue_with_drafts, draft_geojson
 class TestConcurrentFeatureEdits(TransactionTestCase):
     """Test concurrent edits to the same feature."""
 
@@ -344,18 +345,18 @@ class TestConcurrentFeatureCreation(TransactionTestCase):
             }
         }
         
-        item1 = ImportQueue.objects.create(
+        item1 = queue_with_drafts(
             user=self.user,
             original_filename='test1.kml',
             raw_file='<kml></kml>',
-            geofeatures=[feature_data]
+            features=[feature_data]
         )
         
-        item2 = ImportQueue.objects.create(
+        item2 = queue_with_drafts(
             user=self.user,
             original_filename='test2.kml',
             raw_file='<kml></kml>',
-            geofeatures=[feature_data]
+            features=[feature_data]
         )
         
         # Note: Actual concurrent import would require async job system

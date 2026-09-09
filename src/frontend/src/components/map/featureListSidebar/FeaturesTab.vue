@@ -100,6 +100,7 @@ import Loader from '@/components/parts/Loader.vue';
 import { APIHOST } from '@/config.js';
 import { getGeometryTypeColor, DEFAULT_GEOMETRY_COLOR } from '@/utils/geometryColors.js';
 import { getIconUrl, resolveIconUrl, isSystemIcon, handleIconError } from '@/utils/map/iconUtils.ts';
+import { searchFeatures } from '@/api/services/featuresApi';
 import { toastApiError } from '@/utils/apiError';
 import { toast } from '@/utils/toast';
 import type { GeoJsonFeature } from '@/types/geospatial';
@@ -123,8 +124,6 @@ const emit = defineEmits<{
   'feature-hide': [feature: GeoJsonFeature];
   'feature-hover': [feature: GeoJsonFeature | null];
 }>();
-
-const API_BASE_URL = '/api/features/search/';
 
 const searchQuery = ref('');
 const searchResults = ref<GeoJsonFeature[]>([]);
@@ -235,13 +234,6 @@ function handleSearchInput() {
   }, 300);
 }
 
-interface FeatureSearchResponse {
-  data?: {
-    features?: GeoJsonFeature[];
-  };
-  error?: string;
-}
-
 async function performSearch(query: string) {
   if (!query) {
     clearSearch();
@@ -251,12 +243,10 @@ async function performSearch(query: string) {
   isSearching.value = true;
 
   try {
-    const url = `${APIHOST}${API_BASE_URL}?query=${encodeURIComponent(query)}`;
-    const response = await fetch(url);
-    const data = (await response.json()) as FeatureSearchResponse;
+    const data = await searchFeatures(query);
 
-    if (response.ok && data.data?.features) {
-      const features = data.data.features;
+    if (data.data?.features) {
+      const features = data.data.features as GeoJsonFeature[];
 
       features.sort((a, b) => {
         const nameA = ((a.properties.name as string | undefined) || 'Unnamed Feature').toLowerCase();
@@ -266,8 +256,7 @@ async function performSearch(query: string) {
 
       searchResults.value = features;
     } else {
-      console.error('Search failed:', data.error || 'Unknown error');
-      toast.error(data.error || 'Search failed');
+      toast.error('Search failed');
       searchResults.value = [];
     }
   } catch (error) {

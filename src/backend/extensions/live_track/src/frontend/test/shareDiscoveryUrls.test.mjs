@@ -6,38 +6,38 @@ import {
   shareInfoUrl
 } from '../src/shareDiscoveryUrls.js';
 
-test('shareInfoUrl uses the neutral live-track discovery endpoint', () => {
+test('shareInfoUrl uses the unified shares info endpoint', () => {
   assert.equal(
     shareInfoUrl('f8a918ab-7f53-4ef3-be11-a957c40ebd02'),
-    '/api/extensions/live-track/share/f8a918ab-7f53-4ef3-be11-a957c40ebd02/info/'
+    '/api/shares/f8a918ab-7f53-4ef3-be11-a957c40ebd02/info/'
   );
 });
 
 test('shareInfoUrl encodes share IDs before building the URL', () => {
   assert.equal(
     shareInfoUrl('id with spaces'),
-    '/api/extensions/live-track/share/id%20with%20spaces/info/'
+    '/api/shares/id%20with%20spaces/info/'
   );
 });
 
-test('shareDataUrlForInfo dispatches internal shares to the internal data endpoint', () => {
+test('shareDataUrlForInfo uses the unified track endpoint for internal shares', () => {
   assert.equal(
     shareDataUrlForInfo('f8a918ab-7f53-4ef3-be11-a957c40ebd02', { share_access: 'internal' }),
-    '/api/extensions/live-track/internal/share/f8a918ab-7f53-4ef3-be11-a957c40ebd02/'
+    '/api/shares/f8a918ab-7f53-4ef3-be11-a957c40ebd02/track/'
   );
 });
 
-test('shareDataUrlForInfo dispatches world shares to the world data endpoint', () => {
+test('shareDataUrlForInfo uses the unified track endpoint for world shares', () => {
   assert.equal(
     shareDataUrlForInfo('f8a918ab-7f53-4ef3-be11-a957c40ebd02', { share_access: 'world' }),
-    '/api/extensions/live-track/world/share/f8a918ab-7f53-4ef3-be11-a957c40ebd02/'
+    '/api/shares/f8a918ab-7f53-4ef3-be11-a957c40ebd02/track/'
   );
 });
 
-test('shareDataUrlForInfo defaults unknown discovery metadata to world data endpoint', () => {
+test('shareDataUrlForInfo defaults unknown discovery metadata to the track endpoint', () => {
   assert.equal(
     shareDataUrlForInfo('f8a918ab-7f53-4ef3-be11-a957c40ebd02', {}),
-    '/api/extensions/live-track/world/share/f8a918ab-7f53-4ef3-be11-a957c40ebd02/'
+    '/api/shares/f8a918ab-7f53-4ef3-be11-a957c40ebd02/track/'
   );
 });
 

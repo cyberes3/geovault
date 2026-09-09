@@ -9,8 +9,7 @@ const METERS_TO_KM = 0.001;
 const KMH_TO_MPH = 0.621371;
 
 function getUnitPreference(): string {
-  const userSettings = window.gv_core.store?.getters?.['userSettings/userSettings'] as { account?: { units?: string } } | undefined;
-  return userSettings?.account?.units ?? 'imperial';
+  return window.gv_core.settings.getUnitPreference();
 }
 
 /** Stringify a value of unknown shape without risking the default `[object Object]` output. */

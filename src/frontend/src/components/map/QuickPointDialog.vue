@@ -347,9 +347,10 @@ export default defineComponent({
         // Call backend API
         const data = await createQuickPointFeature(payload) as { feature: MapPageFeature }
 
-        // Success - emit event with the created feature and close
+        this.isSaving = false
         this.$emit('created', data.feature)
-        this.handleClose()
+        this.reset()
+        this.$emit('close')
       } catch (error) {
         console.error('Error creating quick point:', error)
         this.errorMessage = getApiErrorMessage(error, 'Failed to create point')

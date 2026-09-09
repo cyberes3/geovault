@@ -5,31 +5,121 @@ from django.contrib.gis.db import models
 from django.contrib.postgres.indexes import GinIndex, GistIndex
 from django.db import models as django_models
 
+from api.sharing.models import ShareGrant, ShareLink
+
 
 class ImportQueue(django_models.Model):
+    STATUS_PROCESSING = 'processing'
+    STATUS_READY = 'ready'
+    STATUS_CANCELED = 'canceled'
+    STATUS_FAILED = 'failed'
+    STATUS_IMPORTED = 'imported'
+    STATUS_CHOICES = (
+        (STATUS_PROCESSING, 'Processing'),
+        (STATUS_READY, 'Ready'),
+        (STATUS_CANCELED, 'Canceled'),
+        (STATUS_FAILED, 'Failed'),
+        (STATUS_IMPORTED, 'Imported'),
+    )
+    ENCODING_UTF8 = 'utf8'
+    ENCODING_BASE64 = 'base64'
+    ENCODING_CHOICES = (
+        (ENCODING_UTF8, 'UTF-8'),
+        (ENCODING_BASE64, 'Base64'),
+    )
+    TERMINAL_STATUSES = (STATUS_CANCELED, STATUS_FAILED, STATUS_READY, STATUS_IMPORTED)
+
     id = django_models.AutoField(primary_key=True)
     user = django_models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=django_models.CASCADE)
     imported = django_models.BooleanField(default=False)
     unparsable = django_models.BooleanField(default=False, help_text="True if the file failed to parse and should not be retried")
-    geofeatures = django_models.JSONField(default=list)
-    duplicate_features = django_models.JSONField(default=list, help_text="Features that are duplicates of existing features in the feature store")
+    queue_status = django_models.CharField(
+        max_length=16,
+        choices=STATUS_CHOICES,
+        default=STATUS_READY,
+        db_index=True,
+        help_text="processing|ready|canceled|failed|imported",
+    )
     original_filename = django_models.TextField()
     raw_file = django_models.TextField(help_text="Raw file content (KML, KMZ, GPX, etc.)")
+    raw_file_encoding = django_models.CharField(
+        max_length=8,
+        choices=ENCODING_CHOICES,
+        default=ENCODING_UTF8,
+        help_text="Discriminant for raw_file: utf8 text or base64 bytes",
+    )
     file_hash = django_models.CharField(max_length=64, null=True, blank=True, help_text="SHA-256 hash of the raw uploaded file content (entire file, not individual features)")
     log_id = django_models.UUIDField(default=uuid.uuid4, unique=True, help_text="UUID to group related log entries", null=True)
     replacement = django_models.IntegerField(null=True, blank=True, help_text="ID of the existing feature being updated with this replacement upload")
     bulk_operations = django_models.JSONField(default=dict, null=True, blank=True, help_text="Bulk operations (tags, styling) to apply during import")
-    skipped_feature_ids = django_models.JSONField(default=list, help_text="List of feature IDs that are skipped by the user")
+    skip_intent = django_models.JSONField(
+        default=dict,
+        help_text="SkipIntent snapshot: blocked, auto_skipped_geometry, user_skipped, user_restored_geometry",
+    )
+    duplicate_counts = django_models.JSONField(
+        default=dict,
+        help_text="File-wide duplicate counts: {hash, geometry}",
+    )
     timestamp = django_models.DateTimeField(auto_now_add=True)
 
     class Meta:
         indexes = [
             # Compound index for user-specific import queue queries
             django_models.Index(fields=['user', 'imported', 'timestamp'], name='import_user_imported_time'),
+            django_models.Index(fields=['user', 'queue_status', 'timestamp'], name='import_user_qstatus_time'),
             # Index for file hash lookups (raw file content hash for duplicate detection)
             django_models.Index(fields=['user', 'file_hash'], name='import_user_file_hash'),
             # Index for log grouping
             django_models.Index(fields=['log_id', 'timestamp'], name='import_log_id_time'),
+        ]
+
+
+class ImportDraftFeature(models.Model):
+    VERDICT_NONE = 'none'
+    VERDICT_HASH = 'hash'
+    VERDICT_GEOMETRY = 'geometry'
+    VERDICT_KIND_CHOICES = (
+        (VERDICT_NONE, 'None'),
+        (VERDICT_HASH, 'Hash'),
+        (VERDICT_GEOMETRY, 'Geometry'),
+    )
+    SCOPE_NONE = 'none'
+    SCOPE_LIBRARY = 'library'
+    SCOPE_DRAFT_QUEUE = 'draft_queue'
+    VERDICT_SCOPE_CHOICES = (
+        (SCOPE_NONE, 'None'),
+        (SCOPE_LIBRARY, 'Library'),
+        (SCOPE_DRAFT_QUEUE, 'Draft queue'),
+    )
+
+    id = models.AutoField(primary_key=True)
+    queue = models.ForeignKey(ImportQueue, on_delete=models.CASCADE, related_name='draft_features')
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    geojson = models.JSONField()
+    geojson_hash = models.CharField(max_length=64, db_index=True)
+    geometry = models.GeometryField(null=True, blank=True, dim=3)
+    name = models.TextField(blank=True, default='')
+    geometry_type = models.CharField(max_length=32, blank=True, default='')
+    sort_lat = models.FloatField(null=True, blank=True)
+    sort_lon = models.FloatField(null=True, blank=True)
+    spatial_index = models.IntegerField(default=0)
+    file_index = models.IntegerField(default=0)
+    verdict_kind = models.CharField(max_length=16, choices=VERDICT_KIND_CHOICES, default=VERDICT_NONE)
+    verdict_scope = models.CharField(max_length=16, choices=VERDICT_SCOPE_CHOICES, default=SCOPE_NONE)
+    match_feature_store_id = models.IntegerField(null=True, blank=True)
+    match_queue_id = models.IntegerField(null=True, blank=True)
+    match_spatial_index = models.IntegerField(null=True, blank=True)
+    match_name = models.TextField(blank=True, default='')
+    match_geometry_type = models.CharField(max_length=32, blank=True, default='')
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['queue', 'spatial_index'], name='draft_queue_spatial'),
+            models.Index(fields=['queue', '-sort_lat', 'sort_lon'], name='draft_queue_sort'),
+            models.Index(fields=['queue', 'geojson_hash'], name='draft_queue_hash'),
+            models.Index(fields=['user', 'geojson_hash'], name='draft_user_hash'),
+            models.Index(fields=['queue', 'verdict_kind'], name='draft_queue_verdict'),
+            GistIndex(fields=['geometry'], name='draft_geometry_idx'),
         ]
 
 
@@ -118,8 +208,9 @@ class FeatureStore(models.Model):
             # This prevents race conditions during concurrent imports while allowing
             # different users to have the same features (e.g., public POIs)
             django_models.UniqueConstraint(
-                fields=['user', 'geojson_hash'],
+                fields=['user', 'scope', 'geojson_hash'],
                 name='unique_user_geojson_hash',
+                nulls_distinct=False,
                 violation_error_message='Feature with this hash already exists for this user'
             )
         ]
@@ -163,54 +254,26 @@ class DatabaseLogging(django_models.Model):
         ]
 
 
-class TagShare(django_models.Model):
-    share_id = django_models.CharField(max_length=255, unique=True, db_index=True, help_text="UUID4")
-    tag = django_models.CharField(max_length=255, help_text="The tag being shared")
+class FeatureTag(django_models.Model):
     user = django_models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=django_models.CASCADE)
-    created_at = django_models.DateTimeField(auto_now_add=True)
-    access_count = django_models.IntegerField(default=0, help_text="Number of times this share has been accessed")
-    include_tags = django_models.BooleanField(default=False, help_text="Whether to include tags in the shared features")
-    allow_downloads = django_models.BooleanField(default=False, help_text="Whether viewers can download features as KMZ")
+    feature = django_models.ForeignKey(FeatureStore, on_delete=django_models.CASCADE, related_name='feature_tags')
+    tag_key = django_models.CharField(max_length=255)
+    namespace = django_models.CharField(max_length=16)
+    scope = django_models.CharField(max_length=255, null=True, blank=True, default=None)
 
     class Meta:
-        indexes = [
-            django_models.Index(fields=['user', 'created_at'], name='tagshare_user_created'),
-            django_models.Index(fields=['share_id'], name='tagshare_share_id'),
-            django_models.Index(fields=['tag', 'user'], name='tagshare_tag_user'),
+        constraints = [
+            django_models.UniqueConstraint(
+                fields=['user', 'feature', 'tag_key', 'namespace', 'scope'],
+                name='uniq_featuretag_user_feat_key_ns_sc',
+                nulls_distinct=False,
+            )
         ]
-
-
-class CollectionShare(django_models.Model):
-    share_id = django_models.CharField(max_length=255, unique=True, db_index=True, help_text="UUID4 share identifier")
-    collection = django_models.ForeignKey('Collection', on_delete=django_models.CASCADE, help_text="The collection being shared")
-    user = django_models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=django_models.CASCADE)
-    created_at = django_models.DateTimeField(auto_now_add=True)
-    access_count = django_models.IntegerField(default=0, help_text="Number of times this share has been accessed")
-    include_tags = django_models.BooleanField(default=False, help_text="Whether to include tags in the shared features")
-    allow_downloads = django_models.BooleanField(default=False, help_text="Whether viewers can download features as KMZ")
-
-    class Meta:
         indexes = [
-            django_models.Index(fields=['user', 'created_at'], name='colshare_user_created'),
-            django_models.Index(fields=['share_id'], name='colshare_share_id'),
-            django_models.Index(fields=['collection', 'user'], name='colshare_coll_user'),
-        ]
-
-
-class FeatureShare(django_models.Model):
-    share_id = django_models.CharField(max_length=255, unique=True, db_index=True, help_text="UUID4 share identifier")
-    feature = django_models.ForeignKey('FeatureStore', on_delete=django_models.CASCADE, help_text="The feature being shared")
-    user = django_models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=django_models.CASCADE)
-    created_at = django_models.DateTimeField(auto_now_add=True)
-    access_count = django_models.IntegerField(default=0, help_text="Number of times this share has been accessed")
-    include_tags = django_models.BooleanField(default=False, help_text="Whether to include tags in the shared feature")
-    allow_downloads = django_models.BooleanField(default=False, help_text="Whether viewers can download features as KMZ")
-
-    class Meta:
-        indexes = [
-            django_models.Index(fields=['user', 'created_at'], name='featshare_user_created'),
-            django_models.Index(fields=['share_id'], name='featshare_share_id'),
-            django_models.Index(fields=['feature', 'user'], name='featshare_feat_user'),
+            django_models.Index(fields=['user', 'scope', 'tag_key'], name='ftag_user_scope_key'),
+            django_models.Index(fields=['user', 'scope', 'namespace', 'tag_key'], name='ftag_user_scope_ns_key'),
+            django_models.Index(fields=['feature'], name='ftag_feature'),
+            django_models.Index(fields=['user', 'tag_key'], name='ftag_user_key'),
         ]
 
 
@@ -219,14 +282,38 @@ class Collection(django_models.Model):
     user = django_models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=django_models.CASCADE)
     name = django_models.CharField(max_length=255)
     description = django_models.TextField(blank=True, null=True)
-    tags = django_models.JSONField(default=list, help_text="Array of tag strings")
-    feature_ids = django_models.JSONField(default=list, help_text="Array of feature IDs")
     created_at = django_models.DateTimeField(auto_now_add=True)
     updated_at = django_models.DateTimeField(auto_now=True)
 
     class Meta:
         indexes = [
             django_models.Index(fields=['user', 'created_at'], name='collection_user_created'),
+        ]
+
+
+class CollectionTagRule(django_models.Model):
+    collection = django_models.ForeignKey(Collection, on_delete=django_models.CASCADE, related_name='tag_rules')
+    tag = django_models.CharField(max_length=255)
+
+    class Meta:
+        constraints = [
+            django_models.UniqueConstraint(fields=['collection', 'tag'], name='uniq_col_tag_rule'),
+        ]
+        indexes = [
+            django_models.Index(fields=['tag'], name='col_tag_rule_tag'),
+        ]
+
+
+class CollectionFeatureMembership(django_models.Model):
+    collection = django_models.ForeignKey(Collection, on_delete=django_models.CASCADE, related_name='feature_pins')
+    feature = django_models.ForeignKey(FeatureStore, on_delete=django_models.CASCADE, related_name='collection_pins')
+
+    class Meta:
+        constraints = [
+            django_models.UniqueConstraint(fields=['collection', 'feature'], name='uniq_col_feat_pin'),
+        ]
+        indexes = [
+            django_models.Index(fields=['feature'], name='col_feat_pin_feat'),
         ]
 
 

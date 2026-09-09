@@ -8,6 +8,7 @@ from django.contrib.gis.geos import Point
 from django.contrib.auth import get_user_model
 
 from api.models import FeatureStore
+from api.services.feature_service import FeatureService
 from geo_lib.feature_id import generate_geojson_hash
 
 
@@ -379,38 +380,28 @@ class TestFeaturesByTagSearch(TestCase):
                     'tags': tags
                 }
             }
-            FeatureStore.objects.create(
-                user=self.user,
-                geojson=feature_data,
-                geometry=Point(feature_data['geometry']['coordinates'][0],
-                             feature_data['geometry']['coordinates'][1],
-                             0.0),
-                geojson_hash=generate_geojson_hash(feature_data)
+            FeatureService.create(
+                self.user,
+                feature_data,
+                geojson_hash=generate_geojson_hash(feature_data),
             )
 
     def test_get_features_by_tag_with_search(self):
-        """Test getting features by tag with search parameter."""
-        response = self.client.get('/api/features/by-tag/', {'search': 'hik'})
+        response = self.client.get('/api/tags/', {'search': 'hik'})
         self.assertEqual(response.status_code, 200)
-        data = json.loads(response.content)
-        # Should find tags containing 'hik'
-        self.assertIn('user_tags', data)
+        names = {item['name'] for item in response.json()['items']}
+        self.assertIn('hiking', names)
 
     def test_get_features_by_tag_search_case_insensitive(self):
-        """Test that tag search is case insensitive."""
-        response = self.client.get('/api/features/by-tag/', {'search': 'HIK'})
+        response = self.client.get('/api/tags/', {'search': 'HIK'})
         self.assertEqual(response.status_code, 200)
-        data = json.loads(response.content)
-        # Should find tags regardless of case
-        self.assertIn('user_tags', data)
+        names = {item['name'] for item in response.json()['items']}
+        self.assertIn('hiking', names)
 
     def test_get_features_by_tag_search_no_matches(self):
-        """Test tag search with no matches."""
-        response = self.client.get('/api/features/by-tag/', {'search': 'nonexistenttag12345'})
+        response = self.client.get('/api/tags/', {'search': 'nonexistenttag12345'})
         self.assertEqual(response.status_code, 200)
-        data = json.loads(response.content)
-        # Should return empty or minimal results
-        self.assertIn('user_tags', data)
+        self.assertEqual(response.json()['items'], [])
 
 
 class TestSystemTagsVsUserTags(TestCase):
@@ -439,35 +430,73 @@ class TestSystemTagsVsUserTags(TestCase):
                 'system_tags': ['system-tag-1', 'system-tag-2']
             }
         }
-        FeatureStore.objects.create(
-            user=self.user,
-            geojson=feature_data,
-            geometry=Point(-122.4194, 37.7749, 0.0),
-            geojson_hash=generate_geojson_hash(feature_data)
+        FeatureService.create(
+            self.user,
+            feature_data,
+            geojson_hash=generate_geojson_hash(feature_data),
         )
 
     def test_get_features_by_tag_separates_tag_types(self):
-        """Test that user tags and system tags are separated."""
-        response = self.client.get('/api/features/by-tag/')
+        response = self.client.get('/api/tags/', {'page_size': '100'})
         self.assertEqual(response.status_code, 200)
-        data = json.loads(response.content)
-        
-        self.assertIn('user_tags', data)
-        self.assertIn('system_tags', data)
-        # Should have separate dictionaries for each type
+        kinds = {item['name']: item['kind'] for item in response.json()['items']}
+        self.assertEqual(kinds.get('user-tag-1'), 'user')
+        self.assertEqual(kinds.get('system-tag-1'), 'system')
 
     def test_search_in_user_tags(self):
-        """Test search finds user tags."""
+        """Test search finds user tags via FeatureTag."""
         response = self.client.get('/api/features/search/', {'query': 'user-tag'})
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
-        # Should find features with user tags
-        self.assertIsInstance(data, dict)
+        self.assertEqual(data['feature_count'], 1)
+        self.assertEqual(data['data']['features'][0]['properties']['name'], 'Test Point')
 
     def test_search_in_system_tags(self):
-        """Test search finds system tags."""
+        """Test search finds system tags via FeatureTag."""
         response = self.client.get('/api/features/search/', {'query': 'system-tag'})
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
-        # Should find features with system tags
-        self.assertIsInstance(data, dict)
+        self.assertEqual(data['feature_count'], 1)
+        self.assertEqual(data['data']['features'][0]['properties']['name'], 'Test Point')
+
+
+class TestSearchUsesFeatureTagIndex(TestCase):
+    """Tag search reads FeatureTag, not JSONB tag arrays."""
+
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_user(
+            email='search-index@example.com',
+            password='testpass123',
+            username='searchindex'
+        )
+        self.client.force_login(self.user)
+
+        jsonb_only = {
+            'type': 'Feature',
+            'geometry': {'type': 'Point', 'coordinates': [10.0, 20.0, 0.0]},
+            'properties': {'name': 'Jsonb Only', 'tags': ['secret-tag']},
+        }
+        FeatureStore.objects.create(
+            user=self.user,
+            geojson=jsonb_only,
+            geometry=Point(10.0, 20.0, 0.0),
+            geojson_hash=generate_geojson_hash(jsonb_only),
+        )
+        FeatureService.create(self.user, {
+            'type': 'Feature',
+            'geometry': {'type': 'Point', 'coordinates': [11.0, 21.0, 0.0]},
+            'properties': {'name': 'Indexed Tag', 'tags': ['secret-tag']},
+        })
+
+    def test_tag_search_ignores_unindexed_jsonb_tags(self):
+        response = self.client.get('/api/features/search/', {'query': 'secret-tag'})
+        self.assertEqual(response.status_code, 200)
+        names = {feature['properties']['name'] for feature in response.json()['data']['features']}
+        self.assertEqual(names, {'Indexed Tag'})
+
+    def test_name_search_still_finds_unindexed_feature(self):
+        response = self.client.get('/api/features/search/', {'query': 'Jsonb Only'})
+        self.assertEqual(response.status_code, 200)
+        names = {feature['properties']['name'] for feature in response.json()['data']['features']}
+        self.assertEqual(names, {'Jsonb Only'})

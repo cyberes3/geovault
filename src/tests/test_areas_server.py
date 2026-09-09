@@ -147,6 +147,29 @@ class TestHealth:
         assert r.json["status"] == "unhealthy"
         assert "no tables" in r.json["error"]
 
+    def test_index_returns_json(self, client):
+        """GET / returns a JSON probe, not a missing-template traceback."""
+        r = client.get("/")
+        assert r.status_code == 200
+        assert r.is_json
+        assert r.json.get("status") == "ok"
+        assert "traceback" not in (r.json or {})
+
+    def test_check_health_sql_uses_select_1_and_to_regclass(self):
+        from areas_lib.query import check_health
+
+        source = inspect.getsource(check_health)
+        assert "SELECT 1" in source
+        assert "to_regclass" in source
+        assert "information_schema" not in source
+
+    def test_cache_clear_uses_scan_not_keys(self, client):
+        from app import _RedisResponseCache
+
+        source = inspect.getsource(_RedisResponseCache.clear)
+        assert ".scan(" in source
+        assert ".keys(" not in source
+
 
 class TestStats:
     def test_stats_ok(self, require_areas_server):
@@ -548,111 +571,71 @@ class TestQueryArgs:
 
 
 class TestNearbyPlaceLookup:
-    """Unit tests for lookup_places and query layer filling city when admin has none."""
+    """Unit tests for place SQL fragments and query layer filling city when admin has none."""
 
-    def test_run_place_single_returns_none_when_radius_zero(self):
-        """run_place_single returns None when radius_miles is 0 (no DB call)."""
-        conn = MagicMock()
-        assert lookup_places.run_place_single(conn, 40.0, -105.0, 0.0) is None
-        conn.cursor.assert_not_called()
+    def test_place_sql_fragment_uses_named_city_radius(self):
+        single = lookup_places.sql_fragment(batch=False)
+        batch = lookup_places.sql_fragment(batch=True)
+        assert "%(city_radius_m)s" in single
+        assert "%(city_radius_m)s" in batch
+        assert "ST_DWithin" in single
+        assert "ST_DWithin" in batch
 
-    def test_run_place_single_returns_closest_name_when_in_radius(self):
-        """run_place_single returns closest place name when within radius."""
-        conn = MagicMock()
-        cur = MagicMock()
-        conn.cursor.return_value.__enter__ = MagicMock(return_value=cur)
-        conn.cursor.return_value.__exit__ = MagicMock(return_value=None)
-        cur.fetchone.return_value = ("Fairplay",)
-        name = lookup_places.run_place_single(conn, PARK_COUNTY_LAT, PARK_COUNTY_LON, 3.0)
-        assert name == "Fairplay"
-
-    def test_run_place_single_returns_none_when_no_row(self):
-        """run_place_single returns None when no place in radius."""
-        conn = MagicMock()
-        cur = MagicMock()
-        conn.cursor.return_value.__enter__ = MagicMock(return_value=cur)
-        conn.cursor.return_value.__exit__ = MagicMock(return_value=None)
-        cur.fetchone.return_value = None
-        assert lookup_places.run_place_single(conn, 40.0, -105.0, 3.0) is None
-
-    def test_run_place_batch_returns_empty_dict_when_radius_zero(self):
-        """run_place_batch returns all None when radius_miles is 0."""
-        conn = MagicMock()
-        out = lookup_places.run_place_batch(conn, [0, 1], [-105.0, -106.0], [40.0, 41.0], 0.0)
-        assert out == {0: None, 1: None}
-        conn.cursor.assert_not_called()
-
-    def test_run_place_batch_returns_names_by_index(self):
-        """run_place_batch returns dict point_idx -> place name."""
-        conn = MagicMock()
-        cur = MagicMock()
-        conn.cursor.return_value.__enter__ = MagicMock(return_value=cur)
-        conn.cursor.return_value.__exit__ = MagicMock(return_value=None)
-        cur.fetchall.return_value = [(0, "Fairplay"), (1, "Leadville")]
-        out = lookup_places.run_place_batch(conn, [0, 1], [-105.0, -106.0], [39.2, 39.25], 3.0)
-        assert out == {0: "Fairplay", 1: "Leadville"}
-
-    def test_query_single_fills_city_from_place_when_admin_has_no_city(self, mock_pool):
-        """query_single sets admin_hierarchy['city'] from place lookup when admin city is None."""
+    def test_query_sql_omits_place_when_include_place_false(self):
         from areas_lib import query as areas_query
 
-        ret = (
-            {"country": "US", "state": "Colorado", "county": "Park County", "city": "Fairplay"},
-            [],
-            [],
-            [],
-            None,
-        )
-        with patch("areas_lib.query.query_single", return_value=ret):
-            admin, _, _, _, _ = areas_query.query_single(mock_pool, PARK_COUNTY_LAT, PARK_COUNTY_LON, city_radius_miles=3.0)
+        sql_single = areas_query._query_single_sql(include_place=False)
+        sql_batch = areas_query._query_batch_sql(include_place=False)
+        assert "'place'" not in sql_single
+        assert "'place'" not in sql_batch
+
+    def test_query_sql_includes_place_when_include_place_true(self):
+        from areas_lib import query as areas_query
+
+        sql_single = areas_query._query_single_sql(include_place=True)
+        sql_batch = areas_query._query_batch_sql(include_place=True)
+        assert "'place'" in sql_single
+        assert "'place'" in sql_batch
+
+    def test_parse_single_fills_city_from_place_when_admin_has_no_city(self):
+        from areas_lib import query as areas_query
+
+        rows = [
+            ("admin", {"osm_id": 1, "admin_level": 6, "name": "Park County", "tags": {}}),
+            ("place", {"name": "Fairplay"}),
+        ]
+        admin, _, _, _, _, _ = areas_query._parse_single_rows(rows, include_place=True)
+        assert admin["county"] == "Park County"
         assert admin["city"] == "Fairplay"
 
-    def test_query_single_does_not_override_admin_city(self, mock_pool):
-        """query_single keeps admin city when admin already has a city (place lookup not used for override)."""
+    def test_parse_single_does_not_override_admin_city(self):
         from areas_lib import query as areas_query
 
-        ret = (
-            {"country": "US", "state": "Colorado", "county": "Denver", "city": "Denver"},
-            [],
-            [],
-            [],
-            None,
-        )
-        with patch("areas_lib.query.query_single", return_value=ret):
-            admin, _, _, _, _ = areas_query.query_single(mock_pool, 39.7, -105.0, city_radius_miles=3.0)
+        rows = [
+            ("admin", {"osm_id": 1, "admin_level": 8, "name": "Denver", "tags": {}}),
+            ("place", {"name": "Fairplay"}),
+        ]
+        admin, _, _, _, _, _ = areas_query._parse_single_rows(rows, include_place=True)
         assert admin["city"] == "Denver"
 
-    def test_query_single_no_place_lookup_when_city_radius_zero(self, mock_pool):
-        """query_single returns no city when result has no city (e.g. city_radius_miles=0)."""
+    def test_parse_single_ignores_place_when_include_place_false(self):
         from areas_lib import query as areas_query
 
-        ret = (
-            {"country": "US", "state": "Colorado", "county": "Park County", "city": None},
-            [],
-            [],
-            [],
-            None,
-        )
-        with patch("areas_lib.query.query_single", return_value=ret):
-            admin, _, _, _, _ = areas_query.query_single(mock_pool, PARK_COUNTY_LAT, PARK_COUNTY_LON, city_radius_miles=0.0)
+        rows = [
+            ("admin", {"osm_id": 1, "admin_level": 6, "name": "Park County", "tags": {}}),
+            ("place", {"name": "Fairplay"}),
+        ]
+        admin, _, _, _, _, _ = areas_query._parse_single_rows(rows, include_place=False)
         assert admin["city"] is None
 
-    def test_query_batch_fills_city_from_place_when_admin_has_no_city(self, mock_pool):
-        """query_batch sets city from place_by_idx when admin has no city for that point."""
+    def test_parse_batch_fills_city_from_place_when_admin_has_no_city(self):
         from areas_lib import query as areas_query
 
-        ret = [
-            (
-                {"country": "US", "state": "Colorado", "county": "Park County", "city": "Fairplay"},
-                [],
-                [],
-                [],
-                None,
-            ),
+        rows = [
+            (0, "admin", {"osm_id": 1, "admin_level": 6, "name": "Park County", "tags": {}}),
+            (0, "place", {"name": "Fairplay"}),
         ]
-        with patch("areas_lib.query.query_batch", return_value=ret):
-            results = areas_query.query_batch(mock_pool, [(PARK_COUNTY_LAT, PARK_COUNTY_LON)], city_radius_miles=3.0)
-        assert len(results) == 1
+        results = areas_query._parse_batch_rows(rows, 1, include_place=True)
         assert results[0][0]["city"] == "Fairplay"
 
 
@@ -836,8 +819,8 @@ class TestAdminHierarchy:
 
     def test_admin_same_level_uses_point_on_surface(self):
         """Admin same-level distance uses ST_PointOnSurface (Nominatim alignment), not ST_Centroid."""
-        source_single = inspect.getsource(lookup_admin.run_admin_single)
-        source_batch = inspect.getsource(lookup_admin.run_admin_batch)
+        source_single = lookup_admin.sql_fragment(batch=False)
+        source_batch = lookup_admin.sql_fragment(batch=True)
         assert "ST_PointOnSurface" in source_single
         assert "ST_Centroid" not in source_single
         assert "ST_PointOnSurface" in source_batch
@@ -847,12 +830,43 @@ class TestAdminHierarchy:
         """Unified query admin ordering uses ST_PointOnSurface (Nominatim alignment), not ST_Centroid."""
         from areas_lib import query as areas_query
 
-        sql_single, _ = areas_query._query_single_sql(include_place=False)
+        sql_single = areas_query._query_single_sql(include_place=False)
         sql_batch = areas_query._query_batch_sql(include_place=False)
         assert "ST_PointOnSurface" in sql_single
         assert "ST_Centroid" not in sql_single
         assert "ST_PointOnSurface" in sql_batch
         assert "ST_Centroid" not in sql_batch
+
+
+class TestQuerySqlBuilders:
+    """UNION ALL SQL uses named params, geography rank, and a lake cap of 5 on both paths."""
+
+    def test_named_params_and_geography_rank(self):
+        from areas_lib import query as areas_query
+
+        sql_single = areas_query._query_single_sql(include_place=True, include_waterway=True)
+        sql_batch = areas_query._query_batch_sql(include_place=True, include_waterway=True)
+        for sql in (sql_single, sql_batch):
+            assert "%(lake_radius_m)s" in sql
+            assert "%(ocean_radius_m)s" in sql
+            assert "%(city_radius_m)s" in sql
+            assert "%(waterway_radius_m)s" in sql
+            assert "111320" not in sql
+            assert "69.17" not in sql
+            assert "ST_DWithin(public.geography" in sql
+        assert "%(lon)s" in sql_single
+        assert "%(lat)s" in sql_single
+        assert "%(indices)s" in sql_batch
+
+    def test_ocean_fragment_uses_geography_radius(self):
+        from areas_lib.lookup_ocean import TABLE_OCEANS, sql_fragment
+
+        single = sql_fragment(batch=False, table_name=TABLE_OCEANS, layer="ocean_main")
+        batch = sql_fragment(batch=True, table_name=TABLE_OCEANS, layer="ocean_main")
+        for sql in (single, batch):
+            assert "%(ocean_radius_m)s" in sql
+            assert "111320" not in sql
+            assert "geography" in sql
 
 
 # --- Fake feature data for top-5 limit tests (no real DB). ---
@@ -953,124 +967,25 @@ class TestProtectedAreasTop5:
         out = lookup_protected_areas.build_protected_list(rows)
         assert len(out) == 7
 
-    def test_run_protected_single_execute_receives_limit_5(self):
-        conn = MagicMock()
-        cur = MagicMock()
-        conn.cursor.return_value.__enter__ = MagicMock(return_value=cur)
-        conn.cursor.return_value.__exit__ = MagicMock(return_value=None)
-        cur.fetchall.return_value = []
-        lookup_protected_areas.run_protected_single(conn, 40.0, -105.0)
-        cur.execute.assert_called_once()
-        args = cur.execute.call_args[0]
-        params = args[1]
-        assert params[0] == -105.0 and params[1] == 40.0
-        assert params[2] == lookup_protected_areas.PROTECTED_LIMIT_PER_POINT
-        assert params[2] == 5
+    def test_protected_sql_fragment_caps_at_five(self):
+        single = lookup_protected_areas.sql_fragment(batch=False)
+        batch = lookup_protected_areas.sql_fragment(batch=True)
+        cap = str(lookup_protected_areas.PROTECTED_LIMIT_PER_POINT)
+        assert cap == "5"
+        assert f"LIMIT {cap}" in single
+        assert f"rn <= {cap}" in batch
 
-    def test_run_protected_single_returns_at_most_five_when_mock_returns_five(self):
-        conn = MagicMock()
-        cur = MagicMock()
-        conn.cursor.return_value.__enter__ = MagicMock(return_value=cur)
-        conn.cursor.return_value.__exit__ = MagicMock(return_value=None)
-        cur.fetchall.return_value = [_fake_protected_row(i, f"Park {i}") for i in range(1, 6)]
-        rows = lookup_protected_areas.run_protected_single(conn, 40.0, -105.0)
-        assert len(rows) == 5
-
-    def test_run_protected_single_empty(self):
-        conn = MagicMock()
-        cur = MagicMock()
-        conn.cursor.return_value.__enter__ = MagicMock(return_value=cur)
-        conn.cursor.return_value.__exit__ = MagicMock(return_value=None)
-        cur.fetchall.return_value = []
-        rows = lookup_protected_areas.run_protected_single(conn, 40.0, -105.0)
-        assert len(rows) == 0
-
-    def test_run_protected_batch_execute_receives_limit_5(self):
-        conn = MagicMock()
-        cur = MagicMock()
-        conn.cursor.return_value.__enter__ = MagicMock(return_value=cur)
-        conn.cursor.return_value.__exit__ = MagicMock(return_value=None)
-        cur.fetchall.return_value = []
-        lookup_protected_areas.run_protected_batch(conn, [0], [-105.0], [40.0])
-        cur.execute.assert_called_once()
-        args = cur.execute.call_args[0]
-        params = args[1]
-        assert params[-1] == lookup_protected_areas.PROTECTED_LIMIT_PER_POINT
-        assert params[-1] == 5
-
-    def test_run_protected_batch_five_per_point(self):
-        conn = MagicMock()
-        cur = MagicMock()
-        conn.cursor.return_value.__enter__ = MagicMock(return_value=cur)
-        conn.cursor.return_value.__exit__ = MagicMock(return_value=None)
-        cur.fetchall.return_value = [
-            (0, i, f"Park P0 {i}", {}) for i in range(1, 6)
-        ] + [
-            (1, i, f"Park P1 {i}", {}) for i in range(1, 6)
-        ]
-        rows = lookup_protected_areas.run_protected_batch(conn, [0, 1], [-105.0, -106.0], [40.0, 41.0])
-        assert len(rows) == 10
-        by_idx = {}
-        for r in rows:
-            by_idx.setdefault(r[0], []).append(r)
-        assert len(by_idx[0]) == 5
-        assert len(by_idx[1]) == 5
-
-    def test_query_single_protected_at_most_five(self, mock_pool):
-        """query_single returns at most 5 protected areas (mocked)."""
+    def test_parse_single_protected_at_most_five(self):
+        """Parser does not truncate; SQL enforces the cap."""
         from areas_lib import query as areas_query
 
-        protected = [{"name": f"Park {i}"} for i in range(1, 6)]
-        ret = (
-            {"country": "US", "state": None, "county": None, "city": None},
-            protected,
-            [],
-            [],
-            None,
-        )
-        with patch("areas_lib.query.query_single", return_value=ret):
-            admin, protected_out, lakes, oceans, _ = areas_query.query_single(mock_pool, 40.0, -105.0)
+        rows = [
+            ("protected", {"osm_id": i, "name": f"Park {i}", "tags": {}})
+            for i in range(1, 6)
+        ]
+        _, protected_out, _, _, _, _ = areas_query._parse_single_rows(rows, include_place=False)
         assert len(protected_out) == 5
         assert protected_out[0]["name"] == "Park 1"
-
-    def test_run_protected_single_when_mock_returns_six_no_python_truncation(self):
-        """If DB returned 6 rows (e.g. bug), we'd get 6; limit is enforced in SQL only."""
-        conn = MagicMock()
-        cur = MagicMock()
-        conn.cursor.return_value.__enter__ = MagicMock(return_value=cur)
-        conn.cursor.return_value.__exit__ = MagicMock(return_value=None)
-        six_rows = [_fake_protected_row(i, f"Park {i}") for i in range(1, 7)]
-        cur.fetchall.return_value = six_rows
-        rows = lookup_protected_areas.run_protected_single(conn, 40.0, -105.0)
-        assert len(rows) == 6
-        out = lookup_protected_areas.build_protected_list(rows)
-        assert len(out) == 6
-
-    def test_run_protected_batch_single_point_five_results(self):
-        conn = MagicMock()
-        cur = MagicMock()
-        conn.cursor.return_value.__enter__ = MagicMock(return_value=cur)
-        conn.cursor.return_value.__exit__ = MagicMock(return_value=None)
-        cur.fetchall.return_value = [(0, i, f"Park {i}", {}) for i in range(1, 6)]
-        rows = lookup_protected_areas.run_protected_batch(conn, [0], [-105.0], [40.0])
-        assert len(rows) == 5
-        out = lookup_protected_areas.build_protected_list([r[1:] for r in rows])
-        assert len(out) == 5
-
-    def test_run_protected_batch_mixed_zero_and_five_per_point(self):
-        """Point 0 has 0 results, point 1 has 5; grouping must still give 5 for point 1."""
-        conn = MagicMock()
-        cur = MagicMock()
-        conn.cursor.return_value.__enter__ = MagicMock(return_value=cur)
-        conn.cursor.return_value.__exit__ = MagicMock(return_value=None)
-        cur.fetchall.return_value = [(1, i, f"Park P1 {i}", {}) for i in range(1, 6)]
-        rows = lookup_protected_areas.run_protected_batch(conn, [0, 1], [-105.0, -106.0], [40.0, 41.0])
-        assert len(rows) == 5
-        by_idx = {}
-        for r in rows:
-            by_idx.setdefault(r[0], []).append(r)
-        assert 0 not in by_idx
-        assert len(by_idx[1]) == 5
 
     def test_build_protected_list_skips_short_rows(self):
         """Rows with len < 3 are skipped (no crash, don't count toward 5)."""
@@ -1118,142 +1033,30 @@ class TestNearbyLakesTop5:
         out = lookup_water.build_lakes(rows)
         assert len(out) == 7
 
-    def test_run_water_single_execute_receives_limit_5(self):
-        """Water single uses one round-trip (UNION ALL); params include lon, lat, both limits, radius."""
-        conn = MagicMock()
-        cur = MagicMock()
-        conn.cursor.return_value.__enter__ = MagicMock(return_value=cur)
-        conn.cursor.return_value.__exit__ = MagicMock(return_value=None)
-        cur.fetchall.return_value = []
-        lookup_water.run_water_single(conn, 40.0, -105.0, 1.0)
-        cur.execute.assert_called_once()
-        params = cur.execute.call_args[0][1]
-        assert params[0] == -105.0 and params[1] == 40.0
-        assert params[2] == lookup_water.NEARBY_LAKES_LIMIT
-        assert params[3] == pytest.approx(1609.34, rel=1e-2)
-        assert params[4] == lookup_water.NEARBY_LAKES_LIMIT
+    def test_water_sql_fragment_caps_at_five_both_paths(self):
+        single = lookup_water.sql_fragment(batch=False)
+        batch = lookup_water.sql_fragment(batch=True)
+        cap = str(lookup_water.NEARBY_LAKES_LIMIT)
+        assert cap == "5"
+        assert f"rn <= {cap}" in single
+        assert f"rn <= {cap}" in batch
+        assert "%(lake_radius_m)s" in single
+        assert "%(lake_radius_m)s" in batch
+        assert "geography" in single
+        assert "geography" in batch
+        assert "69.17" not in single
+        assert "69.17" not in batch
 
-    def test_run_water_single_empty(self):
-        conn = MagicMock()
-        cur = MagicMock()
-        conn.cursor.return_value.__enter__ = MagicMock(return_value=cur)
-        conn.cursor.return_value.__exit__ = MagicMock(return_value=None)
-        cur.fetchall.side_effect = [[], []]
-        rows = lookup_water.run_water_single(conn, 40.0, -105.0, 1.0)
-        assert len(rows) == 0
-
-    def test_run_water_single_five_on_water_plus_five_near(self):
-        """One round-trip returns on-water first, then near-shore (combined list)."""
-        conn = MagicMock()
-        cur = MagicMock()
-        conn.cursor.return_value.__enter__ = MagicMock(return_value=cur)
-        conn.cursor.return_value.__exit__ = MagicMock(return_value=None)
-        on_water = [_fake_lake_row(f"On {i}", on_water=True) for i in range(1, 6)]
-        near = [_fake_lake_row(f"Near {i}", on_water=False, distance_miles=float(i)) for i in range(1, 6)]
-        cur.fetchall.return_value = on_water + near
-        rows = lookup_water.run_water_single(conn, 40.0, -105.0, 1.0)
-        assert len(rows) == 10
-        built = lookup_water.build_lakes(rows)
-        assert len(built) == 10
-
-    def test_run_water_batch_execute_receives_limit_5(self):
-        conn = MagicMock()
-        cur = MagicMock()
-        conn.cursor.return_value.__enter__ = MagicMock(return_value=cur)
-        conn.cursor.return_value.__exit__ = MagicMock(return_value=None)
-        cur.fetchall.return_value = []
-        lookup_water.run_water_batch(conn, [0], [-105.0], [40.0], 1.0)
-        cur.execute.assert_called_once()
-        params = cur.execute.call_args[0][1]
-        assert params[-1] == lookup_water.NEARBY_LAKES_LIMIT
-        assert params[-1] == 5
-
-    def test_run_water_batch_five_per_point(self):
-        conn = MagicMock()
-        cur = MagicMock()
-        conn.cursor.return_value.__enter__ = MagicMock(return_value=cur)
-        conn.cursor.return_value.__exit__ = MagicMock(return_value=None)
-        cur.fetchall.return_value = [
-            (0, f"Lake P0 {i}", "water", 0.0 if i <= 2 else float(i), i <= 2)
-            for i in range(1, 6)
-        ] + [
-            (1, f"Lake P1 {i}", "reservoir", 0.0 if i <= 1 else float(i), i <= 1)
-            for i in range(1, 6)
-        ]
-        by_idx = lookup_water.run_water_batch(conn, [0, 1], [-105.0, -106.0], [40.0, 41.0], 1.0)
-        assert len(by_idx) == 2
-        assert len(by_idx[0]) == 5
-        assert len(by_idx[1]) == 5
-        built0 = lookup_water.build_lakes(by_idx[0])
-        built1 = lookup_water.build_lakes(by_idx[1])
-        assert len(built0) == 5
-        assert len(built1) == 5
-
-    def test_query_single_lakes_at_most_five_plus_five(self, mock_pool):
-        """query_single returns at most 5 nearby lakes (mocked)."""
+    def test_parse_single_lakes_at_most_five(self):
         from areas_lib import query as areas_query
 
-        lakes = [{"name": f"Lake {i}", "water_type": "water", "distance_miles": 0.0, "on_water": True} for i in range(1, 6)]
-        ret = (
-            {"country": "US", "state": None, "county": None, "city": None},
-            [],
-            lakes,
-            [],
-            None,
-        )
-        with patch("areas_lib.query.query_single", return_value=ret):
-            admin, protected, water, oceans, _ = areas_query.query_single(mock_pool, 40.0, -105.0)
+        rows = [
+            ("water", {"name": f"Lake {i}", "water_type": "water", "distance_miles": 0.0, "on_water": True})
+            for i in range(1, 6)
+        ]
+        _, _, water, _, _, _ = areas_query._parse_single_rows(rows, include_place=False)
         assert len(water) == 5
         assert water[0]["name"] == "Lake 1"
-
-    def test_run_water_single_only_on_water_five(self):
-        """Five on-water, zero near-shore: total 5 (one combined fetchall)."""
-        conn = MagicMock()
-        cur = MagicMock()
-        conn.cursor.return_value.__enter__ = MagicMock(return_value=cur)
-        conn.cursor.return_value.__exit__ = MagicMock(return_value=None)
-        on_water = [_fake_lake_row(f"On {i}", on_water=True) for i in range(1, 6)]
-        cur.fetchall.return_value = on_water
-        rows = lookup_water.run_water_single(conn, 40.0, -105.0, 1.0)
-        assert len(rows) == 5
-        built = lookup_water.build_lakes(rows)
-        assert len(built) == 5
-        assert all(b["on_water"] for b in built)
-
-    def test_run_water_single_only_near_shore_five(self):
-        """Zero on-water, five near-shore: total 5 (one combined fetchall)."""
-        conn = MagicMock()
-        cur = MagicMock()
-        conn.cursor.return_value.__enter__ = MagicMock(return_value=cur)
-        conn.cursor.return_value.__exit__ = MagicMock(return_value=None)
-        near = [_fake_lake_row(f"Near {i}", on_water=False, distance_miles=float(i)) for i in range(1, 6)]
-        cur.fetchall.return_value = near
-        rows = lookup_water.run_water_single(conn, 40.0, -105.0, 1.0)
-        assert len(rows) == 5
-        built = lookup_water.build_lakes(rows)
-        assert len(built) == 5
-        assert not any(b["on_water"] for b in built)
-
-    def test_run_water_batch_single_point_five_results(self):
-        conn = MagicMock()
-        cur = MagicMock()
-        conn.cursor.return_value.__enter__ = MagicMock(return_value=cur)
-        conn.cursor.return_value.__exit__ = MagicMock(return_value=None)
-        cur.fetchall.return_value = [(0, f"Lake {i}", "water", 0.0, True) for i in range(1, 6)]
-        by_idx = lookup_water.run_water_batch(conn, [0], [-105.0], [40.0], 1.0)
-        assert list(by_idx.keys()) == [0]
-        assert len(by_idx[0]) == 5
-
-    def test_run_water_batch_mixed_zero_and_five_per_point(self):
-        """Point 0 has 0 lakes, point 1 has 5."""
-        conn = MagicMock()
-        cur = MagicMock()
-        conn.cursor.return_value.__enter__ = MagicMock(return_value=cur)
-        conn.cursor.return_value.__exit__ = MagicMock(return_value=None)
-        cur.fetchall.return_value = [(1, f"Lake P1 {i}", "water", 0.0, True) for i in range(1, 6)]
-        by_idx = lookup_water.run_water_batch(conn, [0, 1], [-105.0, -106.0], [40.0, 41.0], 1.0)
-        assert 0 not in by_idx
-        assert len(by_idx[1]) == 5
 
     def test_build_lakes_skips_short_rows(self):
         """Rows with len < 4 are skipped."""
@@ -1275,20 +1078,18 @@ class TestNearbyLakesTop5:
         assert out[0]["water_type"] == "water"
         assert out[0]["distance_miles"] == 0.0
 
-    def test_query_batch_protected_and_lakes_five_per_point(self, mock_pool):
-        """query_batch: each result has at most 5 protected and at most 5 lakes (mocked)."""
+    def test_parse_batch_protected_and_lakes_five_per_point(self):
+        """Parser keeps five protected and five lakes per point when SQL already capped."""
         from areas_lib import query as areas_query
 
-        protected = [{"name": f"Park {i}"} for i in range(1, 6)]
-        lakes = [{"name": f"Lake {i}", "water_type": "water", "distance_miles": 0.0, "on_water": True} for i in range(1, 6)]
-        ret = [
-            ({"country": "US", "state": None, "county": None, "city": None}, protected, lakes, [], None),
-            ({"country": "US", "state": None, "county": None, "city": None}, protected, lakes, [], None),
-        ]
-        with patch("areas_lib.query.query_batch", return_value=ret):
-            results = areas_query.query_batch(mock_pool, [(40.0, -105.0), (41.0, -106.0)])
+        rows = []
+        for idx in (0, 1):
+            for i in range(1, 6):
+                rows.append((idx, "protected", {"osm_id": i, "name": f"Park {i}", "tags": {}}))
+                rows.append((idx, "water", {"name": f"Lake {i}", "water_type": "water", "distance_miles": 0.0, "on_water": True}))
+        results = areas_query._parse_batch_rows(rows, 2, include_place=False)
         assert len(results) == 2
-        for i, (admin, protected_out, lakes_out, oceans, _) in enumerate(results):
+        for i, (admin, protected_out, lakes_out, oceans, ski, waterway) in enumerate(results):
             assert len(protected_out) == 5, f"point {i} protected"
             assert len(lakes_out) == 5, f"point {i} lakes"
 

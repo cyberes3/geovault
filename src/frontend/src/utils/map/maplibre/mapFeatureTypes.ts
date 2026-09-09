@@ -7,6 +7,7 @@ import type { GeoJsonFeature } from '@/types/geospatial';
  */
 export interface MapFeatureProperties {
     database_id?: string | number;
+    feature_ref?: string | number;
     name?: string | null;
     stroke?: string;
     'stroke-width'?: number;

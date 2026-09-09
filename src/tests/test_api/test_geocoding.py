@@ -7,7 +7,7 @@ import re
 import requests
 from unittest.mock import MagicMock, patch
 from django.test import TestCase, override_settings
-from django.core.cache import cache
+from geo_lib.perf.shared_cache import get_shared_cache
 from django.contrib.auth import get_user_model
 
 # geo_lib.search_geocoding.{backends,common,maptiler,google} read config exclusively from
@@ -20,7 +20,7 @@ class TestGeocodingAPI(TestCase):
     def setUp(self):
         """Set up test fixtures."""
         # Clear cache before each test
-        cache.clear()
+        get_shared_cache().clear()
 
         # Create and authenticate test user
         User = get_user_model()
@@ -231,7 +231,7 @@ class TestGeocodingAPI(TestCase):
     @patch('requests.get')
     def test_geocoding_search_maptiler_caching(self, mock_get):
         """Test that reverse_geocoding results are cached (MapTiler)."""
-        cache.clear()
+        get_shared_cache().clear()
         mock_admin = MagicMock()
         mock_admin.status_code = 200
         mock_admin.json.return_value = self._create_mock_admin_response()
@@ -258,7 +258,7 @@ class TestGeocodingAPI(TestCase):
     @patch('requests.get')
     def test_geocoding_search_google_caching(self, mock_get):
         """Test that reverse_geocoding results are cached (Google)."""
-        cache.clear()
+        get_shared_cache().clear()
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = self._create_mock_google_response()

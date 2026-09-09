@@ -153,64 +153,51 @@ def extract_track_created_date(feature: dict) -> Optional[str]:
     return None
 
 
+def _child_feature(feature: dict, geometry: dict) -> dict:
+    return {
+        'type': 'Feature',
+        'geometry': geometry,
+        'properties': (feature.get('properties') or {}).copy(),
+    }
+
+
 def split_complex_geometries(feature: dict) -> list:
     """
-    Split GeometryCollection into separate features.
-    
-    KML's MultiGeometry converts to GeometryCollection in GeoJSON, so this is the expected
-    complex geometry type. MultiPoint and MultiPolygon should not appear and will trigger
-    an assertion error if encountered.
-    
-    Args:
-        feature: GeoJSON feature dictionary
-        
-    Returns:
-        List of feature dictionaries (single-item list if not splittable)
-        
-    Raises:
-        AssertionError: If MultiPoint or MultiPolygon geometry types are encountered
+    Split GeometryCollection, MultiPoint, and MultiPolygon into simple features.
+
+    GeometryCollection emits every child (not polygon-or-bust). MultiPoint and
+    MultiPolygon are split into N features. Null or empty geometries are skipped.
     """
-    # Handle features with None geometry - skip these as they have no spatial data
-    if not feature.get('geometry') or feature['geometry'] is None:
+    geometry = feature.get('geometry')
+    if not geometry:
         return []
 
-    geometry_type = feature['geometry']['type']
+    geometry_type = geometry.get('type')
+    if not geometry_type:
+        return []
 
-    # Assert that MultiPoint should not appear (KML converts to GeometryCollection)
     if geometry_type == 'MultiPoint':
-        feature_name = feature.get('properties', {}).get('name', 'Unnamed')
-        error_msg = f"Unexpected MultiPoint geometry in feature '{feature_name}'. KML MultiGeometry should convert to GeometryCollection."
-        _logger.error(error_msg)
-        assert False, error_msg
+        coordinates = geometry.get('coordinates') or []
+        return [
+            _child_feature(feature, {'type': 'Point', 'coordinates': coord})
+            for coord in coordinates
+            if coord
+        ]
 
-    # Assert that MultiPolygon should not appear (KML converts to GeometryCollection)
     if geometry_type == 'MultiPolygon':
-        feature_name = feature.get('properties', {}).get('name', 'Unnamed')
-        error_msg = f"Unexpected MultiPolygon geometry in feature '{feature_name}'. KML MultiGeometry should convert to GeometryCollection."
-        _logger.error(error_msg)
-        assert False, error_msg
+        coordinates = geometry.get('coordinates') or []
+        return [
+            _child_feature(feature, {'type': 'Polygon', 'coordinates': polygon})
+            for polygon in coordinates
+            if polygon
+        ]
 
-    # Split GeometryCollection into separate features
     if geometry_type == 'GeometryCollection':
         features = []
-        geometries = feature['geometry']['geometries']
-
-        # Prioritize polygons over other geometries
-        polygon_geometries = [g for g in geometries if g['type'] == 'Polygon']
-        other_geometries = [g for g in geometries if g['type'] in ['Point', 'LineString']]
-
-        # Use polygons if available, otherwise use other geometries
-        geometries_to_use = polygon_geometries if polygon_geometries else other_geometries
-
-        for geom in geometries_to_use:
-            new_feature = {
-                'type': 'Feature',
-                'geometry': geom,
-                'properties': feature['properties'].copy()
-            }
-            features.append(new_feature)
-
+        for child in geometry.get('geometries') or []:
+            if not child or not child.get('type'):
+                continue
+            features.extend(split_complex_geometries(_child_feature(feature, child)))
         return features
 
-    # For all other geometry types, return as-is
     return [feature]

@@ -11,8 +11,7 @@ import { createHeroiconResolver } from './resolveExtensionIcon';
  * chunk, even though the map is only ever needed the first time some extension's manifest `icon:`
  * name is actually looked up. Splitting it into its own module that's only reached via dynamic
  * `import()` keeps that map out of the critical boot path entirely - see
- * `utils/map/maplibre/lazyMaplibreGl.js`/`utils/map/openlayers/lazyOl.js` for the same pattern
- * applied to those libraries.
+ * `utils/map/maplibre/lazyMaplibreGl.js` for the same pattern applied to MapLibre.
  */
 let resolver: ((name: string) => Promise<Component>) | null = null;
 

@@ -15,13 +15,19 @@ from pydantic import BaseModel, ValidationError
 from api.utils.responses import error_response
 
 
-def validate_pydantic_model(model_class: Type[BaseModel], data: Dict[str, Any]) -> Dict[str, Any]:
+def validate_pydantic_model(
+    model_class: Type[BaseModel],
+    data: Dict[str, Any],
+    *,
+    exclude_unset: bool = False,
+) -> Dict[str, Any]:
     """
     Generic validation function for any Pydantic model.
 
     Args:
         model_class: The Pydantic model class to validate against
         data: Dictionary from request body to validate
+        exclude_unset: If True, keep explicit nulls and drop omitted fields (PATCH).
 
     Returns:
         Validated and normalized dictionary
@@ -30,10 +36,12 @@ def validate_pydantic_model(model_class: Type[BaseModel], data: Dict[str, Any]) 
         ValidationError: If validation fails
     """
     validated_model = model_class.model_validate(data)
+    if exclude_unset:
+        return validated_model.model_dump(mode='json', exclude_unset=True)
     return validated_model.model_dump(mode='json', exclude_none=True)
 
 
-def validate_payload(model_class: Type[BaseModel], allow_empty: bool = False):
+def validate_payload(model_class: Type[BaseModel], allow_empty: bool = False, exclude_unset: bool = False):
     """
     Decorator that validates request payload against a Pydantic model.
 
@@ -88,14 +96,17 @@ def validate_payload(model_class: Type[BaseModel], allow_empty: bool = False):
 
                 # Valid JSON - validate against Pydantic model
                 try:
-                    validated_data = validate_pydantic_model(model_class, data)
+                    validated_data = validate_pydantic_model(
+                        model_class, data, exclude_unset=exclude_unset
+                    )
                     kwargs['validated_data'] = validated_data
                     return view_func(request, *args, **kwargs)
                 except ValidationError as e:
-                    # Return more detailed error message
-                    error_messages = [f"{'.'.join(str(loc) for loc in err['loc'])}: {err['msg']}" for err in e.errors()]
-                    error_msg = 'Invalid request format' + (f' - {"; ".join(error_messages)}' if error_messages else '')
-                    return error_response(error_msg, code=400)
+                    fields: Dict[str, str] = {}
+                    for err in e.errors():
+                        field_name = ".".join(str(loc) for loc in err["loc"])
+                        fields[field_name] = err["msg"]
+                    return error_response("Invalid request format", code=400, details={"fields": fields})
             else:
                 # No body at all
                 if allow_empty:

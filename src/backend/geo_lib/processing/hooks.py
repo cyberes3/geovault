@@ -1,14 +1,13 @@
 """
-Post-import hook execution.
+Post-import provider execution.
 
-Import callbacks are registered only via ``website.extensions.extension_hooks``
-(``register_hook('import', ...)`` in an extension's ``extension_ready()``).
-This module forwards execution to that registry.
+Import callbacks are ImportProvider instances registered from extension_ready().
+created_features is the source of truth after finalize.
 """
 from typing import List, Optional
 
 from api.models import ImportQueue, FeatureStore
-from website.extensions.extension_hooks import execute_hooks
+from website.extensions.import_provider import execute_import_providers
 
 
 def execute_import_hooks(
@@ -17,7 +16,7 @@ def execute_import_hooks(
     created_features: Optional[List[FeatureStore]] = None,
 ) -> None:
     """
-    Run all registered ``import`` hooks from the extension hook registry.
+    Run every registered ImportProvider.on_import_finalized.
 
     Args:
         import_item: The ImportQueue row for this import
@@ -26,4 +25,4 @@ def execute_import_hooks(
     """
     if created_features is None:
         created_features = []
-    execute_hooks("import", import_item, user_id, created_features=created_features)
+    execute_import_providers(import_item, user_id, created_features)

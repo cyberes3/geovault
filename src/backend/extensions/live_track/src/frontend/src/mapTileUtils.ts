@@ -5,7 +5,7 @@
  * drift from how the main map builds the same raster spec.
  */
 import type { Map as MapLibreMap } from 'maplibre-gl';
-import type { TileSource, TileSourceClientConfig } from './types/gv-core';
+import type { TileSource, TileSourceClientConfig } from '@geovault/extension-sdk';
 
 const DEFAULT_MAX_ZOOM = 18;
 const DEFAULT_LAYER_MAX_ZOOM = 19;

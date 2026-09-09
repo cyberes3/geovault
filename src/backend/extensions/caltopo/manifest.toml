@@ -1,0 +1,6 @@
+name = "caltopo"
+version = "1.0.0"
+description = "Import maps and features from CalTopo."
+icon = "icon.svg"
+enabled_by_default = true
+umd_global = "CaltopoExtension"

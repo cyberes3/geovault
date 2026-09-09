@@ -211,7 +211,7 @@ import HaukInstructionsModal from './HaukInstructionsModal.vue';
 import { buildTrackerSettingsPayloadFromSnapshot, type TrackerSettingsSnapshot } from './settingsPayloadBuilders';
 import { didRecentDataWindowChange } from './settingsChangePolicy';
 import type { LiveTrack, TrackVisibility } from './types/track';
-import type { ExtensionApi } from './types/extension-api';
+import type { ExtensionApi } from '@geovault/extension-sdk';
 
 type ContainerRefLike = { value: HTMLElement | null } | HTMLElement | null;
 
@@ -246,7 +246,7 @@ export default defineComponent({
     const api = inject('extensionApi') as ExtensionApi;
     const name = ref('');
     const color = ref('#6C93DE');
-    const recentDataWindow = ref('');
+    const recentDataWindow = ref('all');
     const visibility = ref<TrackVisibility>('private');
     const shareParamsWithRecipients = ref(false);
     const sharedWithEmails = ref<string[]>([]);
@@ -558,7 +558,7 @@ export default defineComponent({
       if (t) {
         name.value = t.name ?? '';
         color.value = t.color ?? '#6C93DE';
-        recentDataWindow.value = t.settings?.recent_data_window ?? '';
+        recentDataWindow.value = t.settings?.recent_data_window || 'all';
         visibility.value = t.visibility ?? 'private';
         shareParamsWithRecipients.value = t.share_params_with_recipients === true;
         shareParamsWithWorld.value = t.share_params_with_world === true;
@@ -572,7 +572,7 @@ export default defineComponent({
       } else {
         userPickedColor.value = false;
         color.value = '#6C93DE';
-        recentDataWindow.value = '';
+        recentDataWindow.value = 'all';
         visibility.value = 'private';
         shareParamsWithRecipients.value = false;
         shareParamsWithWorld.value = false;

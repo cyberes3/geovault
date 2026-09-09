@@ -126,10 +126,6 @@ export default defineConfig({
                         !id.includes('/utils/map/maplibre/lazyMaplibreGl.js')) {
                         return 'maplibre-gl'
                     }
-                    // Split OpenLayers into its own chunk (for misc maps)
-                    if (id.includes('node_modules/ol')) {
-                        return 'openlayers'
-                    }
                     // Split Chart.js into its own chunk
                     if (id.includes('node_modules/chart.js')) {
                         return 'chart.js'
@@ -229,6 +225,12 @@ export default defineConfig({
             }
             return {
             '/api': {
+                target: 'http://127.0.0.1:8000',
+                changeOrigin: true,
+                secure: false,
+                configure: forwardHost,
+            },
+            '/share': {
                 target: 'http://127.0.0.1:8000',
                 changeOrigin: true,
                 secure: false,

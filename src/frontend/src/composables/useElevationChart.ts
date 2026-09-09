@@ -76,7 +76,9 @@ function getStringOrNumberProp(properties: Record<string, unknown>, key: string)
 
 function getFeatureId(feature: GeoJsonFeature): string | number | undefined {
   const properties = feature.properties as Record<string, unknown>;
-  return getStringOrNumberProp(properties, 'database_id') ?? getStringOrNumberProp(properties, 'geojson_hash');
+  return getStringOrNumberProp(properties, 'database_id')
+    ?? getStringOrNumberProp(properties, 'feature_ref')
+    ?? getStringOrNumberProp(properties, 'geojson_hash');
 }
 
 /**
@@ -280,7 +282,7 @@ export function useElevationChart(
         if (source === 'external') {
           return null;
         }
-        const data = await getPublicFeatureElevations(shareId.value) as { coordinates?: number[][] } | null;
+        const data = await getPublicFeatureElevations(shareId.value, featureId) as { coordinates?: number[][] } | null;
         return data?.coordinates ?? null;
       }
 

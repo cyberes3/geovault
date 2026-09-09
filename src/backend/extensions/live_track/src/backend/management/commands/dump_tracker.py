@@ -12,6 +12,8 @@ from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
+from geo_lib.track.store import PointStore
+
 User = get_user_model()
 
 SCHEMA_VERSION = 1
@@ -69,8 +71,9 @@ class Command(BaseCommand):
 
         output_path = options["output"] or f"tracker_dump_{_slugify(name)}_{int(time.time())}.json"
 
-        geometry = track.geometry or {"type": "LineString", "coordinates": []}
-        point_params = track.point_params or []
+        store = PointStore.from_track(track)
+        geometry = store.as_geometry()
+        point_params = store.wire_params()
 
         dump = {
             "schema_version": SCHEMA_VERSION,

@@ -172,7 +172,7 @@ export function removeTerrain(map: MapLibreMap | null | undefined): void {
 }
 
 /** Add hillshade layer to the map */
-export function addHillshade(map: MapLibreMap | null | undefined, config: MapTilerConfig, beforeLayer = 'feature-layer'): void {
+export function addHillshade(map: MapLibreMap | null | undefined, config: MapTilerConfig, beforeLayer = 'polygons'): void {
   if (!map || !config.isAvailable()) {
     return
   }

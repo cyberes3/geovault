@@ -1,0 +1,8 @@
+name = "live_track"
+version = "1.0.0"
+icon = "SignalIcon"
+enabled_by_default = true
+map_route = true
+public_share_route = true
+umd_global = "LiveTrackExtension"
+requires_map_engine = "maplibre"

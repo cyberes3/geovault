@@ -4,14 +4,12 @@
  */
 
 import { BaseModule } from './BaseModule';
-import { buildStatusUpdateFields, type JobStatus } from './jobStatusHelpers';
+import { buildStatusUpdateFields, isTerminalStatus, type JobStatus } from './jobStatusHelpers';
 
 export class ProcessJobModule extends BaseModule {
     readonly moduleName = 'process_job';
 
-    initialize(): void {
-        super.initialize();
-
+    protected onInitialize(): void {
         this.subscribe('status_updated', (data: { import_queue_id: number; status: JobStatus }) => {
             this.handleStatusUpdate(data);
         });
@@ -28,7 +26,7 @@ export class ProcessJobModule extends BaseModule {
     }
 
     private handleStatusUpdate(data: { import_queue_id: number; status: JobStatus }): void {
-        if (data.status === 'completed' || data.status === 'failed') {
+        if (isTerminalStatus(data.status)) {
             this.socket?.requestRefresh('import_queue');
             return;
         }

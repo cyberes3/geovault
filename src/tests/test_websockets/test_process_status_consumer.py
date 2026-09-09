@@ -33,7 +33,6 @@ class TestProcessStatusConsumerConnection(TransactionTestCase):
             user=user,
             original_filename='test.kml',
             raw_file='<kml></kml>',
-            geofeatures=[]
         )
         
         communicator = WebsocketCommunicator(
@@ -85,7 +84,6 @@ class TestProcessStatusConsumerConnection(TransactionTestCase):
             user=user1,
             original_filename='test.kml',
             raw_file='<kml></kml>',
-            geofeatures=[]
         )
         
         # Try to connect as user2
@@ -138,7 +136,6 @@ class TestProcessStatusConsumerMessages(TransactionTestCase):
             user=user,
             original_filename='test.kml',
             raw_file='<kml></kml>',
-            geofeatures=[]
         )
         
         communicator = WebsocketCommunicator(
@@ -172,7 +169,6 @@ class TestProcessStatusConsumerMessages(TransactionTestCase):
             user=user,
             original_filename='test.kml',
             raw_file='<kml></kml>',
-            geofeatures=[]
         )
         
         communicator = WebsocketCommunicator(
@@ -213,7 +209,6 @@ class TestProcessStatusConsumerMessages(TransactionTestCase):
             user=user,
             original_filename='test.kml',
             raw_file='<kml></kml>',
-            geofeatures=[]
         )
         
         communicator = WebsocketCommunicator(
@@ -253,7 +248,6 @@ class TestProcessStatusConsumerMessages(TransactionTestCase):
             user=user,
             original_filename='test.kml',
             raw_file='<kml></kml>',
-            geofeatures=[]
         )
         
         communicator = WebsocketCommunicator(
@@ -297,7 +291,6 @@ class TestProcessStatusConsumerEvents(TransactionTestCase):
             user=user,
             original_filename='test.kml',
             raw_file='<kml></kml>',
-            geofeatures=[]
         )
         
         communicator = WebsocketCommunicator(
@@ -343,7 +336,6 @@ class TestProcessStatusConsumerEvents(TransactionTestCase):
             user=user,
             original_filename='test.kml',
             raw_file='<kml></kml>',
-            geofeatures=[]
         )
         
         communicator = WebsocketCommunicator(
@@ -387,7 +379,6 @@ class TestProcessStatusConsumerEvents(TransactionTestCase):
             user=user,
             original_filename='test.kml',
             raw_file='<kml></kml>',
-            geofeatures=[]
         )
         
         communicator = WebsocketCommunicator(
@@ -434,7 +425,6 @@ class TestProcessStatusConsumerEvents(TransactionTestCase):
             user=user,
             original_filename='test.kml',
             raw_file='<kml></kml>',
-            geofeatures=[]
         )
         
         communicator = WebsocketCommunicator(
@@ -481,7 +471,6 @@ class TestProcessStatusConsumerEvents(TransactionTestCase):
             user=user,
             original_filename='test.kml',
             raw_file='<kml></kml>',
-            geofeatures=[]
         )
         
         communicator = WebsocketCommunicator(
@@ -531,7 +520,6 @@ class TestProcessStatusConsumerEvents(TransactionTestCase):
             user=user,
             original_filename='test.kml',
             raw_file='<kml></kml>',
-            geofeatures=[]
         )
         
         communicator = WebsocketCommunicator(

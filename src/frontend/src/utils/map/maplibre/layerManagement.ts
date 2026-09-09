@@ -2,7 +2,7 @@
  * MapLibre layer management utilities
  */
 
-import type { Map as MapLibreMap, AddLayerObject, FilterSpecification, RasterSourceSpecification } from 'maplibre-gl'
+import type { Map as MapLibreMap, AddLayerObject, FilterSpecification } from 'maplibre-gl'
 import {
   getPointLayerConfig,
   getReplacementPointLayerConfig,
@@ -13,7 +13,6 @@ import {
 } from './featureStyles.js'
 import type { LayerConfig } from './featureStyles.js'
 import type { MapLibreExpression } from './featureStyling.js'
-import { MAX_ZOOM_LEVEL } from './mapInitialization.js'
 
 function addConfigLayer(map: MapLibreMap, config: LayerConfig, before?: string): void {
   map.addLayer(config as unknown as AddLayerObject, before)
@@ -243,69 +242,5 @@ function enforceLayerOrder(map: MapLibreMap, showAllLabels = true): void {
         map.moveLayer(topLayerId)
       }
     }
-  }
-}
-
-/** A raster tile source, as accepted by `updateMapLayerSource`. */
-export interface RasterTileSourceConfig {
-  tiles: string[]
-  tileSize?: number
-  attribution?: string
-  minzoom?: number
-  maxzoom?: number
-  client_config?: { attribution?: string }
-}
-
-/**
- * Update map layer source (tile layer switching)
- */
-export function updateMapLayerSource(map: MapLibreMap | null | undefined, layerId: string, tileSource: RasterTileSourceConfig | null | undefined): void {
-  if (!map || !tileSource) return
-  void layerId
-
-  const style = map.getStyle()
-
-  // Remove existing source if it exists
-  if (map.getSource('tile-source')) {
-    map.removeLayer('tile-layer')
-    map.removeSource('tile-source')
-  }
-
-  // Add new source
-  // Support both direct attribution and client_config.attribution
-  const attribution = tileSource.attribution ?? tileSource.client_config?.attribution ?? ''
-  const sourceSpec: RasterSourceSpecification = {
-    type: 'raster',
-    tiles: tileSource.tiles,
-    tileSize: tileSource.tileSize ?? 256,
-    attribution
-  }
-  map.addSource('tile-source', sourceSpec)
-
-  // Calculate maxzoom - ensure it's at least MAX_ZOOM_LEVEL + 1 so tiles render at max zoom
-  // Note: MapLibre's maxzoom is exclusive, so maxzoom: 17 means visible only at zoom < 17
-  // To render at zoom 17, we need maxzoom: 18
-  const sourceMaxZoom = tileSource.maxzoom ?? MAX_ZOOM_LEVEL
-  const layerMaxZoom = Math.max(sourceMaxZoom, MAX_ZOOM_LEVEL + 1)
-
-  // Add or update layer
-  if (!map.getLayer('tile-layer')) {
-    map.addLayer({
-      id: 'tile-layer',
-      type: 'raster',
-      source: 'tile-source',
-      minzoom: tileSource.minzoom ?? 0,
-      maxzoom: layerMaxZoom
-    })
-  } else {
-    // Update existing layer's maxzoom to ensure it renders at max zoom
-    const currentMinZoom = map.getLayer('tile-layer')?.minzoom ?? 0
-    map.setLayerZoomRange('tile-layer', currentMinZoom, layerMaxZoom)
-  }
-
-  // Move tile layer to bottom (below all other layers)
-  const layers = style.layers
-  if (layers.length > 0) {
-    map.moveLayer('tile-layer', layers[0].id)
   }
 }

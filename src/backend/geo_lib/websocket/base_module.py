@@ -31,10 +31,9 @@ class BaseWebSocketModule(ABC):
         """Return the module name (used for routing messages)."""
         pass
 
-    @abstractmethod
     async def handle_message(self, message_type: str, data: Dict[str, Any]) -> None:
-        """Handle incoming messages for this module."""
-        pass
+        """Handle incoming messages for this module. Override when the module accepts client commands."""
+        logger.warning(f"Unknown message type for {self.module_name} module: {message_type}")
 
     @abstractmethod
     async def send_initial_state(self) -> None:

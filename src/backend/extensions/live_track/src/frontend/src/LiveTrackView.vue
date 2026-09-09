@@ -532,7 +532,7 @@
 </template>
 
 <script lang="ts">
-import { defineComponent, ref, computed, onMounted, onActivated, onBeforeUnmount, inject, watch, nextTick, type Ref } from 'vue';
+import { defineComponent, ref, computed, onMounted, onActivated, onDeactivated, onBeforeUnmount, inject, watch, nextTick, type Ref } from 'vue';
 import { PlusIcon, PencilIcon, HomeIcon, Square3Stack3DIcon, TableCellsIcon, XMarkIcon, Bars3Icon, UserGroupIcon, ShareIcon, CloudIcon, EyeIcon, ArrowPathIcon, Cog6ToothIcon, ListBulletIcon } from '@heroicons/vue/24/outline';
 import { getIngressBodyTemplate } from './ingressBodyTemplateCache';
 import BaseButton from 'platform/components/parts/BaseButton.vue';
@@ -558,6 +558,8 @@ import { useMobileView } from './useMobileView';
 import { useLiveTrackMap, MAP_SNAP_DURATION } from './useLiveTrackMap';
 import { useLiveTrackGeolocation } from './useLiveTrackGeolocation';
 import { useLiveTrackSocket } from './useLiveTrackSocket';
+import { LiveTrackSession } from './liveTrackSession';
+import { mergeTrackerGeometry } from './trackerGeometryMergePolicy';
 import { normalizeTrackForMemory } from './trackNormalization';
 import { formatTimestampLocal } from './paramFormatters';
 import {
@@ -579,10 +581,17 @@ import {
 } from './sharingSelectors';
 import { isActiveButDeadTrack } from './activeButDeadTrack';
 import type { PaddingOptions } from 'maplibre-gl';
-import type { ExtensionApi } from './types/extension-api';
+import type { ExtensionApi } from '@geovault/extension-sdk';
 import type { PlatformStateBridge } from './types/platform-state';
-import type { TileSource } from './types/gv-core';
+import type { TileSource } from '@geovault/extension-sdk';
 import type { LiveTrack, LiveTrackGroup, TrackVisibility } from './types/track';
+
+function listItems<T>(data: unknown): T[] {
+  if (data && typeof data === 'object' && Array.isArray((data as { items?: T[] }).items)) {
+    return (data as { items: T[] }).items;
+  }
+  return [];
+}
 
 type SortBy = 'alphabetical' | 'last_updated' | 'num_points' | 'newest';
 type ListTabId = 'trackers' | 'groups' | 'shared';
@@ -707,6 +716,7 @@ export default defineComponent({
     /** Cleared once the map's style/data first finish loading (via `trackMap.onStyleReady`), so a loading overlay can mask the gap between mount and the map settling into its correct basemap/camera. */
     const mapInitializing = ref(true);
     const selectedId = ref<string | number | null>(null);
+    const liveSession = new LiveTrackSession(trackers, groups, selectedId);
     const activeGroupId = ref<string | number | null>(null);
     const followLocked = ref(false);
     const rootContainer = ref<HTMLElement | null>(null);
@@ -887,7 +897,7 @@ export default defineComponent({
     async function fetchGroups(): Promise<void> {
       try {
         const res = await api.get('/groups/');
-        groups.value = Array.isArray(res.data) ? (res.data as LiveTrackGroup[]) : [];
+        groups.value = listItems<LiveTrackGroup>(res.data);
       } catch (e) {
         const err = api.handleError(e);
         window.gv_core.GeoVault.toast.error(err.message || 'Failed to load groups');
@@ -899,20 +909,36 @@ export default defineComponent({
       if (!skipGlobalLoading) loading.value = true;
       try {
         const res = await api.get('/trackers/');
-        const raw = Array.isArray(res.data) ? (res.data as LiveTrack[]) : [];
+        const raw = listItems<LiveTrack>(res.data);
         const ids = raw.map((t) => t.id).filter((id) => id !== '');
 
-        const bulkRes = await api.post('/trackers/geometry/', {
-          tracker_ids: ids
+        const existingById = new Map(trackers.value.map((t) => [String(t.id), t]));
+        const missingIds = ids.filter((id) => {
+          const existing = existingById.get(String(id));
+          return !existing?.geometry?.coordinates?.length;
         });
-        const bulkList = Array.isArray(bulkRes.data) ? (bulkRes.data as LiveTrack[]) : [];
+        const bulkList: LiveTrack[] = [];
+        if (missingIds.length) {
+          const bulkRes = await api.post('/trackers/geometry/', {
+            tracker_ids: missingIds
+          });
+          bulkList.push(...listItems<LiveTrack>(bulkRes.data));
+        }
         const bulkById = new Map(bulkList.map((t) => [String(t.id), t]));
         const withGeometry: LiveTrack[] = raw.map((t) => {
-          const merged = bulkById.get(String(t.id));
-          if (!merged) return normalizeTrackForMemory({ ...t, geometry: { type: 'LineString', coordinates: [] } });
-          return normalizeTrackForMemory({
-            ...merged,
-            // Preserve list-only fields (is_owner, owner_email, visibility)
+          const existing = existingById.get(String(t.id));
+          const incomingGeom = bulkById.get(String(t.id));
+          if (existing?.geometry && !incomingGeom) {
+            return normalizeTrackForMemory({
+              ...existing,
+              ...t,
+              geometry: existing.geometry,
+              point_params: existing.point_params,
+            });
+          }
+          if (!incomingGeom) return normalizeTrackForMemory({ ...t, geometry: { type: 'LineString', coordinates: [] } });
+          return normalizeTrackForMemory(mergeTrackerGeometry(existing, {
+            ...incomingGeom,
             is_owner: t.is_owner,
             owner_email: t.owner_email,
             visibility: t.visibility,
@@ -920,11 +946,11 @@ export default defineComponent({
             internal_share_url: t.internal_share_url,
             world_share_id: t.world_share_id,
             world_share_url: t.world_share_url
-          });
+          }));
         });
 
-        trackers.value = withGeometry;
-        trackSocket.refreshSessionCache(withGeometry);
+        liveSession.replaceCatalog(withGeometry, { wipeTrunk: existingById.size === 0 });
+        trackSocket.refreshSessionCache(liveSession.trackers.value);
         void trackMap.updateMapFeatures();
       } catch (e) {
         const err = api.handleError(e);
@@ -1715,19 +1741,12 @@ export default defineComponent({
           api.get(`/trackers/${trackerId}/geometry/`),
         ]);
         const t = metaRes.data as LiveTrack;
-        const normalized = normalizeTrackForMemory({
+        liveSession.upsertTracker({
           ...(geomRes.data as LiveTrack),
           is_owner: t.is_owner,
           owner_email: t.owner_email,
           visibility: t.visibility,
         });
-        const idStr = String(trackerId);
-        const idx = trackers.value.findIndex((tr) => String(tr.id) === idStr);
-        if (idx >= 0) {
-          trackers.value = trackers.value.slice(0, idx).concat(normalized).concat(trackers.value.slice(idx + 1));
-        } else {
-          trackers.value = [...trackers.value, normalized];
-        }
         void trackMap.updateMapFeatures();
       } catch {
         // Keep optimistic stub; map may have no geometry for this track
@@ -1855,21 +1874,8 @@ export default defineComponent({
       }
     }
 
-    /**
-     * Wait briefly for `App.vue`'s settings fetch (or fetch once ourselves) so `fetchTileSources()`'s
-     * `applyDefaultMapFromStore` reads the real `extensions.live_track.default_map` on the very
-     * first paint instead of racing it and being corrected later by the `platformState.userSettings`
-     * watcher (visible as a style swap). Mirrors the Places extension's `ensureUserSettingsLoaded`.
-     */
-    async function ensureUserSettingsLoaded(waitMs = 3000, pollMs = 50): Promise<void> {
-      const hasUserSettings = (): boolean => platformState.userSettings.value != null;
-      if (hasUserSettings()) return;
-      const deadline = Date.now() + waitMs;
-      while (!hasUserSettings() && Date.now() < deadline) {
-        await new Promise((resolve) => setTimeout(resolve, pollMs));
-      }
-      if (hasUserSettings()) return;
-      await platformState.fetchUserSettings();
+    async function ensureUserSettingsLoaded(): Promise<void> {
+      await window.gv_core.settings.awaitUserSettings();
     }
 
     watch(highlightStaleData, (v) => {
@@ -1890,8 +1896,9 @@ export default defineComponent({
       updateMapFeatures: trackMap.updateMapFeatures,
       scheduleCenterOnSelectedTrack: trackMap.scheduleCenterOnSelectedTrack,
       fetchAndMergeTracker: (trackId) => { void fetchAndMergeTracker(trackId); },
+      session: liveSession,
       onReconnect: () => {
-        void fetchTrackers().then(() => {
+        void fetchTrackers({ skipGlobalLoading: true }).then(() => {
           if (followLocked.value && selectedId.value) trackMap.centerOnSelectedTrackLastPoint();
         });
       }
@@ -1918,15 +1925,29 @@ export default defineComponent({
       await fetchGroups();
       await fetchTrackers();
       requestAnimationFrame(() => { void trackMap.initMap(); });
+      liveSession.attachHooks({
+        destroyMap: () => trackMap.destroyMap(),
+        disconnectSocket: () => trackSocket.disconnect(),
+        stopLocation: () => geo.stopLocationTracking(),
+      });
+      liveSession.activate();
       trackSocket.connect();
     });
 
     onActivated(() => {
+      liveSession.activate();
       applyDefaultSortFromStore();
       applyDefaultMapFromStore(tileSources, selectedLayer);
-      if (trackMap.getMap() && tileSources.value.some((s) => s.id === selectedLayer.value)) {
+      if (!trackMap.getMap()) {
+        requestAnimationFrame(() => { void trackMap.initMap(); });
+      } else if (tileSources.value.some((s) => s.id === selectedLayer.value)) {
         void trackMap.switchMapLayer(selectedLayer.value);
       }
+      trackSocket.connect();
+    });
+
+    onDeactivated(() => {
+      liveSession.deactivate();
     });
 
     watch(
@@ -1943,9 +1964,7 @@ export default defineComponent({
     );
 
     onBeforeUnmount(() => {
-      trackSocket.disconnect();
-      geo.stopLocationTracking();
-      trackMap.destroyMap();
+      liveSession.deactivate();
     });
 
     return {

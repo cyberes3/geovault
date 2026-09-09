@@ -17,7 +17,7 @@
 
 <script lang="ts">
 import { defineComponent, type PropType } from 'vue';
-import type { TileSource } from './types/gv-core';
+import type { TileSource } from '@geovault/extension-sdk';
 
 export default defineComponent({
   name: 'MapLayerSidebar',

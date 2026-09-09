@@ -11,11 +11,13 @@ from xml.etree import ElementTree as ET
 from django.conf import settings
 from django.core.serializers.json import DjangoJSONEncoder
 from django.http import HttpResponse, JsonResponse
-from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
+from api.sharing.grants import ShareGrantService
+from api.sharing.service import ShareService
 from api.utils.authorization import get_object_or_404_for_user
-from api.utils.responses import error_response, handle_404
+from api.utils.responses import error_response, handle_404, list_response
+from geo_lib.sharing.constants import AUDIENCE_WORLD, KIND_LIVE_TRACK, KIND_LIVE_TRACK_GROUP
 from website.auth_decorators import api_or_login_required_401
 from website.public_url import build_public_url
 
@@ -25,40 +27,39 @@ from django.contrib.auth import get_user_model
 from django.db.models import Count, F, Q
 from django.utils import timezone
 
-from .helpers import (
-    DEFAULT_TRACK_COLOR,
-    _color_from_settings,
-    normalize_track_settings_for_api,
-    _filter_coords_by_recent_window,
-    _strip_ser_from_params,
+from geo_lib.track.store import PointStore
+from geo_lib.track.window import WINDOW_ALL, normalize_recent_data_window
+
+from .access import (
     accepted_group_track_ids_for_user,
     can_user_see_track,
     can_user_see_track_via_accepted_group_share,
     can_user_see_track_via_owned_group_membership,
     can_user_see_track_via_group_share,
+)
+from .helpers import (
+    DEFAULT_TRACK_COLOR,
+    _color_from_settings,
+    normalize_track_settings_for_api,
+    _strip_ser_from_params,
     generate_hauk_password,
     get_json_body,
     track_to_response,
     track_to_response_metadata_only,
 )
+from .writer import point_writer
 from .models import (
     LiveTrack,
     LiveTrackGroup,
     LiveTrackGroupMember,
     LiveTrackMapVisibilityPrefs,
-    LiveTrackWorldShare,
-    LiveTrackShare,
     LiveTrackSubscription,
     VISIBILITY_PRIVATE,
     VISIBILITY_PUBLIC,
     VISIBILITY_SHARED,
 )
-from .internal_share_links import (
-    build_live_track_internal_share_url,
-    sync_track_internal_share,
-    visible_track_internal_share_for_user,
-)
-from .world_share_views import build_live_track_share_url
+from .internal_share_links import sync_track_internal_share
+from .world_share_views import attach_track_share_fields
 from .validation import (
     PARAM_PRETTY_NAMES,
     AvailableToAddGroupResponse,
@@ -89,7 +90,6 @@ def _live_track_geometry_max_response_bytes() -> int:
 
 @api_or_login_required_401()
 @require_http_methods(["POST"])
-@csrf_exempt
 def hidden_items_clear(request):
     """
     POST hidden-items/clear/ — clear hidden tracker/group flags for the requesting owner.
@@ -283,13 +283,12 @@ def _bbox_from_normalized_coords(coords: list) -> list | None:
 
 def _bounded_track_geometry_payload(track: LiveTrack, is_owner: bool, max_bytes: int) -> dict:
     """Build tracker geometry response trimmed to max_bytes (newest points retained)."""
-    geom = track.geometry or {"type": "LineString", "coordinates": []}
-    coords = list(geom.get("coordinates") or [])
-    point_params = list(track.point_params or [])
-
-    window_key = (track.settings or {}).get("recent_data_window")
-    if window_key:
-        coords, point_params = _filter_coords_by_recent_window(coords, point_params, window_key)
+    store = PointStore.from_track(track)
+    try:
+        window_key = normalize_recent_data_window((track.settings or {}).get("recent_data_window"))
+    except ValueError:
+        window_key = WINDOW_ALL
+    coords, point_params = store.window(window_key)
     total_filtered_count = len(coords)
 
     if not is_owner:
@@ -319,10 +318,7 @@ def _bounded_track_geometry_payload(track: LiveTrack, is_owner: bool, max_bytes:
         response_payload["owner_email"] = owner_email.strip()
     if is_owner and getattr(track, "hauk_password", None):
         response_payload["hauk_password"] = track.hauk_password
-        emails = list(
-            LiveTrackShare.objects.filter(track=track).values_list("shared_with__email", flat=True)
-        )
-        response_payload["shared_with_emails"] = [e for e in emails if e]
+        response_payload["shared_with_emails"] = ShareGrantService.grantee_emails(KIND_LIVE_TRACK, track.id)
 
     params_align_with_coords = len(point_params) == len(coords)
     response_payload["geometry_status"] = {
@@ -392,7 +388,6 @@ def _get_track_for_user_or_404(user, tracker_id):
 
 @api_or_login_required_401()
 @require_http_methods(["POST"])
-@csrf_exempt
 def tracker_check(request):
     """POST: Check a single tracker ID (and optionally password). Supports session, OAuth, and API auth."""
     data, err = get_json_body(request)
@@ -424,14 +419,16 @@ def tracker_check(request):
 
 @api_or_login_required_401()
 @require_http_methods(["GET", "POST"])
-@csrf_exempt
 def tracker_list_create(request):
     if request.method == "GET":
-        owned = list(LiveTrack.objects.filter(user=request.user).order_by("name"))
+        owned = list(
+            LiveTrack.objects.filter(user=request.user).prefetch_related("point_rows").order_by("name")
+        )
         accepted_group_track_ids = accepted_group_track_ids_for_user(request.user)
         subs = (
             LiveTrackSubscription.objects.filter(user=request.user)
             .select_related("track", "track__user")
+            .prefetch_related("track__point_rows")
             .exclude(track__user=request.user)
         )
         subscribed_at_by_track_id = {}
@@ -448,6 +445,7 @@ def tracker_list_create(request):
                 LiveTrack.objects.filter(id__in=accepted_group_track_ids)
                 .exclude(user=request.user)
                 .select_related("user")
+                .prefetch_related("point_rows")
             ):
                 visible_non_owned_by_id[t.id] = t
         owned_ids = [t.id for t in owned]
@@ -464,14 +462,7 @@ def tracker_list_create(request):
             payload = track_to_response_metadata_only(t, include_secret=False, is_owner=True)
             payload["is_owner"] = True
             payload["subscriber_count"] = count_by_track.get(t.id, 0)
-            internal_share = visible_track_internal_share_for_user(t, request.user)
-            if internal_share:
-                payload["internal_share_id"] = internal_share.share_id
-                payload["internal_share_url"] = build_live_track_internal_share_url(request, internal_share.share_id)
-            world_share = LiveTrackWorldShare.objects.filter(track=t).first()
-            if world_share:
-                payload["world_share_id"] = world_share.share_id
-                payload["world_share_url"] = build_live_track_share_url(request, world_share.share_id)
+            attach_track_share_fields(payload, t, request.user, request, include_world=True)
             out.append(TrackerListItemResponse.model_validate(payload).model_dump(exclude_none=True))
         non_owned_out = []
         for t in visible_non_owned_by_id.values():
@@ -480,14 +471,11 @@ def tracker_list_create(request):
             payload["owner_email"] = (t.user.email or "") if t.user_id else ""
             payload["visibility"] = t.visibility
             payload["subscribed_at"] = subscribed_at_by_track_id.get(t.id)
-            internal_share = visible_track_internal_share_for_user(t, request.user)
-            if internal_share:
-                payload["internal_share_id"] = internal_share.share_id
-                payload["internal_share_url"] = build_live_track_internal_share_url(request, internal_share.share_id)
+            attach_track_share_fields(payload, t, request.user, request, include_world=False)
             non_owned_out.append(TrackerListItemResponse.model_validate(payload).model_dump(exclude_none=True))
         non_owned_out.sort(key=lambda x: (x.get("subscribed_at") is None, x.get("subscribed_at") or 0, (x.get("name") or "").lower()))
         out.extend(non_owned_out)
-        return JsonResponse(out, safe=False)
+        return list_response(out, page=1, page_size=max(len(out), 1), total_items=len(out))
 
     data, err = get_json_body(request)
     if err is not None:
@@ -515,28 +503,16 @@ def tracker_list_create(request):
 @api_or_login_required_401()
 @require_http_methods(["GET", "DELETE"])
 @handle_404
-@csrf_exempt
 def tracker_get_patch_delete(request, tracker_id):
     track = _get_track_for_user_or_404(request.user, tracker_id)
     is_owner = track.user_id == request.user.id
     if request.method == "GET":
         resp = track_to_response_metadata_only(track, include_secret=is_owner, is_owner=is_owner)
-        coords = list((track.geometry or {}).get("coordinates") or [])
-        take = min(LATEST_COORDINATES_LIMIT, len(coords))
-        latest = coords[-take:] if take else []
-        resp["geometry"] = {"type": "LineString", "coordinates": latest}
+        resp.pop("geometry", None)
         resp["is_owner"] = is_owner
         if not is_owner:
             resp["owner_email"] = (track.user.email or "") if track.user_id else ""
-        internal_share = visible_track_internal_share_for_user(track, request.user)
-        if internal_share:
-            resp["internal_share_id"] = internal_share.share_id
-            resp["internal_share_url"] = build_live_track_internal_share_url(request, internal_share.share_id)
-        if is_owner:
-            world_share = LiveTrackWorldShare.objects.filter(track=track).first()
-            if world_share:
-                resp["world_share_id"] = world_share.share_id
-                resp["world_share_url"] = build_live_track_share_url(request, world_share.share_id)
+        attach_track_share_fields(resp, track, request.user, request, include_world=is_owner)
         return JsonResponse(resp)
     if request.method == "DELETE":
         if not is_owner:
@@ -549,7 +525,6 @@ def tracker_get_patch_delete(request, tracker_id):
 @api_or_login_required_401()
 @require_http_methods(["POST"])
 @handle_404
-@csrf_exempt
 def tracker_post_settings(request, tracker_id):
     """POST trackers/<id>/settings/ — update name, color, recent_data_window, visibility, share_params, shared_with_emails. Owner only."""
     track = get_object_or_404_for_user(LiveTrack, request.user, id=tracker_id)
@@ -600,11 +575,11 @@ def tracker_post_settings(request, tracker_id):
         track.visibility = body.visibility
         update_fields.append("visibility")
         if body.visibility == VISIBILITY_PRIVATE:
-            LiveTrackShare.objects.filter(track=track).delete()
+            ShareGrantService.clear(KIND_LIVE_TRACK, track.id)
             LiveTrackGroupMember.objects.filter(track=track).exclude(group__user=track.user).delete()
             LiveTrackSubscription.objects.filter(track=track).exclude(user=track.user).delete()
         elif body.visibility == VISIBILITY_PUBLIC:
-            LiveTrackShare.objects.filter(track=track).delete()
+            ShareGrantService.clear(KIND_LIVE_TRACK, track.id)
     if body.share_params_with_recipients is not None:
         track.share_params_with_recipients = body.share_params_with_recipients
         update_fields.append("share_params_with_recipients")
@@ -616,7 +591,7 @@ def tracker_post_settings(request, tracker_id):
         if track.visibility != VISIBILITY_SHARED:
             # Accept null/[] as a safe clear/no-op for non-shared visibility.
             if raw_shared_with_emails is None or raw_shared_with_emails == []:
-                LiveTrackShare.objects.filter(track=track).delete()
+                ShareGrantService.clear(KIND_LIVE_TRACK, track.id)
                 LiveTrackGroupMember.objects.filter(track=track).exclude(group__user=track.user).delete()
                 LiveTrackSubscription.objects.filter(track=track).exclude(user=track.user).delete()
                 raw_shared_with_emails = []
@@ -634,12 +609,7 @@ def tracker_post_settings(request, tracker_id):
         if invalid:
             return JsonResponse({"error": "Invalid emails", "invalid_emails": invalid}, status=400)
         target_users = set(users_by_email[e] for e in emails)
-        current = set(LiveTrackShare.objects.filter(track=track).values_list("shared_with_id", flat=True))
-        to_add = target_users - {u for u in target_users if u.id in current}
-        to_remove = current - {u.id for u in target_users}
-        for u in to_add:
-            LiveTrackShare.objects.get_or_create(track=track, shared_with=u)
-        LiveTrackShare.objects.filter(track=track, shared_with_id__in=to_remove).delete()
+        _to_add, to_remove = ShareGrantService.set_grantees(KIND_LIVE_TRACK, track.id, target_users)
         # Remove track from any groups owned by the unshared users and drop their subscriptions
         if to_remove:
             LiveTrackGroupMember.objects.filter(
@@ -649,44 +619,32 @@ def tracker_post_settings(request, tracker_id):
                 track=track, user_id__in=to_remove
             ).delete()
     if body.visibility == VISIBILITY_SHARED:
-        recipient_ids = set(
-            LiveTrackShare.objects.filter(track=track).values_list("shared_with_id", flat=True)
-        )
+        recipient_ids = ShareGrantService.grantee_ids(KIND_LIVE_TRACK, track.id)
         keep_ids = recipient_ids | {track.user_id}
         LiveTrackGroupMember.objects.filter(track=track).exclude(group__user_id__in=keep_ids).delete()
         LiveTrackSubscription.objects.filter(track=track).exclude(user_id__in=keep_ids).delete()
     # World share is allowed for shared/public tracks, but never for private tracks.
     if track.visibility == VISIBILITY_PRIVATE:
-        LiveTrackWorldShare.objects.filter(track=track).delete()
+        ShareService.delete_tracker_links(KIND_LIVE_TRACK, track.id, AUDIENCE_WORLD)
     elif "world_share_enabled" in provided_fields:
         if body.world_share_enabled:
-            share, _ = LiveTrackWorldShare.objects.get_or_create(
-                track=track,
-                defaults={"share_id": str(uuid.uuid4())},
-            )
+            ShareService.ensure_tracker_link(track.user, KIND_LIVE_TRACK, track.id, AUDIENCE_WORLD)
         else:
-            LiveTrackWorldShare.objects.filter(track=track).delete()
+            ShareService.delete_tracker_links(KIND_LIVE_TRACK, track.id, AUDIENCE_WORLD)
     if update_fields:
         track.save(update_fields=update_fields)
-    internal_share = sync_track_internal_share(track)
+    sync_track_internal_share(track)
     resp = track_to_response_metadata_only(track, include_secret=True, is_owner=True)
     resp["subscriber_count"] = LiveTrackSubscription.objects.filter(track=track).exclude(
         user_id=track.user_id
     ).count()
-    if internal_share:
-        resp["internal_share_id"] = internal_share.share_id
-        resp["internal_share_url"] = build_live_track_internal_share_url(request, internal_share.share_id)
-    world_share = LiveTrackWorldShare.objects.filter(track=track).first()
-    if world_share:
-        resp["world_share_id"] = world_share.share_id
-        resp["world_share_url"] = build_live_track_share_url(request, world_share.share_id)
+    attach_track_share_fields(resp, track, request.user, request, include_world=True)
     return JsonResponse(resp)
 
 
 @api_or_login_required_401()
 @require_http_methods(["GET"])
 @handle_404
-@csrf_exempt
 def tracker_subscribers(request, tracker_id):
     """GET trackers/<id>/subscribers/ — list users who have subscribed to this track (owner only). Excludes owner."""
     track = get_object_or_404_for_user(LiveTrack, request.user, id=tracker_id)
@@ -704,12 +662,11 @@ def tracker_subscribers(request, tracker_id):
 @api_or_login_required_401()
 @require_http_methods(["GET"])
 @handle_404
-@csrf_exempt
 def tracker_get_geometry(request, tracker_id):
     """GET trackers/<id>/geometry/ — byte-bounded filtered geometry by default; ?all=true is explicit full history."""
     track = _get_track_for_user_or_404(request.user, tracker_id)
     is_owner = track.user_id == request.user.id
-    all_data = request.GET.get("all", "").lower() == "true"
+    all_data = request.GET.get("all", "").lower() == "true" and is_owner
     if all_data:
         response_payload = track_to_response(
             track,
@@ -729,7 +686,6 @@ def tracker_get_geometry(request, tracker_id):
 
 @api_or_login_required_401()
 @require_http_methods(["POST"])
-@csrf_exempt
 def tracker_get_geometry_bulk(request):
     """POST trackers/geometry/ — geometry for multiple trackers. Body: {tracker_ids: [...]}."""
     from django.http import Http404
@@ -768,49 +724,22 @@ def tracker_get_geometry_bulk(request):
             continue
         is_owner = track.user_id == request.user.id
         result.append(_bounded_track_geometry_payload(track, is_owner, max_bytes))
-    return JsonResponse(
-        result,
-        safe=False,
-        json_dumps_params={"separators": (",", ":"), "ensure_ascii": True},
-    )
+    return list_response(result, page=1, page_size=max(len(result), 1), total_items=len(result))
 
 
 @api_or_login_required_401()
 @require_http_methods(["POST"])
 @handle_404
-@csrf_exempt
 def tracker_clear_history(request, tracker_id):
     """POST trackers/<id>/clear-history/ — keep only the latest point (or none if empty). Owner only."""
     track = get_object_or_404_for_user(LiveTrack, request.user, id=tracker_id)
-    geom = track.geometry or {"type": "LineString", "coordinates": []}
-    coords = geom.get("coordinates") or []
-    point_params = track.point_params or []
-    new_coords = [coords[-1]] if coords else []
-    new_params = [point_params[-1]] if point_params else []
-    track.geometry = {"type": "LineString", "coordinates": new_coords}
-    track.point_params = new_params
-    track.save(update_fields=["geometry", "point_params"])
+    track = point_writer.clear_history(track)
     return JsonResponse(track_to_response_metadata_only(track, include_secret=False), status=200)
 
 
 @api_or_login_required_401()
 @require_http_methods(["POST"])
 @handle_404
-@csrf_exempt
-def tracker_regenerate_hauk_password(request, tracker_id):
-    """POST trackers/<id>/regenerate-hauk-password/ — generate new Hauk-only password for this tracker. Owner only."""
-    track = get_object_or_404_for_user(LiveTrack, request.user, id=tracker_id)
-    if track.user_id != request.user.id:
-        return error_response("Only the owner can regenerate Hauk password", 403)
-    track.hauk_password = generate_hauk_password()
-    track.save(update_fields=["hauk_password"])
-    return JsonResponse({"hauk_password": track.hauk_password}, status=200)
-
-
-@api_or_login_required_401()
-@require_http_methods(["POST"])
-@handle_404
-@csrf_exempt
 def tracker_regenerate_tokens(request, tracker_id):
     """POST trackers/<id>/regenerate-tokens/ — regenerate tracker API + Hauk credentials. Owner only."""
     track = get_object_or_404_for_user(LiveTrack, request.user, id=tracker_id)
@@ -832,17 +761,16 @@ LATEST_COORDINATES_LIMIT = 100
 @api_or_login_required_401()
 @require_http_methods(["GET"])
 @handle_404
-@csrf_exempt
 def tracker_get_latest_coordinates(request, tracker_id):
     """GET trackers/<id>/coordinates/ — latest 100 coordinates + corresponding point_params."""
     track = _get_track_for_user_or_404(request.user, tracker_id)
     is_owner = track.user_id == request.user.id
-    geom = track.geometry or {"type": "LineString", "coordinates": []}
-    coords = list(geom.get("coordinates") or [])
-    point_params = list(track.point_params or [])
-    window_key = (track.settings or {}).get("recent_data_window")
-    if window_key:
-        coords, point_params = _filter_coords_by_recent_window(coords, point_params, window_key)
+    store = PointStore.from_track(track)
+    try:
+        window_key = normalize_recent_data_window((track.settings or {}).get("recent_data_window"))
+    except ValueError:
+        window_key = WINDOW_ALL
+    coords, point_params = store.window(window_key)
     take = min(LATEST_COORDINATES_LIMIT, len(coords))
     latest_coords = coords[-take:] if take else []
     latest_params = point_params[-take:] if take else []
@@ -859,7 +787,6 @@ def tracker_get_latest_coordinates(request, tracker_id):
 
 
 @require_http_methods(["GET"])
-@csrf_exempt
 def tracker_profile_properties(request, tracker_id, profile_basename=None):
     """GET profile.properties: session owner or ?secret=tracker_secret. Returns GPSLogger .properties file.
     If profile_basename is in the URL (e.g. GeoVault%20My%20Track.properties), that name is used so
@@ -909,7 +836,6 @@ def tracker_profile_properties(request, tracker_id, profile_basename=None):
 
 
 @require_http_methods(["GET"])
-@csrf_exempt
 def ingress_body_template(request):
     """Return public GPSLogger template metadata and param pretty names."""
     return JsonResponse({
@@ -920,7 +846,6 @@ def ingress_body_template(request):
 
 @api_or_login_required_401()
 @require_http_methods(["GET"])
-@csrf_exempt
 def hauk_config(request):
     """Return Hauk-related config for the frontend (e.g. instructions modal). hauk_domain is used to build the server URL."""
     domain = (settings.EXTENSIONS_CONFIG.get('live_track', {}).get('hauk_domain') or '').strip()
@@ -930,12 +855,20 @@ def hauk_config(request):
 @api_or_login_required_401()
 @require_http_methods(["GET"])
 @handle_404
-@csrf_exempt
 def tracker_kml(request, tracker_id):
-    """GET trackers/<id>/kml/. Owner or subscriber. Always exports full history."""
+    """GET trackers/<id>/kml/. Owner or subscriber. Windowed unless owner requests ?all=true."""
     track = _get_track_for_user_or_404(request.user, tracker_id)
-    geom = track.geometry or {"type": "LineString", "coordinates": []}
-    coords = list(geom.get("coordinates") or [])
+    is_owner = track.user_id == request.user.id
+    store = PointStore.from_track(track)
+    all_data = request.GET.get("all", "").lower() == "true" and is_owner
+    if all_data:
+        coords = store.coordinates
+    else:
+        try:
+            window_key = normalize_recent_data_window((track.settings or {}).get("recent_data_window"))
+        except ValueError:
+            window_key = WINDOW_ALL
+        coords, _params = store.window(window_key)
     ns = "http://www.opengis.net/kml/2.2"
     ET.register_namespace("", ns)
     kml = ET.Element(ET.QName(ns, "kml"))
@@ -958,7 +891,6 @@ def tracker_kml(request, tracker_id):
 @api_or_login_required_401()
 @require_http_methods(["POST", "DELETE"])
 @handle_404
-@csrf_exempt
 def tracker_subscribe_delete(request, tracker_id):
     """POST: subscribe to track (add to list). DELETE: unsubscribe from track and remove from all groups the user owns. For group-shared tracks use groups/<id>/accept-share/ instead."""
     from django.http import Http404
@@ -997,7 +929,6 @@ def tracker_subscribe_delete(request, tracker_id):
 @api_or_login_required_401()
 @require_http_methods(["DELETE"])
 @handle_404
-@csrf_exempt
 def tracker_leave_share(request, tracker_id):
     """DELETE trackers/<id>/share-with-me/ — Remove yourself from a direct track share. Deletes the share entry and your track subscription. Only for tracks shared with you (visibility=shared and you in shared_with)."""
     try:
@@ -1007,10 +938,9 @@ def tracker_leave_share(request, tracker_id):
         raise Http404
     if track.user_id == request.user.id:
         return error_response("You cannot leave a share on your own tracker", 400)
-    share_entry = LiveTrackShare.objects.filter(track=track, shared_with=request.user).first()
-    if not share_entry:
+    if not ShareGrantService.has_grant(KIND_LIVE_TRACK, track.id, request.user):
         return error_response("This tracker is not shared with you", 404)
-    share_entry.delete()
+    ShareGrantService.remove(KIND_LIVE_TRACK, track.id, request.user)
     LiveTrackSubscription.objects.filter(user=request.user, track=track).delete()
     LiveTrackGroupMember.objects.filter(group__user=request.user, track=track).delete()
     return HttpResponse(status=204)
@@ -1018,7 +948,6 @@ def tracker_leave_share(request, tracker_id):
 
 @api_or_login_required_401()
 @require_http_methods(["GET"])
-@csrf_exempt
 def tracker_available_to_add(request):
     """GET trackers/available-to-add/ — trackers and groups the user can add. Direct track shares: subscribe via trackers/<id>/subscribe/. Shared groups: accept via groups/<id>/accept-share/ (no per-track subscribe)."""
     owned_ids = set(LiveTrack.objects.filter(user=request.user).values_list("id", flat=True))
@@ -1034,10 +963,11 @@ def tracker_available_to_add(request):
         .select_related("user")
         .order_by("name")
     )
+    granted_track_ids = ShareGrantService.resource_ids_for_user(KIND_LIVE_TRACK, request.user)
     shared_with_me = list(
         LiveTrack.objects.filter(
             visibility=VISIBILITY_SHARED,
-            share_entries__shared_with=request.user,
+            id__in=granted_track_ids,
         )
         .exclude(id__in=have_ids)
         .select_related("user")
@@ -1068,10 +998,11 @@ def tracker_available_to_add(request):
                 addable.append(str(track.id))
         return addable
 
+    granted_group_ids = ShareGrantService.resource_ids_for_user(KIND_LIVE_TRACK_GROUP, request.user)
     groups_shared_with_me = list(
         LiveTrackGroup.objects.filter(
             visibility=VISIBILITY_SHARED,
-            share_entries__shared_with=request.user,
+            id__in=granted_group_ids,
         )
         .exclude(accepted_subscriptions__user=request.user)
         .exclude(user=request.user)
@@ -1141,7 +1072,6 @@ def _valid_uuid_strings(ids):
 
 @api_or_login_required_401()
 @require_http_methods(["GET", "PATCH"])
-@csrf_exempt
 def map_visibility_get_patch(request):
     """GET or PATCH map-visibility/ — per-user hidden-on-map track and group IDs."""
     if request.method == "GET":

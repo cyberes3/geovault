@@ -1,5 +1,5 @@
 import type { Component } from 'vue';
-import type { ExtensionSetupContext } from './types/extension-setup';
+import type { ExtensionSetupContext } from '@geovault/extension-sdk';
 import LiveTrackView from './LiveTrackView.vue';
 import LiveTrackSettings from './LiveTrackSettings.vue';
 import WorldShareView from './WorldShareView.vue';

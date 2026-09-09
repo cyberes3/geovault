@@ -9,6 +9,7 @@ from typing import Optional
 
 from api.models import FeatureStore
 from geo_lib.processing.logging import ImportLog
+from geo_lib.tags.tag_writer import TagWriter
 from geo_lib.reverse_geocoding.constants import REVERSE_GEOCODING_TAG_PREFIXES
 from geo_lib.reverse_geocoding.location_tags import reverse_geocode_coordinates
 from geo_lib.processing.tagging.generate import generate_auto_tags
@@ -101,6 +102,7 @@ class RegeocodeService:
             geojson['properties']['system_tags'] = all_tags
             feature_store.geojson = geojson
             feature_store.save()
+            TagWriter.reindex_feature(feature_store)
 
         parts = []
         if added > 0:
@@ -187,3 +189,4 @@ class RegeocodeService:
         geojson.setdefault('properties', {})['system_tags'] = new_tags
         feature_store.geojson = geojson
         feature_store.save()
+        TagWriter.reindex_feature(feature_store)

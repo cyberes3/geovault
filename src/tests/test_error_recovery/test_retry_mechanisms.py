@@ -12,6 +12,7 @@ import requests
 
 from api.models import FeatureStore, ImportQueue
 from geo_lib.feature_id import generate_geojson_hash
+from tests.test_utils.import_queue import queue_with_drafts, draft_geojson, draft_duplicate_infos, skipped_hashes
 
 User = get_user_model()
 
@@ -294,7 +295,6 @@ class TestFileProcessingErrors:
             user=user,
             original_filename='malformed.kml',
             raw_file=malformed_kml,
-            geofeatures=[]
         )
         
         # The import should exist but indicate error state
@@ -331,7 +331,6 @@ class TestFileProcessingErrors:
             user=user,
             original_filename='mixed.kml',
             raw_file=mixed_kml,
-            geofeatures=[]
         )
         
         # The import should be created
@@ -350,12 +349,11 @@ class TestFileProcessingErrors:
             user=user,
             original_filename='empty.kml',
             raw_file=empty_kml,
-            geofeatures=[]
         )
         
         # The import should be created but with no features
         assert import_item.id is not None
-        assert len(import_item.geofeatures) == 0
+        assert len(draft_geojson(import_item)) == 0
 
     def test_extremely_large_coordinate_array(self, user):
         """Test handling of files with extremely large coordinate arrays."""
@@ -392,7 +390,6 @@ class TestFileProcessingErrors:
             user=user,
             original_filename='corrupted.kml',
             raw_file=corrupted_data,
-            geofeatures=[]
         )
         
         # The import should exist but indicate processing failure

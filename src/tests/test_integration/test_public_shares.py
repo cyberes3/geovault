@@ -8,7 +8,18 @@ from django.contrib.gis.geos import Point
 
 from django.contrib.auth import get_user_model
 
-from api.models import FeatureStore, TagShare, CollectionShare, Collection
+from api.models import FeatureStore, Collection
+from api.services.feature_service import FeatureService
+from api.sharing.models import ShareLink
+from test_utils.share_fixtures import (
+    SHARE_TEST_BBOX,
+    SHARE_TEST_LAT,
+    SHARE_TEST_LON,
+    create_collection_share,
+    create_owned_collection,
+    create_tag_share,
+    index_feature_tags,
+)
 from geo_lib.feature_id import generate_geojson_hash
 
 
@@ -30,20 +41,17 @@ class TestPublicShareWorkflow(TestCase):
                 'type': 'Feature',
                 'geometry': {
                     'type': 'Point',
-                    'coordinates': [-122.4194 + i * 0.01, 37.7749 + i * 0.01, 0.0]
+                    'coordinates': [SHARE_TEST_LON + i * 0.01, SHARE_TEST_LAT + i * 0.01, 0.0]
                 },
                 'properties': {
                     'name': f'Shared Point {i}',
                     'tags': ['public-tag']
                 }
             }
-            FeatureStore.objects.create(
-                user=self.user,
-                geojson=feature_data,
-                geometry=Point(feature_data['geometry']['coordinates'][0],
-                             feature_data['geometry']['coordinates'][1],
-                             0.0),
-                geojson_hash=generate_geojson_hash(feature_data)
+            FeatureService.create(
+                self.user,
+                feature_data,
+                geojson_hash=generate_geojson_hash(feature_data),
             )
 
     def test_complete_tag_share_workflow(self):
@@ -57,7 +65,7 @@ class TestPublicShareWorkflow(TestCase):
             'allow_downloads': True
         }
         response = self.client.post(
-            '/api/sharing/create/',
+            '/api/shares/',
             data=json.dumps(share_data),
             content_type='application/json'
         )
@@ -69,7 +77,7 @@ class TestPublicShareWorkflow(TestCase):
         self.client.logout()
         
         # Step 3: Get public share info
-        response = self.client.get(f'/api/sharing/public/info/{share_id}/')
+        response = self.client.get(f'/api/shares/{share_id}/info/')
         self.assertEqual(response.status_code, 200)
         info_data = json.loads(response.content)
         self.assertEqual(info_data['tag'], 'public-tag')
@@ -77,7 +85,7 @@ class TestPublicShareWorkflow(TestCase):
         
         # Step 4: Access public share features (bbox query)
         response = self.client.get(
-            f'/api/sharing/public/{share_id}/?bbox=-123,37,-122,38'
+            f'/api/shares/{share_id}/features/?bbox={SHARE_TEST_BBOX}'
         )
         self.assertEqual(response.status_code, 200)
         features_data = json.loads(response.content)
@@ -104,7 +112,7 @@ class TestPublicShareWorkflow(TestCase):
             'feature_ids': feature_ids
         }
         response = self.client.post(
-            '/api/collections/create/',
+            '/api/collections/',
             data=json.dumps(collection_data),
             content_type='application/json'
         )
@@ -113,10 +121,10 @@ class TestPublicShareWorkflow(TestCase):
         
         # Verify collection was created with features
         from api.models import Collection
-        from api.views.collections.utils import get_collection_feature_ids
+        from geo_lib.collections.membership import CollectionMembership
         collection = Collection.objects.get(id=collection_id, user=self.user)
-        collection_feature_ids = get_collection_feature_ids(collection)
-        self.assertGreater(len(collection_feature_ids), 0, f"Collection should have features. Got: {collection_feature_ids}, collection.feature_ids: {collection.feature_ids}, collection.tags: {collection.tags}")
+        collection_feature_ids = CollectionMembership.feature_ids(collection)
+        self.assertGreater(len(collection_feature_ids), 0, f"Collection should have features. Got: {collection_feature_ids}")
         
         # Step 2: Create a collection share
         share_data = {
@@ -126,7 +134,7 @@ class TestPublicShareWorkflow(TestCase):
             'include_tags': False
         }
         response = self.client.post(
-            '/api/sharing/create/',
+            '/api/shares/',
             data=json.dumps(share_data),
             content_type='application/json'
         )
@@ -138,10 +146,10 @@ class TestPublicShareWorkflow(TestCase):
         
         # Step 4: Access public collection share
         # Bbox format: min_lon,min_lat,max_lon,max_lat
-        # Features are at: (-122.4194, 37.7749), (-122.4094, 37.7849), (-122.3994, 37.7949)
+        # Features sit inside SHARE_TEST_BBOX around (1.0, 2.0).
         # So bbox should include all of them: min_lon=-123, min_lat=37, max_lon=-122, max_lat=38
         response = self.client.get(
-            f'/api/sharing/public/collection/{share_id}/?bbox=-123,37,-122,38'
+            f'/api/shares/{share_id}/features/?bbox={SHARE_TEST_BBOX}'
         )
         self.assertEqual(response.status_code, 200)
         features_data = json.loads(response.content)
@@ -170,7 +178,7 @@ class TestPublicShareDownloads(TestCase):
             'type': 'Feature',
             'geometry': {
                 'type': 'Point',
-                'coordinates': [-122.4194, 37.7749, 0.0]
+                'coordinates': [SHARE_TEST_LON, SHARE_TEST_LAT, 0.0]
             },
             'properties': {
                 'name': 'Downloadable Point',
@@ -180,23 +188,19 @@ class TestPublicShareDownloads(TestCase):
         self.feature = FeatureStore.objects.create(
             user=self.user,
             geojson=self.feature_data,
-            geometry=Point(-122.4194, 37.7749, 0.0),
+            geometry=Point(SHARE_TEST_LON, SHARE_TEST_LAT, 0.0),
             geojson_hash=generate_geojson_hash(self.feature_data)
         )
+        index_feature_tags(self.feature)
 
     def test_download_single_feature_from_share(self):
         """Test downloading single feature from public share."""
         # Create share with downloads enabled
-        share = TagShare.objects.create(
-            share_id=str(uuid.uuid4()),
-            tag='download-tag',
-            user=self.user,
-            allow_downloads=True
-        )
+        share = create_tag_share(self.user, 'download-tag', token=str(uuid.uuid4()), allow_downloads=True)
         
         # Download single feature from share (no authentication)
         response = self.client.get(
-            f'/api/export-kmz?feature={self.feature.id}&share={share.share_id}'
+            f'/api/export-kmz?feature={self.feature.id}&share={share.token}'
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response['Content-Type'], 'application/vnd.google-earth.kmz')
@@ -206,15 +210,10 @@ class TestPublicShareDownloads(TestCase):
     def test_download_bulk_from_share(self):
         """Test bulk download from public share."""
         # Create share with downloads enabled
-        share = TagShare.objects.create(
-            share_id=str(uuid.uuid4()),
-            tag='download-tag',
-            user=self.user,
-            allow_downloads=True
-        )
+        share = create_tag_share(self.user, 'download-tag', token=str(uuid.uuid4()), allow_downloads=True)
         
         # Bulk download from share (no authentication)
-        response = self.client.get(f'/api/export-kmz?share={share.share_id}')
+        response = self.client.get(f'/api/export-kmz?share={share.token}')
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response['Content-Type'], 'application/vnd.google-earth.kmz')
         self.assertIn('download-tag-share.kmz', response['Content-Disposition'])
@@ -222,38 +221,24 @@ class TestPublicShareDownloads(TestCase):
     def test_download_denied_when_disabled(self):
         """Test that downloads are denied when allow_downloads is False."""
         # Create share with downloads disabled
-        share = TagShare.objects.create(
-            share_id=str(uuid.uuid4()),
-            tag='download-tag',
-            user=self.user,
-            allow_downloads=False
-        )
+        share = create_tag_share(self.user, 'download-tag', token=str(uuid.uuid4()), allow_downloads=False)
         
         # Try to download - should fail
         response = self.client.get(
-            f'/api/export-kmz?feature={self.feature.id}&share={share.share_id}'
+            f'/api/export-kmz?feature={self.feature.id}&share={share.token}'
         )
         self.assertEqual(response.status_code, 403)
 
     def test_download_from_collection_share(self):
         """Test downloading from collection share."""
         # Create collection
-        collection = Collection.objects.create(
-            user=self.user,
-            name='Downloadable Collection',
-            tags=['download-tag']
-        )
+        collection = create_owned_collection(self.user, 'Downloadable Collection', tags=['download-tag'])
         
         # Create collection share with downloads
-        share = CollectionShare.objects.create(
-            share_id=str(uuid.uuid4()),
-            collection=collection,
-            user=self.user,
-            allow_downloads=True
-        )
+        share = create_collection_share(self.user, collection, token=str(uuid.uuid4()), allow_downloads=True)
         
         # Download from collection share
-        response = self.client.get(f'/api/export-kmz?share={share.share_id}')
+        response = self.client.get(f'/api/export-kmz?share={share.token}')
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response['Content-Type'], 'application/vnd.google-earth.kmz')
 
@@ -275,7 +260,7 @@ class TestPublicShareWithTags(TestCase):
             'type': 'Feature',
             'geometry': {
                 'type': 'Point',
-                'coordinates': [-122.4194, 37.7749, 0.0]
+                'coordinates': [SHARE_TEST_LON, SHARE_TEST_LAT, 0.0]
             },
             'properties': {
                 'name': 'Tagged Point',
@@ -285,30 +270,22 @@ class TestPublicShareWithTags(TestCase):
         self.feature = FeatureStore.objects.create(
             user=self.user,
             geojson=feature_data,
-            geometry=Point(-122.4194, 37.7749, 0.0),
+            geometry=Point(SHARE_TEST_LON, SHARE_TEST_LAT, 0.0),
             geojson_hash=generate_geojson_hash(feature_data)
         )
+        index_feature_tags(self.feature)
         
         # Create collection
-        self.collection = Collection.objects.create(
-            user=self.user,
-            name='Tagged Collection',
-            tags=['share-tag']
-        )
+        self.collection = create_owned_collection(self.user, 'Tagged Collection', tags=['share-tag'])
 
     def test_share_with_tags_included(self):
         """Test that tags are included when include_tags=True."""
         # Create collection share with tags included
-        share = CollectionShare.objects.create(
-            share_id=str(uuid.uuid4()),
-            collection=self.collection,
-            user=self.user,
-            include_tags=True
-        )
+        share = create_collection_share(self.user, self.collection, token=str(uuid.uuid4()), include_tags=True)
         
         # Access share
         response = self.client.get(
-            f'/api/sharing/public/collection/{share.share_id}/?bbox=-123,37,-122,38'
+            f'/api/shares/{share.token}/features/?bbox={SHARE_TEST_BBOX}'
         )
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
@@ -321,16 +298,11 @@ class TestPublicShareWithTags(TestCase):
     def test_share_with_tags_excluded(self):
         """Test that tags are excluded when include_tags=False."""
         # Create collection share without tags
-        share = CollectionShare.objects.create(
-            share_id=str(uuid.uuid4()),
-            collection=self.collection,
-            user=self.user,
-            include_tags=False
-        )
+        share = create_collection_share(self.user, self.collection, token=str(uuid.uuid4()), include_tags=False)
         
         # Access share
         response = self.client.get(
-            f'/api/sharing/public/collection/{share.share_id}/?bbox=-123,37,-122,38'
+            f'/api/shares/{share.token}/features/?bbox={SHARE_TEST_BBOX}'
         )
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
@@ -358,34 +330,29 @@ class TestPublicShareAccessCount(TestCase):
             'type': 'Feature',
             'geometry': {
                 'type': 'Point',
-                'coordinates': [-122.4194, 37.7749, 0.0]
+                'coordinates': [SHARE_TEST_LON, SHARE_TEST_LAT, 0.0]
             },
             'properties': {
                 'name': 'Test Point',
                 'tags': ['test-tag']
             }
         }
-        FeatureStore.objects.create(
+        index_feature_tags(FeatureStore.objects.create(
             user=self.user,
             geojson=feature_data,
-            geometry=Point(-122.4194, 37.7749, 0.0),
+            geometry=Point(SHARE_TEST_LON, SHARE_TEST_LAT, 0.0),
             geojson_hash=generate_geojson_hash(feature_data)
-        )
+        ))
 
     def test_access_count_increments_on_feature_access(self):
         """Test that access count increments when features are accessed."""
-        share = TagShare.objects.create(
-            share_id=str(uuid.uuid4()),
-            tag='test-tag',
-            user=self.user,
-            access_count=0
-        )
+        share = create_tag_share(self.user, 'test-tag', token=str(uuid.uuid4()), access_count=0)
         
         initial_count = share.access_count
         
         # Access share features
         response = self.client.get(
-            f'/api/sharing/public/{share.share_id}/?bbox=-123,37,-122,38'
+            f'/api/shares/{share.token}/features/?bbox={SHARE_TEST_BBOX}'
         )
         self.assertEqual(response.status_code, 200)
         
@@ -395,18 +362,12 @@ class TestPublicShareAccessCount(TestCase):
 
     def test_access_count_increments_on_download(self):
         """Test that access count behavior on download."""
-        share = TagShare.objects.create(
-            share_id=str(uuid.uuid4()),
-            tag='test-tag',
-            user=self.user,
-            allow_downloads=True,
-            access_count=0
-        )
+        share = create_tag_share(self.user, 'test-tag', token=str(uuid.uuid4()), allow_downloads=True, access_count=0)
         
         initial_count = share.access_count
         
         # Download from share
-        response = self.client.get(f'/api/export-kmz?share={share.share_id}')
+        response = self.client.get(f'/api/export-kmz?share={share.token}')
         self.assertEqual(response.status_code, 200)
         
         # Check access count (download might not increment, depends on implementation)
@@ -416,17 +377,12 @@ class TestPublicShareAccessCount(TestCase):
 
     def test_access_count_multiple_accesses(self):
         """Test access count after multiple accesses."""
-        share = TagShare.objects.create(
-            share_id=str(uuid.uuid4()),
-            tag='test-tag',
-            user=self.user,
-            access_count=0
-        )
+        share = create_tag_share(self.user, 'test-tag', token=str(uuid.uuid4()), access_count=0)
         
         # Access multiple times
         for _ in range(5):
             self.client.get(
-                f'/api/sharing/public/{share.share_id}/?bbox=-123,37,-122,38'
+                f'/api/shares/{share.token}/features/?bbox={SHARE_TEST_BBOX}'
             )
         
         share.refresh_from_db()
@@ -455,7 +411,7 @@ class TestPublicShareSecurity(TestCase):
             'type': 'Feature',
             'geometry': {
                 'type': 'Point',
-                'coordinates': [-122.4194, 37.7749, 0.0]
+                'coordinates': [SHARE_TEST_LON, SHARE_TEST_LAT, 0.0]
             },
             'properties': {
                 'name': 'User1 Point',
@@ -465,22 +421,19 @@ class TestPublicShareSecurity(TestCase):
         self.feature1 = FeatureStore.objects.create(
             user=self.user1,
             geojson=feature_data,
-            geometry=Point(-122.4194, 37.7749, 0.0),
+            geometry=Point(SHARE_TEST_LON, SHARE_TEST_LAT, 0.0),
             geojson_hash=generate_geojson_hash(feature_data)
         )
+        index_feature_tags(self.feature1)
 
     def test_cannot_access_other_users_private_features(self):
         """Test that public shares don't expose other users' features."""
         # Create share for user1's features
-        share = TagShare.objects.create(
-            share_id=str(uuid.uuid4()),
-            tag='user1-tag',
-            user=self.user1
-        )
+        share = create_tag_share(self.user1, 'user1-tag', token=str(uuid.uuid4()))
         
         # Access share - should only see user1's features
         response = self.client.get(
-            f'/api/sharing/public/{share.share_id}/?bbox=-123,37,-122,38'
+            f'/api/shares/{share.token}/features/?bbox={SHARE_TEST_BBOX}'
         )
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
@@ -493,38 +446,31 @@ class TestPublicShareSecurity(TestCase):
     def test_cannot_delete_share_as_other_user(self):
         """Test that users cannot delete other users' shares."""
         # Create share for user1
-        share = TagShare.objects.create(
-            share_id=str(uuid.uuid4()),
-            tag='user1-tag',
-            user=self.user1
-        )
+        share = create_tag_share(self.user1, 'user1-tag', token=str(uuid.uuid4()))
         
         # Login as user2 and try to delete
         self.client.force_login(self.user2)
-        response = self.client.delete(f'/api/sharing/{share.share_id}/')
+        response = self.client.delete(f'/api/shares/{share.token}/')
         
         # Should fail
         self.assertEqual(response.status_code, 404)
         
         # Share should still exist
-        self.assertTrue(TagShare.objects.filter(share_id=share.share_id).exists())
+        self.assertTrue(ShareLink.objects.filter(token=share.token).exists())
 
     def test_feature_ids_not_exposed_in_public_view(self):
         """Test that feature database IDs are not exposed in public shares (when public_safe=True)."""
-        share = TagShare.objects.create(
-            share_id=str(uuid.uuid4()),
-            tag='user1-tag',
-            user=self.user1,
-            allow_downloads=False  # No downloads = more privacy
-        )
+        share = create_tag_share(self.user1, 'user1-tag', token=str(uuid.uuid4()), allow_downloads=False)
         
         response = self.client.get(
-            f'/api/sharing/public/{share.share_id}/?bbox=-123,37,-122,38'
+            f'/api/shares/{share.token}/features/?bbox={SHARE_TEST_BBOX}'
         )
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
         
-        # Check features for presence/absence of _id based on implementation
-        if data['data']['features']:
-            feature = data['data']['features'][0]
-            # Implementation determines if _id is present
+        self.assertGreater(len(data['data']['features']), 0)
+        feature = data['data']['features'][0]
+        self.assertNotIn('database_id', feature.get('properties', {}))
+        self.assertNotIn('geojson_hash', feature.get('properties', {}))
+        self.assertNotIn('geojson_hash', feature)
+        self.assertEqual(feature['properties']['feature_ref'], self.feature1.id)

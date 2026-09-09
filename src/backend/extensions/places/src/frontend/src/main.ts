@@ -1,5 +1,5 @@
 import type { Component } from 'vue';
-import type { ExtensionSetupContext } from './types/extension-setup';
+import type { ExtensionSetupContext } from '@geovault/extension-sdk';
 import PlacesView from './views/PlacesView.vue';
 import PlaceEditView from './views/PlaceEditView.vue';
 import PlacesSettings from './PlacesSettings.vue';

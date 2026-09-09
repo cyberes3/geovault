@@ -26,7 +26,7 @@ from website.startup_checks.orchestrator import run_startup_checks
 run_startup_checks()
 
 # Import routing after Django is set up
-from api.routing import websocket_urlpatterns
+from api.routing import get_websocket_urlpatterns
 
 # Wrap the ASGI application with exception handling middleware
 from website.exception_handler import ASGIExceptionMiddleware
@@ -42,7 +42,7 @@ base_application = ProtocolTypeRouter({
         SessionOriginValidator(
             AuthMiddlewareStack(
                 URLRouter(
-                    websocket_urlpatterns
+                    get_websocket_urlpatterns()
                 )
             )
         )

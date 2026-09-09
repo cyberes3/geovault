@@ -14,6 +14,7 @@ from geo_lib.processing.jobs.bulk_import_job import BulkImportJob
 from geo_lib.processing.jobs.import_job import ImportJob
 from geo_lib.processing.jobs.helpers.status_tracker import ProcessingStatus, status_tracker
 
+from tests.test_utils.import_queue import queue_with_drafts, draft_geojson
 User = get_user_model()
 
 
@@ -65,25 +66,23 @@ class TestImportErrorHandling(TransactionTestCase):
         """Test that earlier unimported file with same hash blocks import in bulk import."""
         # Note: File-level duplicate checking is only in BulkImportJob, not ImportJob
         # Create first import item
-        item1 = ImportQueue.objects.create(
+        item1 = queue_with_drafts(
             user=self.user,
             original_filename='first.kml',
             raw_file='<kml></kml>',
-            geofeatures=[self.feature1],
-            duplicate_features=[],
-            skipped_feature_ids=[],
+            features=[self.feature1],
+            skipped=[],
             imported=False,
             file_hash='same_hash_123'
         )
         
         # Create second import item with same hash (but later timestamp)
-        item2 = ImportQueue.objects.create(
+        item2 = queue_with_drafts(
             user=self.user,
             original_filename='duplicate.kml',
             raw_file='<kml></kml>',
-            geofeatures=[self.feature2],
-            duplicate_features=[],
-            skipped_feature_ids=[],
+            features=[self.feature2],
+            skipped=[],
             imported=False,
             file_hash='same_hash_123'  # Same hash
         )
@@ -117,13 +116,12 @@ class TestImportErrorHandling(TransactionTestCase):
         # even when bulk operations might encounter issues.
         
         # Create import item
-        import_item = ImportQueue.objects.create(
+        import_item = queue_with_drafts(
             user=self.user,
             original_filename='fallback_test.kml',
             raw_file='<kml></kml>',
-            geofeatures=[self.feature1, self.feature2],
-            duplicate_features=[],
-            skipped_feature_ids=[],
+            features=[self.feature1, self.feature2],
+            skipped=[],
             imported=False
         )
         
@@ -161,13 +159,12 @@ class TestImportErrorHandling(TransactionTestCase):
         }
         
         # Create import item with invalid feature
-        import_item = ImportQueue.objects.create(
+        import_item = queue_with_drafts(
             user=self.user,
             original_filename='invalid_hash.kml',
             raw_file='<kml></kml>',
-            geofeatures=[invalid_feature],
-            duplicate_features=[],
-            skipped_feature_ids=[],
+            features=[invalid_feature],
+            skipped=[],
             imported=False
         )
         
@@ -195,10 +192,7 @@ class TestImportErrorHandling(TransactionTestCase):
         import_item = ImportQueue.objects.create(
             user=self.user,
             original_filename='empty.kml',
-            raw_file='<kml></kml>',
-            geofeatures=[],  # Empty
-            duplicate_features=[],
-            skipped_feature_ids=[],
+            raw_file='<kml></kml>',  # Empty
             imported=False
         )
         
@@ -226,13 +220,12 @@ class TestImportErrorHandling(TransactionTestCase):
     def test_integrity_error_on_hash_collision(self):
         """Test handling of duplicate hash during save (race condition)."""
         # Create a feature and import it first
-        import_item1 = ImportQueue.objects.create(
+        import_item1 = queue_with_drafts(
             user=self.user,
             original_filename='first_import.kml',
             raw_file='<kml></kml>',
-            geofeatures=[self.feature1],
-            duplicate_features=[],
-            skipped_feature_ids=[],
+            features=[self.feature1],
+            skipped=[],
             imported=False
         )
         
@@ -249,13 +242,12 @@ class TestImportErrorHandling(TransactionTestCase):
         self.assertEqual(FeatureStore.objects.filter(user=self.user).count(), 1)
         
         # Create second import item with same feature (hash duplicate)
-        import_item2 = ImportQueue.objects.create(
+        import_item2 = queue_with_drafts(
             user=self.user,
             original_filename='duplicate_hash.kml',
             raw_file='<kml></kml>',
-            geofeatures=[self.feature1],  # Same feature
-            duplicate_features=[],
-            skipped_feature_ids=[],
+            features=[self.feature1],  # Same feature
+            skipped=[],
             imported=False
         )
         
@@ -281,13 +273,12 @@ class TestImportErrorHandling(TransactionTestCase):
     def test_import_job_no_features_to_create(self):
         """Test when all features are filtered out (skipped or duplicates)."""
         # Create import item where all features are manually skipped
-        import_item = ImportQueue.objects.create(
+        import_item = queue_with_drafts(
             user=self.user,
             original_filename='all_filtered.kml',
             raw_file='<kml></kml>',
-            geofeatures=[self.feature1, self.feature2],
-            duplicate_features=[],
-            skipped_feature_ids=[self.hash1, self.hash2],  # All skipped
+            features=[self.feature1, self.feature2],
+            skipped=[self.hash1, self.hash2],  # All skipped
             imported=False
         )
         
@@ -351,25 +342,23 @@ class TestBulkImportErrorHandling(TransactionTestCase):
     def test_bulk_import_file_level_duplicate(self):
         """Test bulk import with file-level duplicate in queue."""
         # Create first item
-        item1 = ImportQueue.objects.create(
+        item1 = queue_with_drafts(
             user=self.user,
             original_filename='first.kml',
             raw_file='<kml></kml>',
-            geofeatures=[self.feature1],
-            duplicate_features=[],
-            skipped_feature_ids=[],
+            features=[self.feature1],
+            skipped=[],
             imported=False,
             file_hash='same_hash'
         )
         
         # Create second item with same hash
-        item2 = ImportQueue.objects.create(
+        item2 = queue_with_drafts(
             user=self.user,
             original_filename='duplicate.kml',
             raw_file='<kml></kml>',
-            geofeatures=[self.feature1],
-            duplicate_features=[],
-            skipped_feature_ids=[],
+            features=[self.feature1],
+            skipped=[],
             imported=False,
             file_hash='same_hash'
         )

@@ -32,7 +32,7 @@ export interface UserSettings {
 }
 
 /** Describes what `loadDataForCurrentView` should load: the default viewport, a collection, or one of the public share modes. */
-export type LoadContextType = 'default' | 'collection' | 'share_tag' | 'share_collection' | 'share_feature' | 'share_unknown';
+export type LoadContextType = 'default' | 'collection' | 'share_tag' | 'share_collection' | 'share_feature';
 
 export interface PublicShareInfo {
     share_id: string;
@@ -41,7 +41,6 @@ export interface PublicShareInfo {
     collection_name: string | null;
     collection_id: string | null;
     feature_name: string | null;
-    feature_id: string | null;
     include_tags: boolean;
     allow_downloads: boolean;
 }

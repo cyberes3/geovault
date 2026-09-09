@@ -1,13 +1,10 @@
-import json
 from datetime import datetime
 from enum import Enum
-from typing import List, Tuple, Optional, Type, Any
+from typing import List, Tuple, Optional, Any
 from typing import Union
 
 from pydantic import BaseModel, Field, ConfigDict, field_validator
 
-from geo_lib.feature_id import generate_geojson_hash
-from geo_lib.processing.logging import ImportLog, DatabaseLogLevel
 from geo_lib.utils.date_parser import parse_date_field
 
 
@@ -86,48 +83,3 @@ class PolygonFeature(Feature):
 
 
 GeoFeatureSupported = PointFeature | LineStringFeature | MultiLineStringFeature | PolygonFeature
-
-
-def geojson_to_geofeature(geojson: dict) -> Tuple[List[GeoFeatureSupported], ImportLog]:
-    result = []
-    import_log = ImportLog()
-
-    for item in geojson['features']:
-        match item['geometry']['type'].lower():
-            case 'point':
-                c = PointFeature
-            case 'multipoint':
-                c = PointFeature
-            case 'linestring':
-                c = LineStringFeature
-            case 'multilinestring':
-                c = MultiLineStringFeature
-            case 'polygon':
-                c = PolygonFeature
-            case 'multipolygon':
-                c = PolygonFeature
-            case _:
-                import_log.add(f'Feature named "{item["properties"].get("name", "unnamed")}" had unsupported type "{item["geometry"]["type"]}".', 'GeoJSON to GeoFeature', DatabaseLogLevel.WARNING)
-                continue
-
-        f = c(**item)
-        # No need to process rendering since we're not using it anymore
-
-        # Generate hash-based ID for the feature
-        feature_dict = f.model_dump()
-        geojson_hash = generate_geojson_hash(feature_dict)
-        f.properties.geojson_hash = geojson_hash
-
-        result.append(f)
-
-    return result, import_log
-
-
-def geofeature_to_geojson(feature: Union[GeoFeatureSupported, list]) -> str:
-    if isinstance(feature, list):
-        return json.dumps({
-            'type': 'FeatureCollection',
-            'features': [json.loads(x.model_dump_json(by_alias=True)) for x in feature]
-        })
-    else:
-        return feature.model_dump_json(by_alias=True)

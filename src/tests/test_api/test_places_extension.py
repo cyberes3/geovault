@@ -38,7 +38,7 @@ def _patch_places_enabled():
     mock_config.extension_settings.side_effect = (
         lambda name: {'enabled': True} if name == 'places' else {}
     )
-    return patch('website.extensions.extension_loader.get_config', return_value=mock_config)
+    return patch('website.extensions.registry.get_config', return_value=mock_config)
 
 class TestPlacesAPI(TestCase):
     """Test Places extension API endpoints."""

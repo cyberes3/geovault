@@ -12,7 +12,16 @@ from lxml import etree
 
 from django.contrib.auth import get_user_model
 
-from api.models import FeatureStore, Collection, TagShare, CollectionShare
+from api.models import FeatureStore, Collection
+from api.sharing.public_resolver import PublicShareResolver
+from test_utils.share_fixtures import (
+    SHARE_TEST_LAT,
+    SHARE_TEST_LON,
+    create_collection_share,
+    create_owned_collection,
+    create_tag_share,
+    index_feature_tags,
+)
 from geo_lib.feature_id import generate_geojson_hash
 
 
@@ -87,7 +96,7 @@ class TestSingleFeatureExport(TestCase):
             'type': 'Feature',
             'geometry': {
                 'type': 'Point',
-                'coordinates': [-122.4194, 37.7749, 0.0]
+                'coordinates': [SHARE_TEST_LON, SHARE_TEST_LAT, 0.0]
             },
             'properties': {
                 'name': 'Test Point',
@@ -97,7 +106,7 @@ class TestSingleFeatureExport(TestCase):
         self.feature = FeatureStore.objects.create(
             user=self.user,
             geojson=self.feature_data,
-            geometry=Point(-122.4194, 37.7749, 0.0),
+            geometry=Point(SHARE_TEST_LON, SHARE_TEST_LAT, 0.0),
             geojson_hash=generate_geojson_hash(self.feature_data)
         )
 
@@ -129,8 +138,8 @@ class TestSingleFeatureExport(TestCase):
         self.assertEqual(description, 'A test point')
         self.assertIsNotNone(coordinates)
         lon, lat = coordinates
-        self.assertAlmostEqual(lon, -122.4194, places=4)
-        self.assertAlmostEqual(lat, 37.7749, places=4)
+        self.assertAlmostEqual(lon, SHARE_TEST_LON, places=4)
+        self.assertAlmostEqual(lat, SHARE_TEST_LAT, places=4)
 
     def test_export_single_feature_not_found(self):
         """Test exporting non-existent feature."""
@@ -149,7 +158,7 @@ class TestSingleFeatureExport(TestCase):
             'type': 'Feature',
             'geometry': {
                 'type': 'Point',
-                'coordinates': [-122.4094, 37.7849, 0.0]
+                'coordinates': [SHARE_TEST_LON + 0.1, SHARE_TEST_LAT + 0.1, 0.0]
             },
             'properties': {
                 'name': 'Other Point'
@@ -158,7 +167,7 @@ class TestSingleFeatureExport(TestCase):
         other_feature = FeatureStore.objects.create(
             user=other_user,
             geojson=other_feature_data,
-            geometry=Point(-122.4094, 37.7849, 0.0),
+            geometry=Point(SHARE_TEST_LON + 0.1, SHARE_TEST_LAT + 0.1, 0.0),
             geojson_hash=generate_geojson_hash(other_feature_data)
         )
         
@@ -196,21 +205,21 @@ class TestBulkExport(TestCase):
                 'type': 'Feature',
                 'geometry': {
                     'type': 'Point',
-                    'coordinates': [-122.4194 + i * 0.01, 37.7749 + i * 0.01, 0.0]
+                    'coordinates': [SHARE_TEST_LON + i * 0.01, SHARE_TEST_LAT + i * 0.01, 0.0]
                 },
                 'properties': {
                     'name': f'Test Point {i}',
                     'tags': ['test-tag', f'tag-{i}']
                 }
             }
-            FeatureStore.objects.create(
+            index_feature_tags(FeatureStore.objects.create(
                 user=self.user,
                 geojson=feature_data,
                 geometry=Point(feature_data['geometry']['coordinates'][0],
                              feature_data['geometry']['coordinates'][1],
                              0.0),
                 geojson_hash=generate_geojson_hash(feature_data)
-            )
+            ))
 
     def test_export_all_features(self):
         """Test exporting all user features."""
@@ -262,11 +271,7 @@ class TestBulkExport(TestCase):
     def test_export_by_collection(self):
         """Test exporting features by collection."""
         # Create collection
-        collection = Collection.objects.create(
-            user=self.user,
-            name='Test Collection',
-            tags=['test-tag']
-        )
+        collection = create_owned_collection(self.user, 'Test Collection', tags=['test-tag'])
         
         response = self.client.get(f'/api/export-kmz?collection={collection.id}')
         self.assertEqual(response.status_code, 200)
@@ -328,7 +333,7 @@ class TestPublicShareExport(TestCase):
             'type': 'Feature',
             'geometry': {
                 'type': 'Point',
-                'coordinates': [-122.4194, 37.7749, 0.0]
+                'coordinates': [SHARE_TEST_LON, SHARE_TEST_LAT, 0.0]
             },
             'properties': {
                 'name': 'Shared Point',
@@ -338,71 +343,60 @@ class TestPublicShareExport(TestCase):
         self.feature = FeatureStore.objects.create(
             user=self.user,
             geojson=self.feature_data,
-            geometry=Point(-122.4194, 37.7749, 0.0),
+            geometry=Point(SHARE_TEST_LON, SHARE_TEST_LAT, 0.0),
             geojson_hash=generate_geojson_hash(self.feature_data)
         )
+        index_feature_tags(self.feature)
 
     def test_export_single_feature_from_tag_share(self):
         """Test exporting single feature from tag share with downloads enabled."""
-        share = TagShare.objects.create(
-            share_id=str(uuid.uuid4()),
-            tag='shared-tag',
-            user=self.user,
-            allow_downloads=True
-        )
+        share = create_tag_share(self.user, 'shared-tag', token=str(uuid.uuid4()), allow_downloads=True)
         
         response = self.client.get(
-            f'/api/export-kmz?feature={self.feature.id}&share={share.share_id}'
+            f'/api/export-kmz?feature={self.feature.id}&share={share.token}'
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response['Content-Type'], 'application/vnd.google-earth.kmz')
 
     def test_export_single_feature_from_share_downloads_disabled(self):
         """Test that export fails when downloads are disabled."""
-        share = TagShare.objects.create(
-            share_id=str(uuid.uuid4()),
-            tag='shared-tag',
-            user=self.user,
-            allow_downloads=False
-        )
+        share = create_tag_share(self.user, 'shared-tag', token=str(uuid.uuid4()), allow_downloads=False)
         
         response = self.client.get(
-            f'/api/export-kmz?feature={self.feature.id}&share={share.share_id}'
+            f'/api/export-kmz?feature={self.feature.id}&share={share.token}'
         )
         self.assertEqual(response.status_code, 403)
 
     def test_export_bulk_from_tag_share(self):
         """Test bulk export from tag share."""
-        share = TagShare.objects.create(
-            share_id=str(uuid.uuid4()),
-            tag='shared-tag',
-            user=self.user,
-            allow_downloads=True
-        )
+        share = create_tag_share(self.user, 'shared-tag', token=str(uuid.uuid4()), allow_downloads=True)
         
-        response = self.client.get(f'/api/export-kmz?share={share.share_id}')
+        response = self.client.get(f'/api/export-kmz?share={share.token}')
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response['Content-Type'], 'application/vnd.google-earth.kmz')
         self.assertIn('shared-tag-share.kmz', response['Content-Disposition'])
 
     def test_export_bulk_from_collection_share(self):
         """Test bulk export from collection share."""
-        collection = Collection.objects.create(
-            user=self.user,
-            name='Shared Collection',
-            tags=['shared-tag']
-        )
-        share = CollectionShare.objects.create(
-            share_id=str(uuid.uuid4()),
-            collection=collection,
-            user=self.user,
-            allow_downloads=True
-        )
+        collection = create_owned_collection(self.user, 'Shared Collection', tags=['shared-tag'])
+        share = create_collection_share(self.user, collection, token=str(uuid.uuid4()), allow_downloads=True)
         
-        response = self.client.get(f'/api/export-kmz?share={share.share_id}')
+        response = self.client.get(f'/api/export-kmz?share={share.token}')
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response['Content-Type'], 'application/vnd.google-earth.kmz')
         self.assertIn('shared-collection-share.kmz', response['Content-Disposition'])
+
+    def test_export_looks_up_share_once(self):
+        share = create_tag_share(self.user, 'shared-tag', token=str(uuid.uuid4()), allow_downloads=True)
+        with patch.object(PublicShareResolver, 'get_active_link', wraps=PublicShareResolver.get_active_link) as spy:
+            response = self.client.get(f'/api/export-kmz?share={share.token}')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(spy.call_count, 1)
+
+        with patch.object(PublicShareResolver, 'get_active_link', wraps=PublicShareResolver.get_active_link) as spy:
+            response = self.client.get(f'/api/export-kmz?feature={self.feature.id}&share={share.token}')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(spy.call_count, 1)
 
     def test_export_from_invalid_share_id(self):
         """Test export with invalid share ID."""
@@ -417,7 +411,7 @@ class TestPublicShareExport(TestCase):
             'type': 'Feature',
             'geometry': {
                 'type': 'Point',
-                'coordinates': [-122.4094, 37.7849, 0.0]
+                'coordinates': [SHARE_TEST_LON + 0.1, SHARE_TEST_LAT + 0.1, 0.0]
             },
             'properties': {
                 'name': 'Other Point',
@@ -427,19 +421,14 @@ class TestPublicShareExport(TestCase):
         other_feature = FeatureStore.objects.create(
             user=self.user,
             geojson=other_feature_data,
-            geometry=Point(-122.4094, 37.7849, 0.0),
+            geometry=Point(SHARE_TEST_LON + 0.1, SHARE_TEST_LAT + 0.1, 0.0),
             geojson_hash=generate_geojson_hash(other_feature_data)
         )
         
-        share = TagShare.objects.create(
-            share_id=str(uuid.uuid4()),
-            tag='shared-tag',
-            user=self.user,
-            allow_downloads=True
-        )
+        share = create_tag_share(self.user, 'shared-tag', token=str(uuid.uuid4()), allow_downloads=True)
         
         response = self.client.get(
-            f'/api/export-kmz?feature={other_feature.id}&share={share.share_id}'
+            f'/api/export-kmz?feature={other_feature.id}&share={share.token}'
         )
         self.assertEqual(response.status_code, 403)
 
@@ -463,7 +452,7 @@ class TestFilenameSanitization(TestCase):
             'type': 'Feature',
             'geometry': {
                 'type': 'Point',
-                'coordinates': [-122.4194, 37.7749, 0.0]
+                'coordinates': [SHARE_TEST_LON, SHARE_TEST_LAT, 0.0]
             },
             'properties': {
                 'name': 'Test/Point\\With:Special*Chars'
@@ -472,7 +461,7 @@ class TestFilenameSanitization(TestCase):
         feature = FeatureStore.objects.create(
             user=self.user,
             geojson=feature_data,
-            geometry=Point(-122.4194, 37.7749, 0.0),
+            geometry=Point(SHARE_TEST_LON, SHARE_TEST_LAT, 0.0),
             geojson_hash=generate_geojson_hash(feature_data)
         )
         
@@ -491,7 +480,7 @@ class TestFilenameSanitization(TestCase):
             'type': 'Feature',
             'geometry': {
                 'type': 'Point',
-                'coordinates': [-122.4194, 37.7749, 0.0]
+                'coordinates': [SHARE_TEST_LON, SHARE_TEST_LAT, 0.0]
             },
             'properties': {
                 'name': 'Test Point 测试 ÄÖÜ'
@@ -500,7 +489,7 @@ class TestFilenameSanitization(TestCase):
         feature = FeatureStore.objects.create(
             user=self.user,
             geojson=feature_data,
-            geometry=Point(-122.4194, 37.7749, 0.0),
+            geometry=Point(SHARE_TEST_LON, SHARE_TEST_LAT, 0.0),
             geojson_hash=generate_geojson_hash(feature_data)
         )
         
@@ -515,7 +504,7 @@ class TestFilenameSanitization(TestCase):
             'type': 'Feature',
             'geometry': {
                 'type': 'Point',
-                'coordinates': [-122.4194, 37.7749, 0.0]
+                'coordinates': [SHARE_TEST_LON, SHARE_TEST_LAT, 0.0]
             },
             'properties': {
                 'name': long_name
@@ -524,7 +513,7 @@ class TestFilenameSanitization(TestCase):
         feature = FeatureStore.objects.create(
             user=self.user,
             geojson=feature_data,
-            geometry=Point(-122.4194, 37.7749, 0.0),
+            geometry=Point(SHARE_TEST_LON, SHARE_TEST_LAT, 0.0),
             geojson_hash=generate_geojson_hash(feature_data)
         )
         
@@ -541,14 +530,14 @@ class TestFilenameSanitization(TestCase):
             'type': 'Feature',
             'geometry': {
                 'type': 'Point',
-                'coordinates': [-122.4194, 37.7749, 0.0]
+                'coordinates': [SHARE_TEST_LON, SHARE_TEST_LAT, 0.0]
             },
             'properties': {}
         }
         feature = FeatureStore.objects.create(
             user=self.user,
             geojson=feature_data,
-            geometry=Point(-122.4194, 37.7749, 0.0),
+            geometry=Point(SHARE_TEST_LON, SHARE_TEST_LAT, 0.0),
             geojson_hash=generate_geojson_hash(feature_data)
         )
         
@@ -596,7 +585,7 @@ class TestExportInvalidParameters(TestCase):
             'type': 'Feature',
             'geometry': {
                 'type': 'Point',
-                'coordinates': [-122.4194, 37.7749, 0.0]
+                'coordinates': [SHARE_TEST_LON, SHARE_TEST_LAT, 0.0]
             },
             'properties': {
                 'name': 'Test Point',
@@ -606,7 +595,7 @@ class TestExportInvalidParameters(TestCase):
         feature = FeatureStore.objects.create(
             user=self.user,
             geojson=feature_data,
-            geometry=Point(-122.4194, 37.7749, 0.0),
+            geometry=Point(SHARE_TEST_LON, SHARE_TEST_LAT, 0.0),
             geojson_hash=generate_geojson_hash(feature_data)
         )
         
@@ -615,7 +604,7 @@ class TestExportInvalidParameters(TestCase):
             'type': 'Feature',
             'geometry': {
                 'type': 'Point',
-                'coordinates': [-122.4094, 37.7849, 0.0]
+                'coordinates': [SHARE_TEST_LON + 0.1, SHARE_TEST_LAT + 0.1, 0.0]
             },
             'properties': {
                 'name': 'Other Point',
@@ -625,20 +614,15 @@ class TestExportInvalidParameters(TestCase):
         FeatureStore.objects.create(
             user=other_user,
             geojson=other_feature_data,
-            geometry=Point(-122.4094, 37.7849, 0.0),
+            geometry=Point(SHARE_TEST_LON + 0.1, SHARE_TEST_LAT + 0.1, 0.0),
             geojson_hash=generate_geojson_hash(other_feature_data)
         )
         
-        share = TagShare.objects.create(
-            share_id=str(uuid.uuid4()),
-            tag='other-tag',
-            user=other_user,
-            allow_downloads=True
-        )
+        share = create_tag_share(other_user, 'other-tag', token=str(uuid.uuid4()), allow_downloads=True)
         
         # Try to export our feature with other user's share
         response = self.client.get(
-            f'/api/export-kmz?feature={feature.id}&share={share.share_id}'
+            f'/api/export-kmz?feature={feature.id}&share={share.token}'
         )
         # Should fail - feature doesn't belong to share
         self.assertIn(response.status_code, [403, 404])
@@ -664,7 +648,7 @@ class TestIconEmbedding(TestCase):
             'type': 'Feature',
             'geometry': {
                 'type': 'Point',
-                'coordinates': [-122.4194, 37.7749, 0.0]
+                'coordinates': [SHARE_TEST_LON, SHARE_TEST_LAT, 0.0]
             },
             'properties': {
                 'name': 'Icon Test',
@@ -674,7 +658,7 @@ class TestIconEmbedding(TestCase):
         feature = FeatureStore.objects.create(
             user=self.user,
             geojson=feature_data,
-            geometry=Point(-122.4194, 37.7749, 0.0),
+            geometry=Point(SHARE_TEST_LON, SHARE_TEST_LAT, 0.0),
             geojson_hash=generate_geojson_hash(feature_data)
         )
         
@@ -720,21 +704,21 @@ class TestIconEmbedding(TestCase):
                 'type': 'Feature',
                 'geometry': {
                     'type': 'Point',
-                    'coordinates': [-122.4194 + i * 0.01, 37.7749 + i * 0.01, 0.0]
+                    'coordinates': [SHARE_TEST_LON + i * 0.01, SHARE_TEST_LAT + i * 0.01, 0.0]
                 },
                 'properties': {
                     'name': f'Icon Test {i}',
                     'icon': icon
                 }
             }
-            FeatureStore.objects.create(
+            index_feature_tags(FeatureStore.objects.create(
                 user=self.user,
                 geojson=feature_data,
                 geometry=Point(feature_data['geometry']['coordinates'][0],
                              feature_data['geometry']['coordinates'][1],
                              0.0),
                 geojson_hash=generate_geojson_hash(feature_data)
-            )
+            ))
         
         response = self.client.get('/api/export-kmz?all=true')
         self.assertEqual(response.status_code, 200)
@@ -761,7 +745,7 @@ class TestIconEmbedding(TestCase):
             'type': 'Feature',
             'geometry': {
                 'type': 'Point',
-                'coordinates': [-122.4194, 37.7749, 0.0]
+                'coordinates': [SHARE_TEST_LON, SHARE_TEST_LAT, 0.0]
             },
             'properties': {
                 'name': 'No Icon Test'
@@ -770,7 +754,7 @@ class TestIconEmbedding(TestCase):
         feature = FeatureStore.objects.create(
             user=self.user,
             geojson=feature_data,
-            geometry=Point(-122.4194, 37.7749, 0.0),
+            geometry=Point(SHARE_TEST_LON, SHARE_TEST_LAT, 0.0),
             geojson_hash=generate_geojson_hash(feature_data)
         )
         

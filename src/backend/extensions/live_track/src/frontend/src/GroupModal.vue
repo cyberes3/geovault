@@ -192,7 +192,7 @@ import SharingSection from './SharingSection.vue';
 import { buildGroupPreservingPatchPayload } from './settingsPayloadBuilders';
 import { getTrackerAddToGroupBlockedReason, isTrackerAddableToGroup } from './groupReshareAddability';
 import type { LiveTrack, LiveTrackGroup, TrackVisibility } from './types/track';
-import type { ExtensionApi } from './types/extension-api';
+import type { ExtensionApi } from '@geovault/extension-sdk';
 
 interface AvailableUser {
   email?: string;
@@ -238,8 +238,8 @@ export default defineComponent({
       loadingUsers.value = true;
       try {
         const res = await fetch('/api/users/', { credentials: 'include' });
-        const data = (await res.json()) as { users?: AvailableUser[] } | null;
-        allUsers.value = Array.isArray(data?.users) ? data.users : [];
+        const data = await res.json();
+        allUsers.value = Array.isArray(data?.items) ? data.items as AvailableUser[] : [];
       } catch {
         allUsers.value = [];
       } finally {

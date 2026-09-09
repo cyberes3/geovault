@@ -82,12 +82,6 @@ data class TrackerSettingsRequest(
     val allow_group_reshare: Boolean? = null
 )
 
-/** Response from GET trackers/<id>/coordinates/ — latest 100 coordinates + point_params. */
-data class TrackerCoordinatesResponse(
-    val coordinates: List<List<Double>> = emptyList(),
-    val point_params: List<JsonObject>? = null
-)
-
 /** POST trackers/geometry/ request body. */
 @Serializable
 data class TrackerBulkGeometryRequest(
@@ -153,6 +147,15 @@ data class HiddenItemsClearRequest(
     val target_types: List<String>? = null
 )
 
+@Serializable
+data class ListPage<T>(
+    val items: List<T> = emptyList(),
+    val page: Int = 1,
+    val page_size: Int = 1,
+    val total_items: Int = 0,
+    val total_pages: Int = 0,
+)
+
 /** Group payload from GET/POST/PATCH groups. */
 @Serializable
 @Parcelize
@@ -198,10 +201,6 @@ data class GroupPatchRequest(
 @Serializable
 data class GroupAddTrackRequest(@SerialName("track_id") val track_id: String)
 
-/** GET /api/users/ — list users for share recipient picker. */
-@Serializable
-data class UsersResponse(val users: List<UserItem> = emptyList())
-
 @Serializable
 data class UserItem(val id: Int, val email: String)
 
@@ -244,9 +243,4 @@ data class TrackerGeometryStatusDto(
     @SerialName("total_filtered_count") val total_filtered_count: Int? = null,
     @SerialName("is_truncated") val is_truncated: Boolean? = null,
     @SerialName("params_align_with_coords") val params_align_with_coords: Boolean? = null,
-)
-
-data class TrackerCoordinatesResponseDto(
-    val coordinates: List<List<Double>> = emptyList(),
-    @SerialName("point_params") val point_params: List<JsonObject>? = null
 )

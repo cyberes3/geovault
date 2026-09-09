@@ -132,25 +132,27 @@ class TestRealDatabasePrecision:
 
     def test_restored_layers_use_geography(self, db_conn):
         """
-        End-to-end sanity check: verify that a specific point query returns 
+        End-to-end sanity check: verify that a specific point query returns
         the correct terrestrial distance for a known feature.
         """
-        # Using a point near Standley Lake, CO (~39.86, -105.12)
-        # Verify that distance is reported in true miles using geography.
-        from areas_lib import lookup_water
-        
-        # Point JUST outside the lake (approx 0.1 miles away)
-        # Lat: 39.8616, Lon: -105.1206 is on water.
-        # Let's shift it slightly East by 0.002 degrees (~0.1 miles)
+        from areas_lib.lookup_water import sql_fragment
+
+        # Point just outside Standley Lake (public reservoir), shifted east by 0.002 degrees.
         lat, lon = 39.8616, -105.1206 + 0.002
-        results = lookup_water.run_water_single(db_conn, lat, lon, lake_radius_miles=1.0)
-        
-        assert len(results) > 0
-        # First result should be Standley Lake
-        name, water_type, dist_miles, on_water = results[0]
-        assert "Standley Lake" in name
-        
-        # Calculate expected geography distance
+        sql = (
+            "WITH pt AS (SELECT public.ST_SetSRID(public.ST_MakePoint(%(lon)s, %(lat)s), 4326) AS geom)\n"
+            + sql_fragment(batch=False)
+        )
+        with db_conn.cursor() as cur:
+            cur.execute(sql, {"lon": lon, "lat": lat, "lake_radius_m": 1609.34})
+            rows = cur.fetchall()
+        assert len(rows) > 0
+        payloads = [row[1] for row in rows if row[0] == "water"]
+        assert payloads
+        payload = payloads[0] if isinstance(payloads[0], dict) else {}
+        assert "Standley Lake" in (payload.get("name") or "")
+        dist_miles = payload["distance_miles"]
+
         cur = db_conn.execute("""
             SELECT public.ST_Distance(
                 public.ST_SetSRID(public.ST_MakePoint(-105.1206 + 0.002, 39.8616), 4326)::geography,
@@ -158,22 +160,32 @@ class TestRealDatabasePrecision:
             ) / 1609.34
         """)
         expected_miles = cur.fetchone()[0]
-        
+
         assert pytest.approx(dist_miles, 0.001) == expected_miles
         print(f"\n[PASS] Land feature accuracy at 40N: Reported {dist_miles:.4f} mi, Expected {expected_miles:.4f} mi")
 
     def test_ocean_lookup_returns_results(self, db_conn):
-        """
-        Sanity check: standalone ocean lookup (lookup_ocean.run_ocean_single) runs
-        successfully and returns ocean name(s). This path uses geography for distance.
-        Note: the unified query in query.py uses geometry for ocean_region/ocean_main
-        for performance; that path is not exercised here.
-        """
-        from areas_lib import lookup_ocean
+        """Sanity check: ocean SQL fragments use geography and return a name for a mid-ocean point."""
+        from areas_lib.lookup_ocean import TABLE_OCEAN_REGIONS, TABLE_OCEANS, _merge_ocean_names, sql_fragment
 
         lat, lon = 20.0, -40.0
-        names = lookup_ocean.run_ocean_single(db_conn, lat, lon, ocean_radius_miles=10.0)
-
-        assert names is not None
-        assert len(names) > 0, "Ocean lookup should return at least one name for a mid-ocean point"
+        sql = (
+            "WITH pt AS (SELECT public.ST_SetSRID(public.ST_MakePoint(%(lon)s, %(lat)s), 4326) AS geom)\n"
+            + sql_fragment(batch=False, table_name=TABLE_OCEAN_REGIONS, layer="ocean_region")
+            + "\nUNION ALL\n"
+            + sql_fragment(batch=False, table_name=TABLE_OCEANS, layer="ocean_main")
+        )
+        with db_conn.cursor() as cur:
+            cur.execute(sql, {"lon": lon, "lat": lat, "ocean_radius_m": 10.0 * 1609.34})
+            rows = cur.fetchall()
+        region = None
+        ocean = None
+        for layer, payload in rows:
+            name = payload.get("name") if isinstance(payload, dict) else None
+            if layer == "ocean_region":
+                region = name
+            elif layer == "ocean_main":
+                ocean = name
+        names = _merge_ocean_names(region, ocean)
+        assert names, "Ocean lookup should return at least one name for a mid-ocean point"
         print(f"\n[INFO] Ocean lookup (geography): found {names}")

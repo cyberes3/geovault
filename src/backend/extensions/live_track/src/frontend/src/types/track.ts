@@ -46,6 +46,13 @@ export interface LiveTrack {
     tracker_secret?: string;
     hauk_password?: string;
     geometry?: TrackGeometry;
+    geometry_status?: {
+        window?: string;
+        returned_count?: number;
+        total_filtered_count?: number;
+        is_truncated?: boolean;
+        params_align_with_coords?: boolean;
+    };
     last_point?: TrackCoordinate;
     last_position?: TrackPosition | null;
     last_timestamp_ms?: number | null;

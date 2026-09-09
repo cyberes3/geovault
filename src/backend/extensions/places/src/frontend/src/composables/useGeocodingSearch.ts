@@ -1,5 +1,5 @@
 import { ref, type Ref } from 'vue';
-import type { GeocodingResult } from '@/types/gv-core';
+import type { GeocodingResult } from '@geovault/extension-sdk';
 
 const { getGeocodingResultCoordinates, getGeocodingResultLabel, searchGeocoding } = window.gv_core.GeoVault.utils;
 

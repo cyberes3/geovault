@@ -14,6 +14,7 @@ from geo_lib.processing.icons.caltopo import _fix_nested_caltopo_url, _is_caltop
 from geo_lib.processing.icons.get import extract_icon_from_kmz, fetch_remote_icon
 from geo_lib.processing.icons.storage import _is_valid_icon_type, store_icon
 from geo_lib.processing.logging import ImportLog, DatabaseLogLevel
+from geo_lib.types.feature_properties import ICON_READ_ALIASES, ingest_icon_properties
 
 _logger = get_tagged_logger()
 
@@ -136,7 +137,7 @@ def process_geojson_icons(
                 # For non-Point features, remove icon properties entirely
                 # This prevents fetching icons for LineString, Polygon, etc.
                 props = feature.get('properties', {})
-                icon_props = [k for k in ['icon', 'icon-href', 'iconUrl', 'icon_url', 'marker-icon', 'marker-symbol', 'symbol'] if k in props]
+                icon_props = [k for k in ICON_READ_ALIASES if k in props]
                 if icon_props:
                     for prop_name in icon_props:
                         del props[prop_name]
@@ -280,16 +281,7 @@ def _process_properties_icons(
     if not is_point or not isinstance(properties, dict):
         return
 
-    # Common property names that might contain icon hrefs
-    icon_property_names = [
-        'marker-symbol',
-        'icon',
-        'icon-href',
-        'iconUrl',
-        'icon_url',
-        'marker-icon',
-        'symbol'
-    ]
+    icon_property_names = list(ICON_READ_ALIASES)
 
     # Process known icon properties
     for prop_name in icon_property_names:
@@ -355,3 +347,5 @@ def _process_properties_icons(
             # Check if any string value matches a href in the mapping
             if href_mapping and value in href_mapping:
                 properties[key] = href_mapping[value]
+
+    ingest_icon_properties(properties)

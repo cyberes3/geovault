@@ -5,7 +5,7 @@ from pathlib import Path
 import redis
 
 from website.extensions.extension_base import ExtensionAppConfig
-from website.extensions.extension_hooks import register_bg_task, register_websocket_route
+from website.extensions.capabilities import register_bg_task, register_websocket_route
 
 logger = logging.getLogger(__name__)
 

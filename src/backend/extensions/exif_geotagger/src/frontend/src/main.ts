@@ -1,4 +1,4 @@
-import type { ExtensionSetupContext } from './types/extension-setup';
+import type { ExtensionSetupContext } from '@geovault/extension-sdk';
 import Geotagger from './Geotagger.vue';
 
 async function setup({ router, registry, api }: ExtensionSetupContext): Promise<void> {

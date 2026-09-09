@@ -24,7 +24,7 @@ data class TrackerCheckResponse(val valid: Boolean, val name: String? = null)
 
 interface TrackerApi {
     @GET("/api/extensions/live-track/trackers/")
-    fun getTrackers(): Call<List<TrackerDto>>
+    fun getTrackers(): Call<ListPage<TrackerDto>>
 
     @GET("/api/extensions/live-track/trackers/available-to-add/")
     fun getAvailableToAdd(): Call<AvailableToAddResponse>
@@ -36,10 +36,7 @@ interface TrackerApi {
     fun getTrackerGeometry(@Path("id") id: String): Call<TrackerDto>
 
     @POST("/api/extensions/live-track/trackers/geometry/")
-    fun getTrackersGeometry(@Body request: TrackerBulkGeometryRequest): Call<List<TrackerDto>>
-
-    @GET("/api/extensions/live-track/trackers/{id}/coordinates/")
-    fun getTrackerCoordinates(@Path("id") id: String): Call<TrackerCoordinatesResponseDto>
+    fun getTrackersGeometry(@Body request: TrackerBulkGeometryRequest): Call<ListPage<TrackerDto>>
 
     @POST("/api/extensions/live-track/trackers/")
     fun createTracker(@Body request: TrackerCreateRequest): Call<TrackerDto>
@@ -78,7 +75,7 @@ interface TrackerApi {
     fun clearHiddenItems(@Body request: HiddenItemsClearRequest): Call<ResponseBody>
 
     @GET("/api/extensions/live-track/groups/")
-    fun getGroups(): Call<List<Group>>
+    fun getGroups(): Call<ListPage<Group>>
 
     @POST("/api/extensions/live-track/groups/")
     fun createGroup(@Body request: GroupCreateRequest): Call<Group>
@@ -105,7 +102,7 @@ interface TrackerApi {
     fun leaveGroup(@Path("id") id: String): Call<ResponseBody>
 
     @GET("/api/users/")
-    fun getUsers(): Call<UsersResponse>
+    fun getUsers(): Call<ListPage<UserItem>>
 
     @POST("/api/extensions/live-track/tracker-check/")
     fun checkTracker(@Body request: TrackerCheckRequest): Call<TrackerCheckResponse>

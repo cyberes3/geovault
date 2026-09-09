@@ -266,7 +266,10 @@ class TestSSRFIntegrationRealKML:
 
     def test_real_kml_with_ssrf_icon_href_no_fetch(self):
         """Full KML with Icon href to loopback: convert_to_geojson runs, no outbound fetch to internal host."""
-        from geo_lib.processing.processors import get_processor
+        from types import SimpleNamespace
+
+        from geo_lib.importing.readers.kml import KmlReader
+        from geo_lib.importing.session import RawFile
 
         kml_with_ssrf_icon = """<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2">
@@ -287,15 +290,21 @@ class TestSSRFIntegrationRealKML:
   </Document>
 </kml>"""
         with patch("geo_lib.processing.icons.get.build_ssrf_safe_opener") as mock_build:
-            processor = get_processor(kml_with_ssrf_icon.encode("utf-8"), "ssrf_test.kml")
-            result = processor.convert_to_geojson()
+            session = SimpleNamespace(
+                raw_file=RawFile.from_bytes(kml_with_ssrf_icon.encode("utf-8")),
+                filename="ssrf_test.kml",
+            )
+            result = KmlReader().read(session)
         assert result["type"] == "FeatureCollection"
         assert len(result["features"]) >= 1
         mock_build.assert_not_called()
 
     def test_real_kml_with_safe_icon_href_fetch_attempted(self):
         """Full KML with Icon href to public URL: fetch is attempted (mocked)."""
-        from geo_lib.processing.processors import get_processor
+        from types import SimpleNamespace
+
+        from geo_lib.importing.readers.kml import KmlReader
+        from geo_lib.importing.session import RawFile
 
         kml_with_public_icon = """<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2">
@@ -323,8 +332,11 @@ class TestSSRFIntegrationRealKML:
         mock_resp.__exit__ = lambda self, *a: None
         mock_opener.open.return_value = mock_resp
         with patch("geo_lib.processing.icons.get.build_ssrf_safe_opener", return_value=mock_opener):
-            processor = get_processor(kml_with_public_icon.encode("utf-8"), "public_icon_test.kml")
-            result = processor.convert_to_geojson()
+            session = SimpleNamespace(
+                raw_file=RawFile.from_bytes(kml_with_public_icon.encode("utf-8")),
+                filename="public_icon_test.kml",
+            )
+            result = KmlReader().read(session)
         assert result["type"] == "FeatureCollection"
         assert len(result["features"]) >= 1
         mock_opener.open.assert_called()

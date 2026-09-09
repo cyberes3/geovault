@@ -31,21 +31,15 @@
 import { defineComponent, type PropType } from 'vue'
 import { getGeometryTypeColor } from '@/utils/geometryColors.js'
 import { formatGeometryTypeForDisplay } from '@/utils/geometryTypeFormatter.js'
-import type { FeatureLike } from 'ol/Feature'
 import type { MapPageFeature } from '@/composables/mapPageTypes'
 
-/** This popup historically supported both OpenLayers `Feature`s and plain GeoJSON features; only the GeoJSON path is exercised today (see `MapPage.vue`), but the dual-mode branches are kept intact. */
-type PopupFeature = MapPageFeature | FeatureLike
+type PopupFeature = MapPageFeature
 
 interface PopupPosition {
   x: number;
   y: number;
   containerWidth: number;
   containerHeight: number;
-}
-
-function isOlFeature(feature: PopupFeature): feature is FeatureLike {
-  return typeof (feature as FeatureLike).getGeometry === 'function'
 }
 
 export default defineComponent({
@@ -70,16 +64,7 @@ export default defineComponent({
       // Sort features by geometry type: Points -> Lines -> Polygons
       // Within each group, preserve the original order
       const getGeometryTypeSortOrder = (feature: PopupFeature): number => {
-        let geomType: string | undefined
-        if (isOlFeature(feature)) {
-          // OpenLayers Feature
-          const geometry = feature.getGeometry()
-          if (!geometry) return 999
-          geomType = geometry.getType()
-        } else {
-          // Plain GeoJSON
-          geomType = feature.geometry.type
-        }
+        const geomType = feature.geometry.type
 
         // Points first (order 1)
         if (geomType === 'Point' || geomType === 'MultiPoint') {
@@ -202,75 +187,20 @@ export default defineComponent({
   },
   methods: {
     getFeatureKey(feature: PopupFeature, index: number): string {
-      // Generate a unique key for each feature
-      let properties: Record<string, unknown>
-      if (isOlFeature(feature)) {
-        // OpenLayers Feature
-        properties = (feature.get('properties') as Record<string, unknown> | undefined) ?? {}
-      } else {
-        // Plain GeoJSON
-        properties = feature.properties
-      }
-      
-      // Use feature ID if available, otherwise use geometry + index
-      const databaseId = properties.database_id as string | number | undefined
+      const databaseId = feature.properties.database_id as string | number | undefined
       if (databaseId) {
         return `feature_${databaseId}`
       }
-      
-      // Fallback: use geometry type and index
-      let geomType: string
-      if (isOlFeature(feature)) {
-        // OpenLayers Feature
-        const geometry = feature.getGeometry()
-        geomType = geometry ? geometry.getType() : 'unknown'
-      } else {
-        // Plain GeoJSON
-        geomType = feature.geometry.type
-      }
-      return `feature_${geomType}_${index}`
+      return `feature_${feature.geometry.type}_${index}`
     },
     getFeatureName(feature: PopupFeature): string {
-      // Support both OpenLayers Features and plain GeoJSON
-      let properties: Record<string, unknown>
-      if (isOlFeature(feature)) {
-        // OpenLayers Feature
-        properties = (feature.get('properties') as Record<string, unknown> | undefined) ?? {}
-      } else {
-        // Plain GeoJSON
-        properties = feature.properties
-      }
-      return (properties.name as string | undefined) ?? ''
+      return (feature.properties.name as string | undefined) ?? ''
     },
     getFeatureGeometryType(feature: PopupFeature): string {
-      // Support both OpenLayers Features and plain GeoJSON
-      let geomType: string
-      if (isOlFeature(feature)) {
-        // OpenLayers Feature
-        const geometry = feature.getGeometry()
-        if (!geometry) return 'Unknown'
-        geomType = geometry.getType()
-      } else {
-        // Plain GeoJSON
-        geomType = feature.geometry.type
-      }
-      
-      // Use shared formatter utility for user-friendly names
-      return formatGeometryTypeForDisplay(geomType)
+      return formatGeometryTypeForDisplay(feature.geometry.type)
     },
     getGeometryTypeColor(feature: PopupFeature): string {
-      // Support both OpenLayers Features and plain GeoJSON
-      let geometryType: string
-      if (isOlFeature(feature)) {
-        // OpenLayers Feature
-        const geometry = feature.getGeometry()
-        if (!geometry) return '#d1d5db'
-        geometryType = geometry.getType()
-      } else {
-        // Plain GeoJSON
-        geometryType = feature.geometry.type
-      }
-      return getGeometryTypeColor(geometryType)
+      return getGeometryTypeColor(feature.geometry.type)
     }
   }
 })

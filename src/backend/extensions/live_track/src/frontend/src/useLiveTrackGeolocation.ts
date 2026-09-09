@@ -1,6 +1,6 @@
 import { ref } from 'vue';
 import type { Map as MapLibreMap, Marker } from 'maplibre-gl';
-import type { LocationMarkerCoords } from './types/gv-core';
+import type { LocationMarkerCoords } from '@geovault/extension-sdk';
 
 const { createUserLocationMarker, updateUserLocationMarker, removeUserLocationMarker, geolocationManager } = window.gv_core;
 

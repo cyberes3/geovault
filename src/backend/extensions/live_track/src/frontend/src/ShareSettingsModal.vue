@@ -57,7 +57,7 @@ import Loader from 'platform/components/parts/Loader.vue';
 import ScrollingSelect from 'platform/components/parts/ScrollingSelect.vue';
 import { buildTrackerSharingPayload } from './settingsPayloadBuilders';
 import type { LiveTrack, TrackVisibility } from './types/track';
-import type { ExtensionApi } from './types/extension-api';
+import type { ExtensionApi } from '@geovault/extension-sdk';
 
 interface AvailableUser {
   email?: string;
@@ -89,8 +89,8 @@ export default defineComponent({
       loadingUsers.value = true;
       try {
         const res = await fetch('/api/users/', { credentials: 'include' });
-        const data = (await res.json()) as { users?: AvailableUser[] } | null;
-        availableUsers.value = Array.isArray(data?.users) ? data.users : [];
+        const data = await res.json();
+        availableUsers.value = Array.isArray(data?.items) ? data.items as AvailableUser[] : [];
       } catch {
         availableUsers.value = [];
       } finally {

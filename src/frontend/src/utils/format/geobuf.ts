@@ -30,10 +30,19 @@ function isProtobufContentType(contentType: string): boolean {
     return contentType.includes('application/x-protobuf') || contentType.includes('application/vnd.mapbox-vector-tile');
 }
 
+export const EMPTY_FEATURE_COLLECTION: GeoJsonFeatureCollection = Object.freeze({
+    type: 'FeatureCollection',
+    features: Object.freeze([]),
+}) as GeoJsonFeatureCollection;
+
 /** Decode geobuf binary data to a GeoJSON FeatureCollection. */
 export function decodeGeobuf(arrayBuffer: ArrayBuffer | Uint8Array): GeoJsonFeatureCollection {
     const pbf = new Pbf(new Uint8Array(arrayBuffer));
-    return geobuf.decode(pbf) as GeoJsonFeatureCollection;
+    const decoded = geobuf.decode(pbf) as GeoJsonFeatureCollection | null;
+    if (!decoded || decoded.type !== 'FeatureCollection' || !Array.isArray(decoded.features) || decoded.features.length === 0) {
+        return EMPTY_FEATURE_COLLECTION;
+    }
+    return decoded;
 }
 
 function headerNameToMetadataKey(headerName: string): string {

@@ -1,23 +1,18 @@
+import { itemsFromListPage } from '@/contracts/envelope';
 import { httpClient } from '../httpClient';
+import type { ExtensionListItem } from '../../../packages/extension-sdk/src/manifest';
 
-export interface ExtensionMetadata {
-    name: string;
-    display_name?: string;
-    icon?: string;
-    map_route?: string;
-    [key: string]: unknown;
-}
+export type ExtensionMetadata = ExtensionListItem;
 
 let cachedExtensions: ExtensionMetadata[] | null = null;
 let extensionsPromise: Promise<ExtensionMetadata[]> | null = null;
 
 /**
- * GET /api/extensions/ - metadata for every enabled extension, cached for the lifetime of the
- * page. `extensionLoader.ts` and `DashboardPage.vue` both need this list independently; without
- * caching, every page load fired the request twice for no reason.
+ * GET /api/extensions/ — enabled-extension catalog.
+ * Never caches an empty list: a failed fetch must not lock guests out of baked share routes.
  */
 export async function listExtensions(): Promise<ExtensionMetadata[]> {
-    if (cachedExtensions) {
+    if (cachedExtensions && cachedExtensions.length > 0) {
         return cachedExtensions;
     }
     if (extensionsPromise) {
@@ -27,13 +22,15 @@ export async function listExtensions(): Promise<ExtensionMetadata[]> {
     extensionsPromise = httpClient
         .get('/api/extensions/')
         .then((response) => {
-            cachedExtensions = Array.isArray(response.data) ? response.data : [];
-            return cachedExtensions;
+            const list = itemsFromListPage<ExtensionMetadata>(response.data);
+            if (list.length > 0) {
+                cachedExtensions = list;
+            }
+            return list;
         })
         .catch((error) => {
             console.error('Failed to fetch extensions list:', error);
-            cachedExtensions = [];
-            return cachedExtensions;
+            return cachedExtensions ?? [];
         })
         .finally(() => {
             extensionsPromise = null;

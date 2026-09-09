@@ -1,27 +1,34 @@
 """
 CalTopo single feature import endpoint.
 """
-import json
+from datetime import datetime, timezone
 from typing import Dict, Any, ClassVar
 
-from django.contrib.gis.geos import GEOSGeometry
 from django.db import transaction
 from django.http import HttpRequest, JsonResponse
 from django.views.decorators.http import require_http_methods
 from pydantic import BaseModel, Field, ConfigDict, field_validator
 
-from api.models import FeatureStore
+from api.services.feature_service import FeatureService
 from api.utils.responses import error_response, success_response
+from website.extensions.import_provider import (
+    EXTERNAL_IDS_FEATURE_KEY,
+    ImportHookPayload,
+    collect_external_ids,
+)
 from api.validation.decorators import validate_payload
-from geo_lib.spatial.coordinates import ensure_3d_geometry_coordinates
+from extensions.caltopo.src.backend.import_provider import CaltopoImportProvider
 from extensions.caltopo.src.backend.services.caltopo_api import get_feature, convert_caltopo_to_geojson
 from extensions.caltopo.src.backend.utils.caltopo_helpers import require_caltopo_connection, perform_caltopo_call, VALID_CALTOPO_FEATURE_CLASSES
 from extensions.caltopo.src.backend.utils.rate_limit import caltopo_rate_limited
+from geo_lib.duplicates.adapters.import_draft import build_duplicate_index
+from geo_lib.duplicates.detector import DuplicateDetector
+from geo_lib.duplicates.verdict import VerdictKind, VerdictScope
 from geo_lib.feature_id import generate_geojson_hash
 from geo_lib.reverse_geocoding.background_geocoding import reverse_geocode_feature_async
-from geo_lib.processing.duplicate_detection.find import _find_hash_duplicates, _find_geometry_duplicates
 from geo_lib.processing.logging import ImportLog
 from geo_lib.processing.tagging.generate import generate_auto_tags
+from geo_lib.tags.tag_writer import SystemTagWriter
 from geo_lib.types.validation import match_geometry_class
 from geo_lib.validation.geojson.geojson_whitelist import validate_and_normalize_geojson_feature
 from geo_lib.validation.geometry_validation import GeometryValidationError
@@ -113,45 +120,35 @@ def import_caltopo_feature(request: HttpRequest, validated_data: Dict[str, Any])
         # Return generic error message to user (don't expose technical details)
         return error_response('Failed to process feature from CalTopo. The feature may be in an unsupported format.', code=500)
 
-    # Check for duplicates (warning only)
     warnings = []
     geojson_hash = generate_geojson_hash(geojson_feature)
     geojson_feature['properties']['geojson_hash'] = geojson_hash
-
-    hash_duplicates = _find_hash_duplicates([geojson_feature], request.user.id, source_filter='feature_store')
-    if hash_duplicates:
-        dup_info = hash_duplicates[0]
+    duplicate_index = build_duplicate_index(
+        request.user.id,
+        [geojson_feature],
+        exclude_queue_id=0,
+        uploaded_at=datetime.now(timezone.utc),
+    )
+    verdict = DuplicateDetector().detect_two_pass([geojson_feature], duplicate_index).get(geojson_hash)
+    if verdict and verdict.kind != VerdictKind.NONE:
+        match = verdict.matches[0] if verdict.matches else None
         warnings.append({
-            'type': 'hash',
-            'message': 'Feature with identical hash already exists',
-            'existing_features': [
-                {'id': ef.get('id'), 'name': ef.get('geojson', {}).get('properties', {}).get('name', 'Unnamed')}
-                for ef in dup_info.get('existing_features', [])
-            ]
+            'type': verdict.kind.value,
+            'message': (
+                'Feature with identical hash already exists'
+                if verdict.kind == VerdictKind.HASH else
+                'Feature with similar geometry already exists'
+            ),
+            'existing_features': [{
+                'id': match.feature_store_id if match else None,
+                'name': match.name if match else 'Unnamed',
+            }],
+            'scope': verdict.scope.value if verdict.scope != VerdictScope.NONE else None,
         })
 
-    _, geometry_duplicates, _ = _find_geometry_duplicates([geojson_feature], request.user.id, source_filter='feature_store')
-    if geometry_duplicates:
-        dup_info = geometry_duplicates[0]
-        warnings.append({
-            'type': 'geometry',
-            'message': 'Feature with similar geometry already exists',
-            'existing_features': [
-                {'id': ef.get('id'), 'name': ef.get('geojson', {}).get('properties', {}).get('name', 'Unnamed')}
-                for ef in dup_info.get('existing_features', [])
-            ]
-        })
-
-    # Preserve CalTopo metadata before normalization (it will be stripped by whitelist)
-    caltopo_metadata = {}
-    if 'properties' in geojson_feature:
-        props = geojson_feature['properties']
-        if 'caltopo_map_id' in props:
-            caltopo_metadata['caltopo_map_id'] = props['caltopo_map_id']
-        if 'caltopo_feature_id' in props:
-            caltopo_metadata['caltopo_feature_id'] = props['caltopo_feature_id']
-        if 'caltopo_feature_class' in props:
-            caltopo_metadata['caltopo_feature_class'] = props['caltopo_feature_class']
+    external_ids = collect_external_ids(geojson_feature)
+    if external_ids.is_empty():
+        external_ids = CaltopoImportProvider().extract_external_ids(geojson_feature)
 
     # Validate and normalize
     try:
@@ -162,12 +159,6 @@ def import_caltopo_feature(request: HttpRequest, validated_data: Dict[str, Any])
         )
     except GeometryValidationError as e:
         return error_response(f'Feature validation failed: {str(e)}', code=400)
-
-    # Restore CalTopo metadata after normalization
-    if caltopo_metadata:
-        if 'properties' not in normalized_feature:
-            normalized_feature['properties'] = {}
-        normalized_feature['properties'].update(caltopo_metadata)
 
     # Generate hash after normalization
     geojson_hash = generate_geojson_hash(normalized_feature)
@@ -188,38 +179,25 @@ def import_caltopo_feature(request: HttpRequest, validated_data: Dict[str, Any])
     # Remove geojson_hash from properties (it's stored separately in FeatureStore)
     del normalized_feature['properties']['geojson_hash']
 
-    # Create geometry object from normalized GeoJSON (same approach as feature_processing.py)
-    geometry = None
-    if normalized_feature.get('geometry'):
-        # Normalize coordinates to ensure all have Z dimension
-        geom_data = ensure_3d_geometry_coordinates(normalized_feature['geometry'].copy())
-        geometry = GEOSGeometry(json.dumps(geom_data))
-
-    # Create FeatureStore entry
     with transaction.atomic():
-        # Delete existing feature if re-importing
-        # This handles cases where:
-        # 1. Feature was previously imported and still exists (normal re-import)
-        # 2. Feature was previously imported but user deleted it (clean up stale mapping)
-        # 3. Feature was previously imported but user edited it (delete old version, import fresh)
         if map_id in caltopo_user.imported_features and feature_id in caltopo_user.imported_features[map_id]:
             existing_feature_id = caltopo_user.imported_features[map_id][feature_id]
-            # Try to delete the feature (may not exist if user deleted it manually)
-            FeatureStore.objects.filter(id=existing_feature_id, user=request.user).delete()
-            # Always clean up the mapping, even if feature was already deleted
+            FeatureService.delete(request.user, existing_feature_id)
             caltopo_user.imported_features[map_id].pop(feature_id, None)
 
-        feature_store = FeatureStore.objects.create(
-            user=request.user,
-            geojson=normalized_feature,
-            geometry=geometry,
-            geojson_hash=geojson_hash
+        feature_store = FeatureService.create(
+            request.user,
+            normalized_feature,
+            geojson_hash=geojson_hash,
         )
-
-        if map_id not in caltopo_user.imported_features:
-            caltopo_user.imported_features[map_id] = {}
-        caltopo_user.imported_features[map_id][feature_id] = feature_store.id
-        caltopo_user.save()
+        SystemTagWriter.write_creation_tags(feature_store, system_tags)
+        setattr(feature_store, EXTERNAL_IDS_FEATURE_KEY, external_ids)
+        CaltopoImportProvider().on_import_finalized(ImportHookPayload(
+            import_item=None,
+            user_id=request.user.id,
+            created_features=[feature_store],
+            external_ids=[external_ids],
+        ))
 
     reverse_geocode_feature_async(feature_store.id)
     normalized_feature['properties']['database_id'] = feature_store.id

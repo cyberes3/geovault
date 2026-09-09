@@ -306,26 +306,19 @@ def detect_file_type(file_data: Union[bytes, str], filename: str = "") -> FileTy
             try:
                 content = file_data.decode('utf-8')
             except UnicodeDecodeError:
-                return FileType.KMZ  # Assume KMZ if not decodable as UTF-8
+                raise ValueError("Unsupported file content")
     else:
         content = file_data
 
-    # Check for KML/GPX XML signatures in content
-    # Check for root elements first (more specific), then generic XML
     content_lower = content.lower().strip()
     if '<gpx' in content_lower:
         return FileType.GPX
-    elif '<kml' in content_lower:
+    if '<kml' in content_lower:
         return FileType.KML
-    elif content_lower.startswith('<?xml'):
-        # Generic XML - default to KML
-        return FileType.KML
-    
-    # Check for GeoJSON
+
     content_stripped = content.strip()
     if (content_stripped.startswith('{') or content_stripped.startswith('[')) and \
        '"type"' in content_lower and ('"feature"' in content_lower or '"featurecollection"' in content_lower):
         return FileType.GEOJSON
 
-    # Default to KML if we can't determine
-    return FileType.KML
+    raise ValueError("Unsupported file content")

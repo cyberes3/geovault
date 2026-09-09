@@ -1,6 +1,6 @@
 # Building a GeoVault Extension
 
-This guide gives a high-level overview of how to build your own extension. Use the **`example_extension`** in this folder as the reference implementation; **caltopo**, **exif_geotagger**, **live_track**, and **places** show other patterns (hooks, tools, settings, full-height map routes).
+This guide gives a high-level overview of how to build your own extension. Use the **`example_extension`** in this folder as the reference implementation; **caltopo**, **exif_geotagger**, **live_track**, and **places** show other patterns (ImportProvider, tools, settings, full-height map routes).
 
 ## What an extension is
 
@@ -16,7 +16,7 @@ Extensions add backend (Django) and/or frontend (Vue.js) features to GeoVault. A
 
 ```
 my_extension/
-├── manifest.py              # name, version, description, icon, enabled_by_default, map_route, public_share_route
+├── manifest.toml            # name, version, description, icon, enabled_by_default, map_route, public_share_route
 └── src/
     ├── backend/             # Django
     │   ├── apps.py          # ExtensionAppConfig + extension_ready()
@@ -25,7 +25,7 @@ my_extension/
     │   └── views.py
     └── frontend/            # Vue + Vite
         ├── src/
-        │   ├── main.js      # must export default setup
+        │   ├── main.ts      # must export default setup
         │   └── ...          # components, assets
         ├── vite.config.js   # thin wrapper around the shared factory
         ├── eslint.config.js # thin wrapper around the shared factory
@@ -35,9 +35,9 @@ my_extension/
 
 ## Backend
 
-### Manifest (`manifest.py`)
+### Manifest (`manifest.toml`)
 
-The platform discovers extensions by scanning for `manifest.py`. Required: `name` (snake_case), `version`. Optional: `description`, `icon` (Heroicon name, `"icon.svg"`, or inline SVG), `enabled_by_default`, `map_route` (use the full-height map layout for this extension's routes — see `live_track`), `public_share_route` (treat `/extensions/<kebab-name>/share` as an unauthenticated share route — see `live_track`).
+The platform discovers extensions by scanning for `manifest.toml`. The folder name must equal `name`. Required: `name` (snake_case), `version`. Optional: `description`, `icon` (Heroicon name, `"icon.svg"`, or inline SVG), `enabled_by_default`, `map_route` (use the full-height map layout for this extension's routes — see `live_track`), `public_share_route` (treat `/extensions/<kebab-name>/share` as an unauthenticated share route — see `live_track`), `umd_global`, `requires_map_engine` (`maplibre` / `none`), `dashboard_widget`.
 
 ### API routes (`urls.py`)
 
@@ -47,7 +47,8 @@ Paths you define are prefixed with `/api/extensions/<kebab-name>/` (underscores 
 
 Create an `apps.py` that subclasses `ExtensionAppConfig` and set `name`, `label`, `verbose_name`. Implement **`extension_ready()`** — it runs after Django is up and is where you should:
 
-- Register hooks (e.g. import hooks)
+- Register an `ImportProvider` (extract external ids before the property whitelist)
+- Register websocket routes, well-known paths, or Celery tasks
 - Validate config or run startup checks
 
 Do not rely on DB or start threads here; use signals or Celery for background work.
@@ -58,11 +59,11 @@ Define models as usual; set `app_label` to your extension's label. Run migration
 
 ### Views
 
-Normal Django views. Use `@api_or_login_required_401()` (from `website.auth_decorators`) for auth, and `api.utils.responses.success_response` / `error_response` for consistent JSON responses. When working with platform features (`FeatureStore`), go through `api.services.feature_service.FeatureService` rather than building queries or validation by hand: `FeatureService.get_owned_feature_or_404(user, feature_id, scope=...)` for scoped lookups, `FeatureService.validate_and_preserve_feature(...)` / `validate_user_tags(...)` for feature/tag validation, and the `FeatureStore` manager's chainable scope methods (`.owned_by(user)`, `.main_map()`, `.in_scope(scope)`) for querysets. This keeps every extension's feature access correctly scoped by construction instead of each one re-implementing (and potentially getting wrong) the same ownership/scope checks. See `example_extension`'s views for simple CRUD and feature create/modify/delete, and `places/src/backend/services/place_service.py` for a scoped-feature service built on top of `FeatureService`.
+Normal Django views. Use `@api_or_login_required_401()` (from `website.auth_decorators`) for auth, and `api.utils.responses.success_response` / `error_response` for consistent JSON responses. Do not stack `@csrf_exempt` on session views. When working with platform features (`FeatureStore`), go through `api.services.feature_service.FeatureService` rather than building queries or validation by hand: `FeatureService.create(..., scope=...)` and `FeatureService.get_owned_feature_or_404(user, feature_id, scope=...)` for scoped access, `FeatureService.validate_and_preserve_feature(...)` / `validate_user_tags(...)` for feature/tag validation, and the `FeatureStore` manager's chainable scope methods (`.owned_by(user)`, `.main_map()`, `.in_scope(scope)`) for querysets. See `example_extension`'s views for user-scoped items and scoped feature create/modify/delete, and `places/src/backend/services/place_service.py` for a scoped-feature service built on top of `FeatureService`.
 
 ## Frontend
 
-### Setup function (`main.js`)
+### Setup function (`main.ts`)
 
 Your frontend entry **must** export a single **default** async function named `setup`:
 
@@ -146,11 +147,9 @@ All shared platform resources live on **`window.gv_core`** only. Use `window.gv_
 - **`window.gv_core.createRouteWrapper`** — see above
 - **`window.gv_core.Vue`**, **`VueRouter`**, **`Vuex`**, **`axios`** — Vue ecosystem (externalized so extensions share core's single instance)
 - **`window.gv_core.resolveHeroiconByName(name)`** — resolves an *outline* heroicon by name, lazily. Rejects (doesn't silently return `null`) for a name that isn't a real outline heroicon. Heroicons itself is *not* externalized/shared (see below) - this is purely a convenience for the rare case where you need to look up an icon by a runtime string rather than a static `import { XIcon } from '@heroicons/vue/24/outline'`.
-- **`window.gv_core.ol`** — OpenLayers (`source`, `layer`, `proj`, `geom`, `style`, `interaction`, `Feature`). Loaded lazily: `null` until you call and `await` **`window.gv_core.loadOl()`**, which resolves to (and also populates) this value.
 - **`window.gv_core.maplibre`** — MapLibre GL JS. Loaded lazily: `null` until you call and `await` **`window.gv_core.loadMaplibreGl()`**, which resolves to (and also populates) this value.
 - **`window.gv_core.tileSourceCatalog`** — shared, cached basemap/tile-source catalog singleton (`.load()`)
 - **`window.gv_core.RasterTileUrls`**, **`OSM_TILE_SOURCE_ID`** — raster tile URL helpers
-- **`window.gv_core.openLayersBasemap`** — shared OpenLayers basemap singleton
 - **`window.gv_core.geolocationManager`** — shared geolocation singleton (`getCurrentPosition()`, `startTracking(onUpdate, onError)`, `stopTracking()`)
 - **`window.gv_core.isValidMapLngLatPair`**, **`createUserLocationMarker`**, **`updateUserLocationMarker`**, **`removeUserLocationMarker`** — MapLibre map/marker helpers
 - **`window.gv_core.setupCopyMapCoordinatesOnContextMenu(map)`** — right-click-to-copy-coordinates behavior for a MapLibre map
@@ -158,7 +157,7 @@ All shared platform resources live on **`window.gv_core`** only. Use `window.gv_
 - **`window.gv_core.realtimeSocket`**, **`WebSocketHeartbeat`** — the multiplexed `/ws/realtime/` connection and the ping/pong zombie-connection detector
 - **`window.gv_core.BaseButton`**, **`BaseModal`**, **`Loader`**, **`LocationIcon`**, **`ScrollingSelect`**, **`SearchableCheckboxList`**, **`ToggleButton`**, **`SettingsInput`** — shared UI components (also globally registered, so you can use them in templates without importing)
 
-The Vue-ecosystem values are also exposed at top level (`window.Vue`, `window.axios`, etc.) purely so UMD builds that externalize these dependencies keep working. `window.ol`/`window.maplibregl` are similarly exposed at top level, but (like their `gv_core` counterparts) only after `loadOl()`/`loadMaplibreGl()` has resolved at least once. Prefer `window.gv_core.*` in your source.
+The Vue-ecosystem values are also exposed at top level (`window.Vue`, `window.axios`, etc.) purely so UMD builds that externalize these dependencies keep working. `window.maplibregl` is similarly exposed at top level after `loadMaplibreGl()` has resolved at least once. Prefer `window.gv_core.*` in your source.
 
 **Heroicons is intentionally not shared/externalized.** Add `@heroicons/vue` as your own dependency (`npm install @heroicons/vue`) and import icons the normal way (`import { MapIcon } from '@heroicons/vue/24/outline'`) - Vite tree-shakes your build down to only the icons you actually use, so there's no meaningful duplication even if another extension imports the same icon. This is the one exception to "core provides it as a shared global": eagerly loading the entire ~391KB icon library on every page load just so it could be shared wasn't worth it for a handful of nav icons.
 
@@ -203,49 +202,60 @@ export default createSharedEslintConfig({ tsconfigRootDir: dirname(fileURLToPath
 // tsconfig.json
 {
   "extends": "../../../../../frontend/tsconfig.extension-base.json",
-  "compilerOptions": { "baseUrl": ".", "paths": { "@/*": ["src/*"] } },
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"],
+      "@geovault/extension-sdk": ["../../../../../frontend/packages/extension-sdk/src/index.ts"]
+    }
+  },
   "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.vue", "src/**/*.js"]
 }
 ```
 
 Add matching `lint` / `lint:check` / `type-check` scripts to `package.json` (see any extension's `package.json` for the exact scripts/devDependencies). Extensions are still primarily plain JS today — that's fine; `checkJs` is off, so `vue-tsc` won't flood you with errors on `.js` files, but the tooling is ready for when you (or core) migrate a file to TypeScript.
 
-## Hooks (backend)
+## ImportProvider (backend)
 
-You can plug into platform lifecycle via hooks. Register them **only** inside `extension_ready()`:
+Register an `ImportProvider` **only** inside `extension_ready()`. The platform asks every provider to extract external ids **before** the property whitelist, then delivers those ids again after `FeatureStore` rows are created.
 
 ```python
-from website.extensions.extension_hooks import register_hook
+from website.extensions.import_provider import ExternalIds, ImportHookPayload, register_import_provider
+
+class MyImportProvider:
+    def extract_external_ids(self, geojson: dict) -> ExternalIds:
+        return ExternalIds(by_provider={"my_extension": {"id": "..."}})
+
+    def on_import_finalized(self, payload: ImportHookPayload) -> None:
+        # payload.created_features is the source of truth; import_item.geofeatures is empty
+        pass
 
 def extension_ready(self):
-    register_hook('import', 'my_handler', self.on_import)
-
-def on_import(self, import_item, user_id, created_features):
-    # import_item: ImportQueue; created_features: list of FeatureStore
-    pass
+    register_import_provider(MyImportProvider())
 ```
 
-Hook IDs are prefixed with your extension name. **Import** hooks run after a successful import; use them to update extension tables or trigger follow-up work (see caltopo's `handle_import`).
+See `example_extension` and `caltopo` for complete providers. There is no parallel hook registry.
 
 ## Quick reference
 
 | Topic | Where to look |
 |-------|----------------|
-| Manifest options | `example_extension/manifest.py`, `live_track/manifest.py` (map_route, public_share_route) |
+| Manifest options | `example_extension/manifest.toml`, `live_track/manifest.toml` (map_route, public_share_route) |
 | Backend URLs, views, models | `example_extension/src/backend/` |
-| AppConfig + import hook | `example_extension/src/backend/apps.py`, `caltopo/src/backend/apps.py` |
-| Frontend setup, nav, settings, API, platformState | `example_extension/src/frontend/src/main.js`, `ExampleSettings.vue` |
-| Tool instead of nav link | `exif_geotagger/src/frontend/src/main.js` |
+| AppConfig + ImportProvider | `example_extension/src/backend/apps.py`, `caltopo/src/backend/apps.py` |
+| Frontend setup, nav, settings, API, platformState | `example_extension/src/frontend/src/main.ts`, `ExampleSettings.vue` |
+| Shared types | `@geovault/extension-sdk` |
+| Tool instead of nav link | `exif_geotagger/src/frontend/src/main.ts` |
 | Composables + throttled map updates (larger extension) | `live_track/src/frontend/src/useLiveTrackMap.js`, `useLiveTrackSocket.js` |
 | Vite config factory | `frontend/vite.extension-shared.mjs`, any extension's `vite.config.js` |
 | Shared ESLint/tsconfig factories | `frontend/eslint.shared-config.mjs`, `frontend/tsconfig.extension-base.json` |
 
 ## Troubleshooting
 
-- **Extension not loading** — Check `extensions.<name>.enabled` in config; ensure `manifest.py` has `name` and `version`. `src/backend/` is optional — frontend-only extensions (e.g. `exif_geotagger`) register their frontend metadata without a Django app.
+- **Extension not loading** — Check `extensions.<name>.enabled` in config; ensure `manifest.toml` has `name` and `version` and that the folder name equals `name`. `src/backend/` is optional — frontend-only extensions (e.g. `exif_geotagger`) register their frontend metadata without a Django app.
 - **"No valid setup function"** — Use `export default setup` (default export); build must output a format the platform can load (UMD, via the shared Vite factory).
 - **`inject('platformState')` / `inject('extensionApi')` is `undefined`** — The component wasn't wrapped with `createRouteWrapper`, or `platformState`/`api` wasn't passed in the options object to `wrap()`.
-- **Hook error "outside of extension context"** — Register hooks only inside `extension_ready()` on an `ExtensionAppConfig` subclass.
+- **ImportProvider error "outside of extension context"** — Register providers only inside `extension_ready()` on an `ExtensionAppConfig` subclass.
 - **API 403 / wrong URL** — Use the injected `api` (e.g. `api.get('/path/')`); don't build extension API URLs by hand. Ensure the route exists in your backend `urls.py`. Remember the URL prefix is kebab-case (`my-extension`), even though the Python `name` is snake_case (`my_extension`).
 - **Settings not saving** — Use keys starting with `extensions.<name>.` and `platformState.saveUserSetting(...)`; ensure the user is authenticated.
 - **Duplicate/stale singleton behavior (e.g. two location watchers, two tile-source fetches)** — You imported a core module directly instead of using its `window.gv_core` equivalent. Check your `vite.config.js` build output for warnings about unresolved `platform/...` imports — only `platform/components/...` and `platform/assets/css/...` resolve; everything else must come from `window.gv_core`.

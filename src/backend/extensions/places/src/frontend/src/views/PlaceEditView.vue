@@ -84,9 +84,9 @@ import { usePlacesApi } from '@/composables/usePlacesApi';
 import { createPlacesMap, type PlacesMapController } from '@/utils/placesMaplibre';
 import { ensureUserSettingsLoaded, getDefaultMapSourceId } from '@/utils/placesMapSettings';
 import type { TileSourceSelectOption } from '@/utils/placesBasemap';
-import type { RouterLike } from '@/types/extension-setup';
+import type { RouterLike } from '@geovault/extension-sdk';
 import type { PlatformStateBridge } from '@/types/platform-state';
-import type { GeocodingResult } from '@/types/gv-core';
+import type { GeocodingResult } from '@geovault/extension-sdk';
 import type { MaplibreMap } from '@/types/maplibre';
 
 const PLACE_EDIT_SOURCE_ID = 'gv_places_overlay_edit_source';

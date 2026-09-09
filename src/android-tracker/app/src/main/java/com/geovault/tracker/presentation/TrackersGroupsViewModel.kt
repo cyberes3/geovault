@@ -706,7 +706,7 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
             _uiState.update { it.copy(isShareRecipientSuggestionsLoading = true) }
             try {
                 val loaded = trackerRepository.loadUsers()
-                val distinctUsers = loaded.users
+                val distinctUsers = loaded
                     .map { user -> UserItem(id = user.id, email = user.email.trim()) }
                     .filter { it.email.isNotEmpty() }
                     .distinctBy { it.email.lowercase(Locale.getDefault()) }

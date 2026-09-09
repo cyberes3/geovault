@@ -22,10 +22,9 @@ import com.geovault.tracker.Tracker
 import com.geovault.tracker.TrackerApi
 import com.geovault.tracker.TrackerBulkGeometryRequest
 import com.geovault.tracker.TrackerCheckRequest
-import com.geovault.tracker.TrackerCoordinatesResponse
 import com.geovault.tracker.TrackerCreateRequest
 import com.geovault.tracker.TrackerSettingsRequest
-import com.geovault.tracker.UsersResponse
+import com.geovault.tracker.UserItem
 import com.geovault.tracker.toDomainModel
 import com.geovault.tracker.toDomainModels
 import kotlinx.coroutines.CancellationException
@@ -60,7 +59,7 @@ class ApiTrackerManagementRepository(
             if (!forceRefresh) {
                 catalog.cachedTrackers()?.let { return@run it as Any }
             }
-            val incoming = executeApiCall { api -> api.getTrackers().execute() }.toDomainModels()
+            val incoming = executeApiCall { api -> api.getTrackers().execute() }.items.toDomainModels()
             // GEOMETRY-PRESERVATION: the trackers list endpoint returns metadata only
             // (no geometry, point_params, last_point, bbox). Merge each incoming metadata
             // snapshot onto the existing tracker (when present) so geometry fields survive
@@ -133,13 +132,6 @@ class ApiTrackerManagementRepository(
         } as Tracker
     }
 
-    override suspend fun loadTrackerCoordinates(trackerId: String): TrackerCoordinatesResponse {
-        @Suppress("UNCHECKED_CAST")
-        return readRequestGate.run("tracker-coordinates:$trackerId") {
-            executeApiCall { api -> api.getTrackerCoordinates(trackerId).execute() }.toDomainModel() as Any
-        } as TrackerCoordinatesResponse
-    }
-
     override suspend fun loadTrackersGeometry(trackerIds: List<String>): List<Tracker> {
         val normalizedIds = trackerIds.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
         if (normalizedIds.isEmpty()) {
@@ -150,7 +142,7 @@ class ApiTrackerManagementRepository(
         return readRequestGate.run(key) {
             val incomingTrackers = executeApiCall {
                 api -> api.getTrackersGeometry(TrackerBulkGeometryRequest(tracker_ids = normalizedIds)).execute()
-            }.toDomainModels()
+            }.items.toDomainModels()
             val mergedTrackers = cacheMutex.withLock {
                 val existingById = (catalog.cachedTrackers() ?: catalog.trackers.value).associateBy { it.id }
                 val mergedById = incomingTrackers.associate { incoming ->
@@ -281,11 +273,8 @@ class ApiTrackerManagementRepository(
         } as ByteArray
     }
 
-    override suspend fun loadUsers(): UsersResponse {
-        @Suppress("UNCHECKED_CAST")
-        return readRequestGate.run("users") {
-            executeApiCall { api -> api.getUsers().execute() } as Any
-        } as UsersResponse
+    override suspend fun loadUsers(): List<UserItem> {
+        return executeApiCall { api -> api.getUsers().execute() }.items
     }
 
     override suspend fun loadMapVisibility(forceRefresh: Boolean): MapVisibilityResponse {
@@ -325,6 +314,7 @@ class ApiTrackerManagementRepository(
                 catalog.cachedGroups()?.let { return@run it as Any }
             }
             val sortedGroups = executeApiCall { api -> api.getGroups().execute() }
+                .items
                 .sortedWith(NaturalSort.byName(Locale.getDefault()) { it.name })
             catalog.replaceGroups(sortedGroups)
             sortedGroups as Any

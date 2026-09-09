@@ -221,7 +221,7 @@ export default defineComponent({
   emits: ['update:modelValue'],
   computed: {
     // `userSettings/userSettings` is null until the store's initial fetch resolves.
-    ...mapGetters('userSettings', ['userSettings']),
+    ...mapGetters('userSettings', ['userSettings', 'settingsStatus']),
     // Narrowed views of `modelValue` for the DOM attribute bindings below, which each only
     // ever receive one specific type depending on `setting.type`.
     booleanModelValue(): boolean {
@@ -231,7 +231,7 @@ export default defineComponent({
       return this.modelValue == null ? '' : String(this.modelValue);
     },
     isLoading(): boolean {
-      const settingsLoading: boolean = this.userSettings === null;
+      const settingsLoading: boolean = this.userSettings === null && this.settingsStatus !== 'error';
 
       // For select dropdowns, also check if options are empty (e.g., default_basemap)
       // Options might be populated asynchronously after component creation

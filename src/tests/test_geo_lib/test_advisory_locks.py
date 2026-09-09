@@ -20,24 +20,28 @@ class TestHashToLockId:
     def test_hash_to_lock_id_deterministic(self):
         """Test that the same hash always produces the same lock ID."""
         test_hash = "abc123def456"
-        lock_id_1 = hash_to_lock_id(test_hash)
-        lock_id_2 = hash_to_lock_id(test_hash)
+        lock_id_1 = hash_to_lock_id(1, test_hash)
+        lock_id_2 = hash_to_lock_id(1, test_hash)
         assert lock_id_1 == lock_id_2
     
     def test_hash_to_lock_id_different_hashes(self):
         """Test that different hashes produce different lock IDs."""
         hash_1 = "abc123"
         hash_2 = "def456"
-        lock_id_1 = hash_to_lock_id(hash_1)
-        lock_id_2 = hash_to_lock_id(hash_2)
+        lock_id_1 = hash_to_lock_id(1, hash_1)
+        lock_id_2 = hash_to_lock_id(1, hash_2)
         assert lock_id_1 != lock_id_2
     
     def test_hash_to_lock_id_in_range(self):
         """Test that lock ID is within PostgreSQL bigint range."""
         test_hash = "a" * 64  # SHA256-like length
-        lock_id = hash_to_lock_id(test_hash)
+        lock_id = hash_to_lock_id(1, test_hash)
         # PostgreSQL bigint range: -2^63 to 2^63-1
         assert -(2**63) <= lock_id < 2**63
+
+    def test_same_hash_different_users_differ(self):
+        test_hash = "abc123"
+        assert hash_to_lock_id(1, test_hash) != hash_to_lock_id(2, test_hash)
 
 
 @pytest.mark.django_db
@@ -48,7 +52,7 @@ class TestAdvisoryLock:
         """Test that lock can be acquired and released."""
         test_hash = "test_hash_123"
         
-        with advisory_lock(test_hash) as lock:
+        with advisory_lock(1, test_hash) as lock:
             assert lock.acquired is True
         
         # After exiting context, lock should still be marked as acquired
@@ -61,7 +65,7 @@ class TestAdvisoryLock:
         lock_released = False
         
         try:
-            with advisory_lock(test_hash):
+            with advisory_lock(1, test_hash):
                 raise ValueError("Test exception")
         except ValueError:
             lock_released = True
@@ -71,14 +75,14 @@ class TestAdvisoryLock:
     def test_lock_acquire_called(self):
         """Test that pg_advisory_lock is called with correct lock ID."""
         test_hash = "test_hash_acquire"
-        expected_lock_id = hash_to_lock_id(test_hash)
+        expected_lock_id = hash_to_lock_id(1, test_hash)
         
         # Patch connection where it's used in the advisory_locks module
         with patch('geo_lib.utils.advisory_locks.connection') as mock_connection:
             mock_cursor = MagicMock()
             mock_connection.cursor.return_value = mock_cursor
             
-            with advisory_lock(test_hash):
+            with advisory_lock(1, test_hash):
                 pass
             
             # Check that pg_advisory_lock was called
@@ -101,7 +105,7 @@ class TestAdvisoryLock:
             mock_cursor.fetchone.return_value = (True,)  # Simulate successful unlock
             mock_connection.cursor.return_value = mock_cursor
             
-            with advisory_lock(test_hash):
+            with advisory_lock(1, test_hash):
                 pass
             
             # Check that pg_advisory_unlock was called
@@ -115,7 +119,7 @@ class TestAdvisoryLock:
         execution_log = []
         
         def worker(worker_id, delay):
-            with advisory_lock(test_hash):
+            with advisory_lock(1, test_hash):
                 execution_log.append(f"worker_{worker_id}_start")
                 time.sleep(delay)
                 execution_log.append(f"worker_{worker_id}_end")
@@ -151,7 +155,7 @@ class TestAdvisoryLock:
             
             # Django's connection is thread-local, so each thread automatically gets its own connection
             lock_acquire_start = time.time()
-            with advisory_lock(f"test_hash_{hash_suffix}"):
+            with advisory_lock(1, f"test_hash_{hash_suffix}"):
                 lock_acquired = time.time()
                 timing_log.append((f"{hash_suffix}_lock_acquired", lock_acquired - start_time))
                 timing_log.append((f"{hash_suffix}_connection_time", lock_acquired - lock_acquire_start))
@@ -211,7 +215,7 @@ class TestAdvisoryLockIntegration:
         def save_with_lock(worker_id):
             """Simulate saving a file hash with advisory lock."""
             try:
-                with advisory_lock(test_hash):
+                with advisory_lock(1, test_hash):
                     # Check if hash already exists
                     existing = ImportQueue.objects.filter(
                         user_id=user_id,

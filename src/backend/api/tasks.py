@@ -5,10 +5,24 @@ from celery import shared_task
 
 from api.services.replacement_cleanup_service import cleanup_orphaned_replacements
 from geo_lib.processing.jobs.helpers.status_tracker import status_tracker
+from geo_lib.importing.jobs.apply_task import run_apply_job
+from geo_lib.importing.jobs.bulk_apply_task import run_bulk_apply_job
+from geo_lib.importing.jobs.delete_task import run_delete_job
+from geo_lib.importing.jobs.dispatch import (
+    APPLY_CELERY_TASK_NAME,
+    BULK_APPLY_CELERY_TASK_NAME,
+    BULK_DELETE_CELERY_TASK_NAME,
+    DELETE_CELERY_TASK_NAME,
+    RECHECK_CELERY_TASK_NAME,
+)
+from geo_lib.importing.jobs.recheck_task import run_recheck_job
+from geo_lib.importing.jobs.user_lock import acquire_user_import_lock, release_lock
+from geo_lib.processing.jobs.bulk_delete_job import BulkDeleteJob
 from geo_lib.processing.jobs.process_job.dispatch import (
     ImportLockContention,
     IMPORT_CELERY_QUEUE_NAME,
     IMPORT_CELERY_TASK_NAME,
+    IMPORT_LOCK_TTL_BUFFER_SECONDS,
 )
 from geo_lib.processing.jobs.process_job.job import ProcessJob
 from geo_lib.utils.redis_connection import get_redis_connection
@@ -92,5 +106,80 @@ def process_import_job(self, job_id: str, job_data: Dict[str, Any]) -> None:
     """
     try:
         ProcessJob(status_tracker).process_locked(job_id, job_data)
+    except ImportLockContention:
+        raise self.retry(countdown=IMPORT_LOCK_RETRY_COUNTDOWN_SECONDS, max_retries=None)
+
+
+@shared_task(name=APPLY_CELERY_TASK_NAME, queue=IMPORT_CELERY_QUEUE_NAME, bind=True, max_retries=None)
+def apply_import_job(
+    self,
+    job_id: str,
+    item_id: int,
+    user_id: int,
+    import_custom_icons: bool,
+    extra_user_skipped: list,
+    extra_user_restored: list,
+    ceiling_seconds: int,
+) -> None:
+    try:
+        lock = acquire_user_import_lock(user_id, ceiling_seconds + IMPORT_LOCK_TTL_BUFFER_SECONDS)
+        try:
+            run_apply_job(
+                status_tracker, job_id, item_id, user_id,
+                import_custom_icons, extra_user_skipped, extra_user_restored, ceiling_seconds,
+            )
+        finally:
+            release_lock(lock)
+    except ImportLockContention:
+        raise self.retry(countdown=IMPORT_LOCK_RETRY_COUNTDOWN_SECONDS, max_retries=None)
+
+
+@shared_task(name=DELETE_CELERY_TASK_NAME, queue=IMPORT_CELERY_QUEUE_NAME)
+def delete_import_job(job_id: str, item_id: int, user_id: int, filename: str, ceiling_seconds: int) -> None:
+    run_delete_job(status_tracker, job_id, item_id, user_id, filename, ceiling_seconds)
+
+
+@shared_task(name=BULK_APPLY_CELERY_TASK_NAME, queue=IMPORT_CELERY_QUEUE_NAME, bind=True, max_retries=None)
+def bulk_apply_import_job(
+    self,
+    job_id: str,
+    item_ids: list,
+    user_id: int,
+    import_custom_icons: bool,
+    ceiling_seconds: int,
+) -> None:
+    try:
+        lock = acquire_user_import_lock(user_id, ceiling_seconds + IMPORT_LOCK_TTL_BUFFER_SECONDS)
+        try:
+            run_bulk_apply_job(status_tracker, job_id, item_ids, user_id, import_custom_icons, ceiling_seconds)
+        finally:
+            release_lock(lock)
+    except ImportLockContention:
+        raise self.retry(countdown=IMPORT_LOCK_RETRY_COUNTDOWN_SECONDS, max_retries=None)
+
+
+@shared_task(name=BULK_DELETE_CELERY_TASK_NAME, queue=IMPORT_CELERY_QUEUE_NAME)
+def bulk_delete_import_job(job_id: str, item_ids: list, user_id: int, ceiling_seconds: int) -> None:
+    BulkDeleteJob(status_tracker)._execute_job(job_id, {
+        'item_ids': item_ids,
+        'user_id': user_id,
+    })
+
+
+@shared_task(name=RECHECK_CELERY_TASK_NAME, queue=IMPORT_CELERY_QUEUE_NAME, bind=True, max_retries=None)
+def recheck_duplicates_job(
+    self,
+    job_id: str,
+    item_id: int,
+    user_id: int,
+    current_page: int,
+    ceiling_seconds: int,
+) -> None:
+    try:
+        lock = acquire_user_import_lock(user_id, ceiling_seconds + IMPORT_LOCK_TTL_BUFFER_SECONDS)
+        try:
+            run_recheck_job(status_tracker, job_id, item_id, user_id, current_page, ceiling_seconds)
+        finally:
+            release_lock(lock)
     except ImportLockContention:
         raise self.retry(countdown=IMPORT_LOCK_RETRY_COUNTDOWN_SECONDS, max_retries=None)

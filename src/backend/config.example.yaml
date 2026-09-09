@@ -191,7 +191,6 @@ reverse_geocoding:
   enabled: true
 
   # Distance thresholds for proximity tags (in miles)
-  city_proximity_miles: 5.0
   lake_proximity_miles: 1.0
 
   # Areas server (admin, protected areas, lakes, ocean). Required when reverse geocoding is enabled.
@@ -203,6 +202,10 @@ reverse_geocoding:
     max_batch_size: 100
     # Search radius in miles for nearest place (city/town/village) when admin has no city (default 3; 0 to disable).
     city_radius_miles: 3.0
+    # Ocean shoreline search radius in miles (default 1).
+    ocean_radius_miles: 1.0
+    # Major waterway search radius in miles (default 300 feet).
+    waterway_radius_miles: 0.056818181818181816
 
   # Number of points to sample along linestrings/multilinestrings for reverse geocoding. Points are equally spaced by distance along the track. Final tags are deduplicated per feature.
   linestring_geocode_points: 4

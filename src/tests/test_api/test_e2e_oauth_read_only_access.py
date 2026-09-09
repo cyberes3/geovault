@@ -19,7 +19,7 @@ class TestE2EOAuthReadOnlyAccess(TestCase):
     """
     E2E tests that read-only access works with API key authentication.
 
-    Covers: feature store (list, tags, single feature), import queue (history, jobs),
+    Covers: feature store (list, tag names, single feature), import queue (history, jobs),
     user settings, config, user storage, collections, extensions list.
     """
 
@@ -55,19 +55,20 @@ class TestE2EOAuthReadOnlyAccess(TestCase):
         return self.client.get(path, **{**self.auth_header, **kwargs})
 
     def test_read_only_access_feature_store(self):
-        """API key can read feature store: all features, user tags, single feature."""
+        """API key can read feature store: all features, tag names, single feature."""
         r = self._get("/api/features/all/")
         self.assertEqual(r.status_code, 200, r.content)
         data = json.loads(r.content)
-        self.assertIn("data", data)
-        self.assertIn("features", data["data"])
-        self.assertIsInstance(data["data"]["features"], list)
-        self.assertGreaterEqual(len(data["data"]["features"]), 1)
+        self.assertIn("items", data)
+        self.assertIsInstance(data["items"], list)
+        self.assertGreaterEqual(len(data["items"]), 1)
+        self.assertEqual(data["items"][0]["id"], self.feature.id)
 
-        r = self._get("/api/features/user-tags/")
+        r = self._get("/api/tags/names/")
         self.assertEqual(r.status_code, 200, r.content)
         data = json.loads(r.content)
-        self.assertIsInstance(data, list, "user-tags returns a list of tag strings")
+        self.assertIn("items", data)
+        self.assertIsInstance(data["items"], list)
 
         r = self._get(f"/api/feature/{self.feature.id}/")
         self.assertEqual(r.status_code, 200, r.content)
@@ -124,13 +125,14 @@ class TestE2EOAuthReadOnlyAccess(TestCase):
         r = self._get("/api/collections/")
         self.assertEqual(r.status_code, 200, r.content)
         data = json.loads(r.content)
-        self.assertIn("collections", data)
-        self.assertIsInstance(data["collections"], list)
+        self.assertIn("items", data)
+        self.assertIsInstance(data["items"], list)
 
         r = self._get("/api/extensions/")
         self.assertEqual(r.status_code, 200, r.content)
         data = json.loads(r.content)
-        self.assertIsInstance(data, list, "extensions endpoint returns a list")
+        self.assertIn("items", data)
+        self.assertIsInstance(data["items"], list)
 
     def test_read_only_access_import_queue_item_features_when_item_exists(self):
         """API key can read import queue item features when user has an import item."""
@@ -139,14 +141,13 @@ class TestE2EOAuthReadOnlyAccess(TestCase):
             user=self.user,
             original_filename="e2e_test.gpx",
             raw_file="",
-            geofeatures=[],
         )
         try:
             r = self._get(f"/api/item/import/get/features/{item.id}")
             self.assertEqual(r.status_code, 200, r.content)
             data = json.loads(r.content)
-            self.assertIn("geofeatures", data)
-            self.assertIsInstance(data["geofeatures"], list)
+            self.assertIn("items", data)
+            self.assertIsInstance(data["items"], list)
         finally:
             item.delete()
 
@@ -158,7 +159,7 @@ class TestE2EOAuthReadOnlyAccess(TestCase):
         endpoints = [
             "/api/user/status/",
             "/api/features/all/",
-            "/api/features/user-tags/",
+            "/api/tags/names/",
             "/api/item/import/history",
             "/api/item/import/jobs",
             "/api/user/settings/",

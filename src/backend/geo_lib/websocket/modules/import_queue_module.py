@@ -1,16 +1,28 @@
 import json
+from typing import Any, Optional
 
 from channels.db import database_sync_to_async
 from django.core.serializers.json import DjangoJSONEncoder
+from django.db.models import Count
+from pydantic import BaseModel, Field
 
 from api.models import ImportQueue
+from geo_lib.importing.draft_store import ImportDraftStore
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.processing.jobs.helpers.status_tracker import status_tracker
-from geo_lib.utils.redis_connection import get_redis_connection
 from geo_lib.websocket.base_module import BaseWebSocketModule
-from geo_lib.websocket.modules.file_duplicate_utils import check_all_features_duplicate
 
 logger = get_tagged_logger('websocket')
+
+
+class ImportQueueStatusCounts(BaseModel):
+    feature_count: int = Field(ge=-1)
+
+
+class ImportQueueStatusDelta(BaseModel):
+    item_id: int
+    status: Optional[str] = None
+    counts: ImportQueueStatusCounts
 
 
 class ImportQueueModule(BaseWebSocketModule):
@@ -40,9 +52,12 @@ class ImportQueueModule(BaseWebSocketModule):
             user=self.user,
             imported=False,
             replacement__isnull=True
+        ).annotate(
+            draft_count=Count('draft_features')
         ).order_by('-timestamp').values(
-            'id', 'geofeatures', 'original_filename', 'file_hash',
-            'log_id', 'timestamp', 'imported', 'unparsable', 'duplicate_features'
+            'id', 'original_filename', 'file_hash',
+            'log_id', 'timestamp', 'imported', 'unparsable',
+            'queue_status', 'duplicate_counts', 'draft_count', 'skip_intent'
         )
 
         data = json.loads(json.dumps(list(user_items), cls=DjangoJSONEncoder))
@@ -59,22 +74,6 @@ class ImportQueueModule(BaseWebSocketModule):
             job.import_queue_id for job in user_jobs
             if job.status.value == 'queued' and job.import_queue_id
         }
-
-        # Check if there are items queued in Redis for this user
-        # (This handles recovered jobs that haven't started processing yet)
-        queued_import_ids = set()
-        redis_client = get_redis_connection()
-        queue_key = f"processing_queue:user:{self.user.id}"
-
-        # Get all items in the queue without removing them (LRANGE 0 -1)
-        queue_items = redis_client.lrange(queue_key, 0, -1)
-        for item_json in queue_items:
-            try:
-                job_data = json.loads(item_json)
-                if 'import_queue_id' in job_data:
-                    queued_import_ids.add(job_data['import_queue_id'])
-            except (json.JSONDecodeError, TypeError) as e:
-                logger.error(f"Error parsing queue item for user {self.user.id}: {e}")
 
         # Build a map of file hash to items for duplicate detection (hash of raw file content)
         hash_to_items = {}
@@ -103,20 +102,14 @@ class ImportQueueModule(BaseWebSocketModule):
 
         # Process each item
         for i, item in enumerate(data):
-            count = len(item['geofeatures'])
-
-            # Check if this item is currently being processed
-            item['processing'] = item['id'] in active_job_ids
-
-            # Check if this item is queued (from job tracker or Redis queue)
-            item['queued'] = item['id'] in queued_job_ids or item['id'] in queued_import_ids
-
-            # Check if there's an error in the geofeatures or if marked as unparsable
-            if item.get('unparsable') or (count == 1 and item['geofeatures'] and isinstance(item['geofeatures'][0], dict) and 'error' in item['geofeatures'][0]):
+            count = item.get('draft_count') or 0
+            item['processing'] = item['id'] in active_job_ids or item.get('queue_status') == ImportQueue.STATUS_PROCESSING
+            item['queued'] = item['id'] in queued_job_ids
+            if item.get('unparsable') or item.get('queue_status') == ImportQueue.STATUS_FAILED:
                 item['feature_count'] = 0
                 item['processing_failed'] = True
             elif count == 0 and (item['processing'] or item['queued']):
-                item['feature_count'] = -1  # Special value to indicate processing or queued
+                item['feature_count'] = -1
                 item['processing_failed'] = False
             else:
                 item['feature_count'] = count
@@ -142,27 +135,25 @@ class ImportQueueModule(BaseWebSocketModule):
             # Check if all features in the file are duplicates
             # Only check if file_hash duplicate status hasn't been set (lower priority)
             if file_duplicate_status is None:
-                geofeatures = item.get('geofeatures', [])
-                duplicate_features = item.get('duplicate_features', [])
-                
-                if check_all_features_duplicate(geofeatures, duplicate_features):
+                counts = item.get('duplicate_counts') or {}
+                hash_count = int(counts.get('hash') or 0)
+                geometry_count = int(counts.get('geometry') or 0)
+                restored = len((item.get('skip_intent') or {}).get('user_restored_geometry') or [])
+                importable = count - hash_count - max(geometry_count - restored, 0)
+                if count > 0 and importable <= 0:
                     file_duplicate_status = 'all_features_duplicate'
 
             item['file_duplicate'] = {
                 'status': file_duplicate_status,
-                'original_filename': None  # We don't track the original filename in the queue list
+                'original_filename': None
             }
-
-            # Remove keys from response as they're not needed by frontend. geofeatures and
-            # duplicate_features in particular can be several MB of embedded GeoJSON per item
-            # (they're only needed above, to compute feature_count/file_duplicate_status) --
-            # leaving either in the payload risks exceeding the WebSocket message size limit
-            # on large/dupe-heavy imports.
-            del item['geofeatures']
-            del item['duplicate_features']
             del item['log_id']
             del item['file_hash']
             del item['unparsable']
+            item.pop('duplicate_counts', None)
+            item.pop('draft_count', None)
+            item.pop('queue_status', None)
+            item.pop('skip_intent', None)
 
         return data
 
@@ -184,6 +175,38 @@ class ImportQueueModule(BaseWebSocketModule):
         await self.send_to_client('item_imported', event['data'])
 
     async def status_updated(self, event):
-        """Handle status_updated event - refresh queue to update duplicate status."""
-        # Refresh the queue data to ensure duplicate status is up to date
-        await self.send_initial_state()
+        """Handle status_updated event as a single-item delta, not a full queue snapshot."""
+        data = event.get('data') or {}
+        item_id = data.get('item_id') or data.get('id') or data.get('import_queue_id')
+        if item_id is None:
+            logger.warning("import_queue status_updated missing item id")
+            return
+        delta = await database_sync_to_async(self.build_status_delta)(int(item_id), data)
+        await self.send_to_client('status_updated', delta)
+
+    def build_status_delta(self, item_id: int, event_data: dict) -> dict[str, Any]:
+        """Build `{ item_id, status, counts }` from the event plus the current queue row."""
+        item = ImportQueue.objects.filter(user=self.user, id=item_id).values(
+            'id', 'unparsable', 'imported', 'queue_status',
+        ).first()
+        status = event_data.get('status')
+        feature_count = 0
+        if item:
+            count = ImportDraftStore(ImportQueue.objects.get(id=item_id)).feature_count()
+            if item.get('unparsable') or item.get('queue_status') == ImportQueue.STATUS_FAILED:
+                feature_count = 0
+            elif count == 0 and status in ('processing', 'queued'):
+                feature_count = -1
+            else:
+                feature_count = count
+            if status is None:
+                if item['imported'] or item.get('queue_status') == ImportQueue.STATUS_IMPORTED:
+                    status = 'completed'
+                elif item['unparsable'] or item.get('queue_status') == ImportQueue.STATUS_FAILED:
+                    status = 'failed'
+        delta = ImportQueueStatusDelta(
+            item_id=item_id,
+            status=status,
+            counts=ImportQueueStatusCounts(feature_count=feature_count),
+        )
+        return delta.model_dump(mode='json')

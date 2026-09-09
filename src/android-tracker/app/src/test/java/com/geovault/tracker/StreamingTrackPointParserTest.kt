@@ -21,8 +21,9 @@ class StreamingTrackPointParserTest {
                   "type": "track_updated",
                   "data": {
                     "track_id": "t1",
-                    "point": [-71.0, 42.0, 1710000000],
-                    "props": {"acc": 4.2}
+                    "updates": [
+                      {"point": [-71.0, 42.0, 1710000000], "props": {"acc": 4.2}, "index": 0}
+                    ]
                   }
                 }
             """.trimIndent(),
@@ -69,8 +70,9 @@ class StreamingTrackPointParserTest {
                   "type": "track_updated",
                   "data": {
                     "track_id": "t1",
-                    "point": [-71.0, 42.0],
-                    "props": {}
+                    "updates": [
+                      {"point": [-71.0, 42.0], "props": {}, "index": 0}
+                    ]
                   }
                 }
             """.trimIndent(),
@@ -79,6 +81,26 @@ class StreamingTrackPointParserTest {
 
         assertEquals(1, points.size)
         assertEquals(1234L, points.first().timeMs)
+    }
+
+    @Test
+    fun parseTrackUpdatedMessages_ignoresTopLevelPointWithoutUpdates() {
+        val points = StreamingTrackPointParser.parseTrackUpdatedMessages(
+            rawJson = """
+                {
+                  "module": "live_track",
+                  "type": "track_updated",
+                  "data": {
+                    "track_id": "t1",
+                    "point": [-71.0, 42.0, 1710000000000],
+                    "props": {"acc": 4}
+                  }
+                }
+            """.trimIndent(),
+            nowMs = 99L,
+        )
+
+        assertEquals(0, points.size)
     }
 
     @Test

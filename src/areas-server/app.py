@@ -8,7 +8,8 @@ import sys
 import traceback
 from typing import Any, Dict, List, Optional, Tuple
 
-from flask import Flask, request, Response, render_template
+import redis
+from flask import Flask, request, Response
 
 from areas_lib import lookup_waterway
 from areas_lib.query import check_health, get_stats, query_single, query_batch
@@ -75,7 +76,6 @@ class _RedisResponseCache:
     """Redis-backed cache for GET /query responses; shared across Gunicorn workers."""
 
     def __init__(self, redis_url: str, ttl_seconds: int):
-        import redis
         self._client = redis.Redis.from_url(redis_url, decode_responses=True)
         self._client.ping()
         self._ttl = ttl_seconds
@@ -96,11 +96,17 @@ class _RedisResponseCache:
         self._client.setex(k, self._ttl, json.dumps(value))
 
     def clear(self) -> int:
-        """Delete all keys with the areas query prefix. Returns number of keys removed."""
-        keys = self._client.keys(_CACHE_KEY_PREFIX + "*")
-        if not keys:
-            return 0
-        return self._client.delete(*keys)
+        """Delete all keys with the areas query prefix via SCAN. Returns number of keys removed."""
+        deleted = 0
+        cursor = 0
+        pattern = _CACHE_KEY_PREFIX + "*"
+        while True:
+            cursor, keys = self._client.scan(cursor=cursor, match=pattern, count=200)
+            if keys:
+                deleted += int(self._client.delete(*keys))
+            if cursor == 0:
+                break
+        return deleted
 
 
 def get_cache():
@@ -109,6 +115,7 @@ def get_cache():
         try:
             _cache = _RedisResponseCache(REDIS_URL, CACHE_TTL_SECONDS)
         except Exception as e:
+            traceback.print_exc()
             logger.warning("Areas server Redis cache disabled: %s", e)
             _cache = None
     return _cache
@@ -196,12 +203,6 @@ def _error_response_with_traceback(exc: BaseException, status: int = 500) -> Res
         status=status,
         mimetype="application/json",
     )
-
-
-@app.route("/")
-def index():
-    """Serve the map UI: click to set lat/lon, submit to run a single-point query."""
-    return render_template("index.html")
 
 
 @app.route("/health")

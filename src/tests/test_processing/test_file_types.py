@@ -113,10 +113,9 @@ class TestFileTypes:
         """Test validating invalid file signature."""
         assert validate_file_signature(b'invalid', FileType.KML) is False
 
-    def test_detect_file_type_defaults_to_kml(self):
-        """Test that unknown files default to KML."""
-        file_type = detect_file_type(b'unknown content', 'unknown.xyz')
-        assert file_type == FileType.KML
+    def test_detect_file_type_rejects_unknown(self):
+        with pytest.raises(ValueError):
+            detect_file_type(b'unknown content', 'unknown.xyz')
 
     def test_detect_file_type_extension_overrides_content(self):
         """Test that extension takes precedence over content."""

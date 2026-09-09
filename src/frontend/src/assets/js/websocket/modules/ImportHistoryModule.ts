@@ -9,9 +9,7 @@ import type { BackendImportHistoryPagination, ImportHistoryItem } from '../../st
 export class ImportHistoryModule extends BaseModule {
     readonly moduleName = 'import_history';
 
-    initialize(): void {
-        super.initialize();
-
+    protected onInitialize(): void {
         this.subscribe('initial_state', (data: { items: ImportHistoryItem[]; pagination: BackendImportHistoryPagination }) => {
             void this.store.dispatch('importQueue/setImportHistory', data);
             void this.store.dispatch('importQueue/setImportHistoryLoaded', true);

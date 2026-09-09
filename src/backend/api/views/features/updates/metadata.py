@@ -7,13 +7,16 @@ from django.http import Http404, JsonResponse
 from django.views.decorators.http import require_http_methods
 
 from api.services.feature_service import FeatureService, FeatureValidationError
+from api.services.tag_service import TagService
 from api.utils.responses import error_response, handle_404
 from api.validation.decorators import validate_payload
 from api.validation.payloads.features import FeatureMetadataUpdate, BulkFeatureUpdatePayload
 from geo_lib.feature_id import generate_geojson_hash
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.processing.tagging.modules.feature_date import update_feature_date_tags
-from geo_lib.processing.tagging.const_strings import CONST_INTERNAL_TAGS, filter_protected_tags, prepare_user_tags
+from geo_lib.tags.protected import TagValidationError
+from geo_lib.tags.tag_writer import TagWriter
+from geo_lib.types.feature_properties import ICON_READ_ALIASES
 from geo_lib.validation.coordinate.coordinate_validation import validate_coordinates_for_geometry_type
 from geo_lib.validation.coordinate.helpers import CoordinateValidationError
 from geo_lib.validation.geometry_validation import GeometryValidationError
@@ -129,19 +132,10 @@ def update_feature_metadata(request, feature_id, validated_data):
     # Merge update fields into the feature properties
     for field, value in update_fields.items():
         if field == 'tags':
-            # Validate tags
             try:
                 FeatureService.validate_user_tags(value)
             except FeatureValidationError as e:
                 return error_response(str(e), 400)
-
-            # Strip system tags from incoming tags (defensive - user shouldn't be able to add them)
-            user_tags = filter_protected_tags(value, CONST_INTERNAL_TAGS)
-
-            # Prepare user tags (lowercase and deduplicate)
-            user_tags = prepare_user_tags(user_tags)
-
-            merged_feature['properties']['tags'] = user_tags
         elif field == 'name':
             merged_feature['properties']['name'] = value
         elif field == 'description':
@@ -151,10 +145,11 @@ def update_feature_metadata(request, feature_id, validated_data):
         elif field == 'icon':
             # Handle icon - empty string means remove icon
             if value == '':
-                # Remove all possible icon properties
-                for icon_prop in ['icon', 'icon-href', 'iconUrl', 'icon_url', 'marker-icon', 'marker-symbol', 'symbol']:
+                for icon_prop in ICON_READ_ALIASES:
                     merged_feature['properties'].pop(icon_prop, None)
             else:
+                for icon_prop in ICON_READ_ALIASES:
+                    merged_feature['properties'].pop(icon_prop, None)
                 merged_feature['properties']['icon'] = value
         elif field == 'marker-color':
             merged_feature['properties']['marker-color'] = value
@@ -185,9 +180,20 @@ def update_feature_metadata(request, feature_id, validated_data):
         normalized_feature['properties']['geojson_hash'] = generate_geojson_hash(normalized_feature)
         feature.geojson_hash = normalized_feature['properties']['geojson_hash']
 
-    # Update the feature's geojson data
+    # Update the feature's geojson data and keep PostGIS geometry in sync
     feature.geojson = normalized_feature
+    if 'coordinates' in update_fields:
+        synced_geometry = FeatureService.geometry_from_geojson(normalized_feature)
+        if synced_geometry is not None:
+            feature.geometry = synced_geometry
     feature.save()
+    if 'tags' in update_fields:
+        try:
+            TagService.set_user_tags(feature, update_fields['tags'])
+        except TagValidationError as exc:
+            return error_response(exc.message, 400)
+    else:
+        TagWriter.reindex_feature(feature)
 
     return JsonResponse({
         'message': f'Feature metadata updated successfully. Updated fields: {", ".join(updated_fields)}',
@@ -270,11 +276,7 @@ def bulk_update_features_metadata(request, validated_data):
                     merged_feature['properties'] = {}
 
                 for field, value in update_fields.items():
-                    if field == 'tags':
-                        user_tags = filter_protected_tags(value, CONST_INTERNAL_TAGS)
-                        user_tags = prepare_user_tags(user_tags)
-                        merged_feature['properties']['tags'] = user_tags
-                    else:
+                    if field != 'tags':
                         merged_feature['properties'][field] = value
 
                 # Update system tags if created date was changed
@@ -295,9 +297,19 @@ def bulk_update_features_metadata(request, validated_data):
                     })
                     continue
 
-                # Update the feature's geojson data
                 feature.geojson = normalized_feature
                 feature.save()
+                if 'tags' in update_fields:
+                    try:
+                        TagService.set_user_tags(feature, update_fields['tags'])
+                    except TagValidationError as exc:
+                        errors.append({
+                            'feature_id': feature_id,
+                            'error': exc.message
+                        })
+                        continue
+                else:
+                    TagWriter.reindex_feature(feature)
 
                 updated_count += 1
 

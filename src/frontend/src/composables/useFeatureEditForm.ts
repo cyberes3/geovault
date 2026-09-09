@@ -104,6 +104,7 @@ export function useFeatureEditForm(options: UseFeatureEditFormOptions) {
     });
 
     const rawJsonInput = ref('');
+    const initialCoordinatesJson = ref('');
     const hasPngIcon = ref(false);
     const isSaving = ref(false);
     const errorMessage = ref('');
@@ -195,6 +196,7 @@ export function useFeatureEditForm(options: UseFeatureEditFormOptions) {
         currentIconUrl.value = iconUrl;
 
         updateRawJson();
+        initialCoordinatesJson.value = rawJsonInput.value;
 
         iconUploadError.value = '';
         iconRemoved.value = false;
@@ -266,7 +268,7 @@ export function useFeatureEditForm(options: UseFeatureEditFormOptions) {
             metadataUpdates.stroke = formData.strokeColor;
         }
 
-        if (rawJsonInput.value.trim()) {
+        if (rawJsonInput.value.trim() && rawJsonInput.value !== initialCoordinatesJson.value) {
             let coordinatesData: unknown;
             try {
                 coordinatesData = JSON.parse(rawJsonInput.value);

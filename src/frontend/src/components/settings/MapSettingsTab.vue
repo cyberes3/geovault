@@ -67,7 +67,7 @@ import settingsConfig from '@/components/settings-data.json';
 import SettingsInput from './components/SettingsInput.vue';
 import HiddenFeaturesWidget from '@/components/map/HiddenFeaturesWidget.vue';
 import { clearHiddenFeatures } from '@/utils/userSettingsService';
-import { tileSourceCatalog } from '@/utils/map/openlayers';
+import { tileSourceCatalog } from '@/utils/map/tileSources/sharedCatalog';
 import hiddenFeaturesManager from '@/utils/hiddenFeaturesManager';
 import { toastApiError } from '@/utils/apiError';
 import { useSettingsSection, type SettingDefinition } from '@/composables/useSettingsSection';

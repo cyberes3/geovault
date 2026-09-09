@@ -70,7 +70,7 @@ import { copyToClipboard } from '@/utils/clipboard';
 import { filterPlaces, formatCoords, googleMapsUrl } from '@/utils/placeFormatters';
 import { buildPlacePayload } from '@/utils/placePayload';
 import type { TileSourceSelectOption } from '@/utils/placesBasemap';
-import type { RouterLike } from '@/types/extension-setup';
+import type { RouterLike } from '@geovault/extension-sdk';
 import type { PlatformStateBridge } from '@/types/platform-state';
 import type { PlaceFeature } from '@/types/places';
 import type { MaplibreMapMouseEvent } from '@/types/maplibre';

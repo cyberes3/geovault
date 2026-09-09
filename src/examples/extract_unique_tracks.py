@@ -4,7 +4,7 @@ Example script demonstrating how to use GeoVault's processing API to extract uni
 from backup KML files that are not in an Archive directory.
 
 This script shows how to:
-- Use KMLProcessor and GPXProcessor to convert files to GeoJSON
+- Use FormatReaders to convert files to GeoJSON
 - Use generate_geojson_hash for duplicate detection
 - Compare tracks between multiple sources
 - Convert GeoJSON back to GPX format
@@ -16,12 +16,13 @@ Example:
     python extract_unique_tracks.py ./Archive ./backup1.kml ./backup2.kml
 """
 
+import argparse
+import json
 import os
 import sys
-import argparse
 from pathlib import Path
-from typing import Dict, List, Set, Any
-import json
+from types import SimpleNamespace
+from typing import Any, Dict, List, Set
 
 # Add backend to path
 backend_path = Path(__file__).parent.parent / 'backend'
@@ -38,9 +39,9 @@ except:
     pass  # Django setup may not be needed for basic conversion
 
 from geo_lib.feature_id import generate_geojson_hash
-from geo_lib.processing.processors.kml_processor import KMLProcessor
-from geo_lib.processing.processors.gpx_processor import GPXProcessor
-from geo_lib.processing.logging import ImportLog
+from geo_lib.importing.readers.gpx import GpxReader
+from geo_lib.importing.readers.kml import KmlReader
+from geo_lib.importing.session import RawFile
 
 
 def load_archive_tracks(archive_dir: Path) -> Dict[str, Dict[str, Any]]:
@@ -60,13 +61,11 @@ def load_archive_tracks(archive_dir: Path) -> Dict[str, Dict[str, Any]]:
                 file_data = f.read()
             
             # Create processor with correct parameters
-            processor = GPXProcessor(
-                file_data=file_data,
-                filename=gpx_file.name
+            session = SimpleNamespace(
+                raw_file=RawFile.from_bytes(file_data),
+                filename=gpx_file.name,
             )
-            
-            # Convert to GeoJSON
-            geojson_data = processor.convert_to_geojson()
+            geojson_data = GpxReader().read(session)
             
             # Extract features
             features = geojson_data.get('features', [])
@@ -102,13 +101,11 @@ def extract_tracks_from_kml(kml_file: Path) -> List[Dict[str, Any]]:
             file_data = f.read()
         
         # Create processor with correct parameters
-        processor = KMLProcessor(
-            file_data=file_data,
-            filename=kml_file.name
+        session = SimpleNamespace(
+            raw_file=RawFile.from_bytes(file_data),
+            filename=kml_file.name,
         )
-        
-        # Convert to GeoJSON
-        geojson_data = processor.convert_to_geojson()
+        geojson_data = KmlReader().read(session)
         
         # Extract features
         features = geojson_data.get('features', [])

@@ -14,6 +14,7 @@ from geo_lib.feature_id import generate_geojson_hash
 from geo_lib.processing.jobs.import_job import ImportJob
 from geo_lib.processing.jobs.helpers.status_tracker import ProcessingStatus, status_tracker
 
+from tests.test_utils.import_queue import queue_with_drafts, draft_geojson
 User = get_user_model()
 
 
@@ -76,13 +77,12 @@ class TestImportJobEndToEnd(TransactionTestCase):
     def test_import_job_end_to_end_success(self):
         """Test full job lifecycle with successful import."""
         # Create import item
-        import_item = ImportQueue.objects.create(
+        import_item = queue_with_drafts(
             user=self.user,
             original_filename='e2e_test.kml',
             raw_file='<kml></kml>',
-            geofeatures=[self.feature1, self.feature2, self.feature3],
-            duplicate_features=[],
-            skipped_feature_ids=[],
+            features=[self.feature1, self.feature2, self.feature3],
+            skipped=[],
             imported=False
         )
         
@@ -131,13 +131,12 @@ class TestImportJobEndToEnd(TransactionTestCase):
     def test_import_job_already_imported(self):
         """Test skipping items that are already imported."""
         # Create already-imported item
-        import_item = ImportQueue.objects.create(
+        import_item = queue_with_drafts(
             user=self.user,
             original_filename='already_imported.kml',
             raw_file='<kml></kml>',
-            geofeatures=[self.feature1],
-            duplicate_features=[],
-            skipped_feature_ids=[],
+            features=[self.feature1],
+            skipped=[],
             imported=True  # Already imported
         )
         
@@ -163,13 +162,12 @@ class TestImportJobEndToEnd(TransactionTestCase):
     def test_import_job_all_features_skipped(self):
         """Test handling when all features are duplicates/skipped."""
         # Create import item where all features are manually skipped
-        import_item = ImportQueue.objects.create(
+        import_item = queue_with_drafts(
             user=self.user,
             original_filename='all_skipped.kml',
             raw_file='<kml></kml>',
-            geofeatures=[self.feature1, self.feature2],
-            duplicate_features=[],
-            skipped_feature_ids=[self.hash1, self.hash2],  # All skipped
+            features=[self.feature1, self.feature2],
+            skipped=[self.hash1, self.hash2],  # All skipped
             imported=False
         )
         
@@ -202,13 +200,12 @@ class TestImportJobEndToEnd(TransactionTestCase):
     def test_import_job_finalizes_and_broadcasts(self):
         """Test that finalize_import_item is called and broadcasts happen."""
         # Create import item
-        import_item = ImportQueue.objects.create(
+        import_item = queue_with_drafts(
             user=self.user,
             original_filename='finalize_test.kml',
             raw_file='<kml></kml>',
-            geofeatures=[self.feature1],
-            duplicate_features=[],
-            skipped_feature_ids=[],
+            features=[self.feature1],
+            skipped=[],
             imported=False
         )
         
@@ -242,13 +239,12 @@ class TestImportJobEndToEnd(TransactionTestCase):
     def test_import_job_marks_item_imported(self):
         """Test that import_item.imported is set to True after success."""
         # Create import item
-        import_item = ImportQueue.objects.create(
+        import_item = queue_with_drafts(
             user=self.user,
             original_filename='mark_imported.kml',
             raw_file='<kml></kml>',
-            geofeatures=[self.feature1, self.feature2],
-            duplicate_features=[],
-            skipped_feature_ids=[],
+            features=[self.feature1, self.feature2],
+            skipped=[],
             imported=False
         )
         
@@ -278,13 +274,12 @@ class TestImportJobEndToEnd(TransactionTestCase):
     def test_import_job_with_custom_icons_flag(self):
         """Test that import_custom_icons parameter is passed through."""
         # Create import item
-        import_item = ImportQueue.objects.create(
+        import_item = queue_with_drafts(
             user=self.user,
             original_filename='custom_icons.kml',
             raw_file='<kml></kml>',
-            geofeatures=[self.feature1],
-            duplicate_features=[],
-            skipped_feature_ids=[],
+            features=[self.feature1],
+            skipped=[],
             imported=False
         )
         
@@ -354,13 +349,12 @@ class TestImportJobWithManualSkips(TransactionTestCase):
     def test_manual_skip_via_saved_ids(self):
         """Test that manually skipped features (saved in DB) are respected."""
         # Create import item with one feature manually skipped
-        import_item = ImportQueue.objects.create(
+        import_item = queue_with_drafts(
             user=self.user,
             original_filename='manual_skip_saved.kml',
             raw_file='<kml></kml>',
-            geofeatures=self.features,
-            duplicate_features=[],
-            skipped_feature_ids=[self.hashes[1]],  # Skip feature 1
+            features=self.features,
+            skipped=[self.hashes[1]],  # Skip feature 1
             imported=False
         )
         
@@ -387,13 +381,12 @@ class TestImportJobWithManualSkips(TransactionTestCase):
     def test_manual_skip_via_parameter(self):
         """Test that manually skipped features (passed as parameter) are respected."""
         # Create import item with no saved skips
-        import_item = ImportQueue.objects.create(
+        import_item = queue_with_drafts(
             user=self.user,
             original_filename='manual_skip_param.kml',
             raw_file='<kml></kml>',
-            geofeatures=self.features,
-            duplicate_features=[],
-            skipped_feature_ids=[],
+            features=self.features,
+            skipped=[],
             imported=False
         )
         
@@ -403,7 +396,7 @@ class TestImportJobWithManualSkips(TransactionTestCase):
             item_id=import_item.id,
             user_id=self.user.id,
             import_custom_icons=True,
-            skipped_feature_ids=[self.hashes[0], self.hashes[2]]  # Skip features 0 and 2
+            skipped=[self.hashes[0], self.hashes[2]]  # Skip features 0 and 2
         )
         
         # Wait for completion

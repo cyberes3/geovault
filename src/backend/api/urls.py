@@ -4,61 +4,42 @@ from api.views.assets.fonts import serve_font_glyph
 from api.views.assets.icons import serve_user_icon, serve_system_icon, upload_icon, recolor_icon, serve_icon_registry
 from api.views.collections.bulk_operations import apply_bulk_operations_to_collection
 from api.views.collections.management import (
-    list_collections,
-    create_collection,
-    get_collection,
-    update_collection,
-    delete_collection,
-    get_collection_features,
+    collections_collection,
+    collection_detail,
 )
 from api.views.app_releases import app_download_redirect, get_app_releases
 from website.internal_apps import internal_apps_page
 from api.views.config import get_config
 from api.views.features.creation import create_quick_point
-from api.views.features.deletion import delete_feature, bulk_delete_features_by_tag
+from api.views.features.deletion import delete_feature
 from api.views.features.export.views import export_feature_kmz
 from api.views.features.get_data_extent_hint import get_data_extent_hint
 from api.views.features.get_geojson_data import get_geojson_data
 from api.views.features.retrieval import get_feature, get_feature_elevations_external, get_feature_elevations_internal
 from api.views.features.search import (
-    get_features_by_tag,
-    get_user_tags,
     search_features,
-    filter_features_by_tags,
     get_all_features,
 )
+from api.views.tags.catalog import list_tags, list_tag_names, list_tag_features
+from api.views.tags.mutations import tag_detail, replace_feature_tags
 from api.views.features.updates.bulk_operations import apply_bulk_operations_to_tag
-from api.views.features.updates.geometry import update_feature, apply_replacement_geometry
+from api.views.features.updates.geometry import update_feature
+from api.views.features.updates.replacement import apply_replacement_geometry
 from api.views.features.updates.metadata import update_feature_metadata, bulk_update_features_metadata
 from api.views.features.updates.tags import regenerate_feature_tags
 from api.views.health import health_check
 from api.views.imports.bulk_operations import save_bulk_operations, get_bulk_operations, save_skip_state
 from api.views.imports.duplicates import recheck_duplicates
-from api.views.imports.queue_management import (
-    get_processing_status,
-    get_user_processing_jobs,
-    get_all_job_statuses,
-    list_import_history,
-    fetch_import_history_item,
-    get_import_queue_item_features,
-    search_import_item_features,
-    delete_import_item,
-    update_import_item,
-    import_to_featurestore,
-)
+from api.views.imports.history import fetch_import_history_item, list_import_history
+from api.views.imports.item_features import get_import_queue_item_features, search_import_item_features
+from api.views.imports.item_mutations import delete_import_item, import_to_featurestore, update_import_item
+from api.views.imports.queue_status import get_all_job_statuses, get_processing_status, get_user_processing_jobs
 from api.views.imports.upload import upload_item
 from api.views.geocoding import geocoding_search
 from api.views.geolocation import get_user_location, get_location_by_ip
 from api.views.tiles import tile_proxy, get_tile_sources, style_proxy
-from api.views.sharing.collections import get_public_collection_share
-from api.views.sharing.features import (
-    get_feature_share,
-    update_feature_share,
-    get_public_feature_share,
-    get_public_feature_elevations_internal
-)
-from api.views.sharing.management import create_share, list_shares, delete_share
-from api.views.sharing.tags import get_public_share_info, get_public_share
+from api.views.shares.owner import shares_collection, share_detail
+from api.views.shares.public import share_elevations, share_features, share_info, share_track
 from api.views.user.settings import (
     get_user_settings,
     update_user_setting,
@@ -66,7 +47,7 @@ from api.views.user.settings import (
     bulk_update_hidden_features,
 )
 from api.views.extensions.management import list_extensions
-from website.extensions.extension_loader import get_extension_registry
+from website.extensions.registry import get_extension_registry
 
 urlpatterns = [
     # Import endpoints
@@ -89,14 +70,15 @@ urlpatterns = [
     # GeoJSON API endpoints
     path('geojson/', get_geojson_data),
     path('geojson/extent-hint/', get_data_extent_hint),
-    path('features/by-tag/', get_features_by_tag),
-    path('features/user-tags/', get_user_tags),
     path('features/search/', search_features),
-    path('features/filter-by-tags/', filter_features_by_tags),
     path('features/all/', get_all_features),
     path('features/bulk-update-metadata/', bulk_update_features_metadata),
-    path('features/bulk-delete-by-tag/', bulk_delete_features_by_tag),
     path('features/bulk-operations/by-tag/<str:tag_name>/', apply_bulk_operations_to_tag),
+    path('features/<int:feature_id>/tags/', replace_feature_tags),
+    path('tags/', list_tags),
+    path('tags/names/', list_tag_names),
+    path('tags/<str:name>/features/', list_tag_features),
+    path('tags/<str:name>/', tag_detail),
     path('features/quick-point/create/', create_quick_point),
 
     # Feature endpoints
@@ -138,24 +120,16 @@ urlpatterns = [
     path('location/ip/', get_location_by_ip),
 
     # Sharing API endpoints
-    path('sharing/create/', create_share),
-    path('sharing/list/', list_shares),
-    path('sharing/<str:share_id>/', delete_share),
-    path('sharing/public/info/<str:share_id>/', get_public_share_info),
-    path('sharing/public/<str:share_id>/', get_public_share),
-    path('sharing/public/collection/<str:share_id>/', get_public_collection_share),
-    path('sharing/features/<int:feature_id>/', get_feature_share),
-    path('sharing/features/<int:feature_id>/update/', update_feature_share),
-    path('sharing/public/feature/<str:share_id>/', get_public_feature_share),
-    path('sharing/public/feature/<str:share_id>/elevations/internal/', get_public_feature_elevations_internal),
+    path('shares/', shares_collection),
+    path('shares/<str:share_id>/info/', share_info),
+    path('shares/<str:share_id>/features/', share_features),
+    path('shares/<str:share_id>/elevations/', share_elevations),
+    path('shares/<str:share_id>/track/', share_track),
+    path('shares/<str:share_id>/', share_detail),
 
     # Collections API endpoints
-    path('collections/', list_collections),
-    path('collections/create/', create_collection),
-    path('collections/<uuid:collection_id>/', get_collection),
-    path('collections/<uuid:collection_id>/update/', update_collection),
-    path('collections/<uuid:collection_id>/delete/', delete_collection),
-    path('collections/<uuid:collection_id>/features/', get_collection_features),
+    path('collections/', collections_collection),
+    path('collections/<uuid:collection_id>/', collection_detail),
     path('collections/<uuid:collection_id>/bulk-operations/', apply_bulk_operations_to_collection),
 
     # User settings API endpoints

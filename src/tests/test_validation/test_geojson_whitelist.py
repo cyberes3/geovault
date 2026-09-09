@@ -519,3 +519,23 @@ class TestGeoJSONWhitelist:
         result = validate_and_normalize_geojson_feature(feature)
         assert result['properties']['name'] == ''
 
+    def test_icon_aliases_ingest_to_canonical_icon(self):
+        """Icon read aliases collapse to the canonical `icon` property."""
+        feature = {
+            'type': 'Feature',
+            'geometry': {
+                'type': 'Point',
+                'coordinates': [10.0, 20.0]
+            },
+            'properties': {
+                'name': 'Icon Alias',
+                'icon-href': 'assets/icons/test.png',
+                'iconUrl': 'assets/icons/other.png',
+            }
+        }
+        result = validate_and_normalize_geojson_feature(feature)
+        assert result['properties']['icon'] == 'assets/icons/test.png'
+        assert 'icon-href' not in result['properties']
+        assert 'iconUrl' not in result['properties']
+        assert 'icon_url' not in result['properties']
+

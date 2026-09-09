@@ -6,17 +6,18 @@
 import { ref, shallowRef, type ComputedRef, type Ref, type ShallowRef } from 'vue';
 import type { Map as MapLibreMap, Marker } from 'maplibre-gl';
 import { getLoadedMaplibreGl } from '@/utils/map/maplibre/lazyMaplibreGl.js';
-import { getUserLocation as fetchUserLocation, type UserLocation } from '@/api/services/locationApi';
-import { createUserLocationMarker, updateUserLocationMarker, removeUserLocationMarker } from '@/utils/map/maplibre';
-import { geolocationManager } from '@/utils/map/geolocationManager';
-import { getLocationDisplayName as formatLocationDisplayName, getMapRecenterFromUserLocation } from '@/utils/map/mapConfigUtils';
+import type { UserLocation } from '@/api/services/locationApi';
+import { geolocationManager, type GeolocationErrorLike } from '@/utils/map/geolocationManager';
+import { getMapRecenterFromUserLocation } from '@/utils/map/mapConfigUtils';
 import { MAX_ZOOM_LEVEL } from '@/utils/map/maplibre/mapInitialization.js';
+import { LocationRuntime } from '@/utils/map/common/LocationRuntime';
 import { toast } from '@/utils/toast';
 import type { TrackingState } from './mapPageTypes';
 
 export interface MapGeolocationDeps {
     map: ShallowRef<MapLibreMap | null>;
     isMapshareRoute: ComputedRef<boolean>;
+    location: LocationRuntime;
     /** Performs a camera move then re-triggers the current bbox data load (see `useFeatureData`). */
     navigateAndRefresh: (navigationFn: () => void, clearAllBounds?: boolean) => Promise<void>;
 }
@@ -29,20 +30,26 @@ export interface GeocodingResult {
 }
 
 export function useMapGeolocation(deps: MapGeolocationDeps) {
-    const { map, isMapshareRoute, navigateAndRefresh } = deps;
+    const { map, isMapshareRoute, navigateAndRefresh, location } = deps;
 
-    const userLocation: Ref<UserLocation | null> = ref(null);
-    const trackingState: Ref<TrackingState> = ref('disabled');
-    const locationMarker: ShallowRef<Marker | null> = shallowRef(null);
-    const hasInitialZoomed = ref(false);
+    const userLocation: Ref<UserLocation | null> = ref(location.displayLocation);
+    const trackingState: Ref<TrackingState> = ref(location.toUiTrackingState());
     const geocodingMarker: ShallowRef<Marker | null> = shallowRef(null);
 
+    function syncFromRuntime(): void {
+        userLocation.value = location.displayLocation;
+        trackingState.value = location.toUiTrackingState();
+    }
+
+    location.onChange = syncFromRuntime;
+
     async function getUserLocation(): Promise<void> {
-        userLocation.value = await fetchUserLocation();
+        await location.fetchIpHint();
+        syncFromRuntime();
     }
 
     function getLocationDisplayName(): string {
-        return formatLocationDisplayName(userLocation.value);
+        return location.displayName();
     }
 
     /**
@@ -102,63 +109,35 @@ export function useMapGeolocation(deps: MapGeolocationDeps) {
         });
     }
 
-    async function handleLocationUpdate(coords: UserLocation): Promise<void> {
-        userLocation.value = coords;
-
-        if (!locationMarker.value && map.value) {
-            locationMarker.value = await createUserLocationMarker(map.value, coords) as Marker;
-        } else if (locationMarker.value) {
-            updateUserLocationMarker(locationMarker.value, coords);
-        }
-
-        if (trackingState.value === 'locked') {
-            const shouldZoom = !hasInitialZoomed.value;
-            centerToUserLocation(shouldZoom);
-            if (shouldZoom) {
-                hasInitialZoomed.value = true;
-            }
-        }
-    }
-
-    function handleLocationError(error: { code?: number; message?: string }): void {
+    function handleLocationError(error: GeolocationErrorLike): void {
         console.error('Geolocation error:', error);
-        trackingState.value = 'disabled';
-        hasInitialZoomed.value = false;
-        if (locationMarker.value) {
-            removeUserLocationMarker(locationMarker.value);
-            locationMarker.value = null;
-        }
-
-        if (error.code === 1) {
+        const code = 'code' in error ? error.code : undefined;
+        if (code === 1) {
             toast.error('Location permission denied.');
         } else {
             toast.error('Failed to get your location.');
         }
+        syncFromRuntime();
     }
 
     async function toggleLocationTracking(): Promise<void> {
-        if (trackingState.value === 'locked') {
+        if (location.mode === 'follow') {
             return;
         }
 
-        if (trackingState.value === 'disabled') {
+        if (location.mode === 'off') {
             const permission = await geolocationManager.checkPermission();
             if (permission === 'denied') {
                 toast.error('Location permission denied. Please enable it in your browser settings.');
                 return;
             }
+            await location.startWatch(map.value, 'follow', handleLocationError);
+            return;
+        }
 
-            trackingState.value = 'locked';
-            hasInitialZoomed.value = false;
-            geolocationManager.startTracking(
-                (coords: UserLocation) => { void handleLocationUpdate(coords); },
-                (error: { code?: number; message?: string }) => { handleLocationError(error); },
-            );
-        } else {
-            trackingState.value = 'locked';
-            if (userLocation.value) {
-                centerToUserLocation(false);
-            }
+        location.follow();
+        if (location.displayLocation) {
+            centerToUserLocation(false);
         }
     }
 
@@ -246,18 +225,14 @@ export function useMapGeolocation(deps: MapGeolocationDeps) {
 
     /** Stop tracking and remove the location marker; call from `beforeUnmount`. */
     function cleanup(): void {
-        geolocationManager.stopTracking();
-        hasInitialZoomed.value = false;
-        if (locationMarker.value) {
-            removeUserLocationMarker(locationMarker.value);
-            locationMarker.value = null;
-        }
+        location.onChange = null;
+        location.cleanup();
+        syncFromRuntime();
     }
 
     return {
         userLocation,
         trackingState,
-        locationMarker,
         geocodingMarker,
         getUserLocation,
         getLocationDisplayName,
@@ -265,11 +240,11 @@ export function useMapGeolocation(deps: MapGeolocationDeps) {
         hasUsableUserLocationForRecenter,
         centerToUserLocation,
         centerToHomeExtent,
-        handleLocationUpdate,
         handleLocationError,
         toggleLocationTracking,
         handleGeocodingResult,
         clearGeocodingMarker,
         cleanup,
+        syncFromRuntime,
     };
 }

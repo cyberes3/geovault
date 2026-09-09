@@ -335,7 +335,6 @@ class TestUserStorageEndpoint(TestCase):
             user=self.user,
             original_filename='test.kml',
             raw_file=kml_content,
-            geofeatures=[]
         )
         response = self.client.get('/api/user/storage/usage/')
         data = json.loads(response.content)

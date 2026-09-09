@@ -7,7 +7,6 @@ Re-exports from location_tags. Other modules:
 - areas_server_client.py: HTTP client for areas server (admin, protected areas, lakes, ocean, ski_resort)
 - admin_boundaries.py: Administrative hierarchy parser (tests only; production uses areas server)
 - protected_areas.py: Protected area classification and parser (tests only; production uses areas server)
-- cache.py: Caching utilities
 - osm_tags.py: OSM tag utilities
 
 PUBLIC API:
@@ -27,9 +26,3 @@ from geo_lib.reverse_geocoding.location_tags import (
     batch_reverse_geocode_coordinates,
     reverse_geocode_coordinates,
 )
-
-__all__ = [
-    'ReverseGeocodingLogMessage',
-    'batch_reverse_geocode_coordinates',
-    'reverse_geocode_coordinates',
-]

@@ -42,16 +42,15 @@ def main() -> int:
     include_place = True  # default city_radius_miles=3
     with psycopg.connect(conninfo) as conn:
         include_waterway = lookup_waterway.table_exists(conn)
-    sql, _ = _query_single_sql(include_place, include_waterway=include_waterway)
-    lake_radius_m = 1.0 * _MILES_TO_M
-    ocean_radius_m = 1.0 * _MILES_TO_M
-    city_radius_m = 3.0 * _MILES_TO_M
-    waterway_radius_m = lookup_waterway.DEFAULT_WATERWAY_RADIUS_MILES * _MILES_TO_M
-    params = [lon, lat, lake_radius_m, ocean_radius_m, ocean_radius_m]
-    if include_waterway:
-        params.append(waterway_radius_m)
-    if include_place:
-        params.append(city_radius_m)
+    sql = _query_single_sql(include_place, include_waterway=include_waterway)
+    params = {
+        "lon": lon,
+        "lat": lat,
+        "lake_radius_m": 1.0 * _MILES_TO_M,
+        "ocean_radius_m": 1.0 * _MILES_TO_M,
+        "city_radius_m": 3.0 * _MILES_TO_M,
+        "waterway_radius_m": lookup_waterway.DEFAULT_WATERWAY_RADIUS_MILES * _MILES_TO_M,
+    }
     explain_sql = "EXPLAIN (ANALYZE, FORMAT TEXT) " + sql
 
     with psycopg.connect(conninfo) as conn:

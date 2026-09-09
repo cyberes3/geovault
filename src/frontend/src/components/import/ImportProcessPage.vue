@@ -11,13 +11,13 @@
     <!-- Import Logs -->
     <ProcessingLogsPanel
       :logs="filteredWorkerLog"
-      :is-loading="loading.logs"
-      @open-full-logs="dialogs.logs = true"
+      :is-loading="logsLoading"
+      @open-full-logs="openFullLogs"
     />
 
     <!-- Import Summary -->
     <ImportSummaryStats
-      :total-features="pagination.totalFeatures || itemsForUser.length"
+      :total-features="draftCount || pagination.totalFeatures || itemsForUser.length"
       :importable-count="importableCount"
       :duplicate-count="totalDuplicateCount"
       :is-loading="loadingPage"
@@ -127,8 +127,8 @@
         :file-duplicate="fileDuplicate"
         :error-message="msg"
         :has-features="itemsForUser.length > 0"
-        :has-next-page="adjustedHasNext"
-        :has-previous-page="adjustedHasPrevious"
+        :has-next-page="pagination.hasNext"
+        :has-previous-page="pagination.hasPrevious"
         :hide-duplicates="hideDuplicates"
         :importable-count="importableCount"
         :is-imported="isImported"
@@ -142,14 +142,14 @@
         :show-duplicate-message="true"
         :show-no-features-message="showNoFeaturesMessage"
         :total-features="pagination.totalFeatures"
-        :total-pages="adjustedTotalPages"
+        :total-pages="pagination.totalPages"
         @previous-page="previousPage"
         @next-page="nextPage"
         @jump-to-page="goToPage"
         @show-map-preview="showMapPreview"
         @save-changes="saveChanges"
-        @perform-import="performImport"
-        @toggle-hide-duplicates="hideDuplicates = $event"
+        @perform-import="() => performImport(importCustomIcons)"
+        @toggle-hide-duplicates="setHideDuplicates"
     />
 
     <!-- Loading Skeleton for Pagination Changes -->
@@ -241,37 +241,6 @@
       </div>
     </div>
 
-    <!-- Empty state when all items on page are duplicates and hidden -->
-    <div v-else-if="showEmptyPageMessage" class="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center">
-      <div class="flex flex-col items-center">
-        <ExclamationTriangleIcon class="h-12 w-12 text-yellow-400 mb-4" />
-        <h3 class="text-lg font-medium text-gray-900 mb-2">All items on this page are duplicates</h3>
-        <p class="text-gray-500 mb-6 max-w-md">
-          All {{ itemsForUser.length }} feature{{ itemsForUser.length === 1 ? '' : 's' }} on this page
-          {{ itemsForUser.length === 1 ? 'is' : 'are' }} duplicate{{ itemsForUser.length === 1 ? '' : 's' }} and hidden by your filter.
-          Try navigating to another page or disable "Hide duplicates" to see all features.
-        </p>
-        <div class="flex gap-3">
-          <button
-            v-if="adjustedHasPrevious"
-            @click="previousPage"
-            class="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-          >
-            <ChevronLeftIcon class="w-4 h-4 mr-1" />
-            Previous Page
-          </button>
-          <button
-            v-if="adjustedHasNext"
-            @click="nextPage"
-            class="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-          >
-            Next Page
-            <ChevronRightIcon class="w-4 h-4 ml-1" />
-          </button>
-        </div>
-      </div>
-    </div>
-
     <!-- Feature Items (virtualized: cards have variable height depending on geometry type / duplicate warnings) -->
     <DynamicScroller
       v-else-if="itemsForUser.length > 0 && !loadingPage"
@@ -322,10 +291,7 @@
 
           <!-- Duplicate Warnings - outside opacity div so they're always fully visible -->
           <div class="relative z-10">
-            <DuplicateWarning type="feature_store_hash" :item="entry.item" />
-            <DuplicateWarning type="feature_store_geometry" :item="entry.item" />
-            <DuplicateWarning type="cross_queue_hash" :item="entry.item" />
-            <DuplicateWarning type="cross_queue_geometry" :item="entry.item" />
+            <DuplicateWarning :verdict="entry.item.duplicate_verdict" />
           </div>
 
           <!-- Content area - can be greyed out for skipped or hash duplicate items -->
@@ -482,8 +448,8 @@
         :duplicate-count="totalDuplicateCount"
         :file-duplicate="fileDuplicate"
         :has-features="itemsForUser.length > 0"
-        :has-next-page="adjustedHasNext"
-        :has-previous-page="adjustedHasPrevious"
+        :has-next-page="pagination.hasNext"
+        :has-previous-page="pagination.hasPrevious"
         :hide-duplicates="hideDuplicates"
         :importable-count="importableCount"
         :is-imported="isImported"
@@ -496,20 +462,15 @@
         :show-duplicate-message="false"
         :show-no-features-message="false"
         :total-features="pagination.totalFeatures"
-        :total-pages="adjustedTotalPages"
+        :total-pages="pagination.totalPages"
         @previous-page="previousPage"
         @next-page="nextPage"
         @jump-to-page="goToPage"
         @show-map-preview="showMapPreview"
         @save-changes="saveChanges"
-        @perform-import="performImport"
-        @toggle-hide-duplicates="hideDuplicates = $event"
+        @perform-import="() => performImport(importCustomIcons)"
+        @toggle-hide-duplicates="setHideDuplicates"
     />
-
-    <div class="hidden">
-      <!-- Load the queue to populate it. -->
-      <ImportTable/>
-    </div>
 
     <!-- Map Preview Dialog -->
     <MapPreviewDialog
@@ -573,27 +534,21 @@ import ImportSummaryStats from '@/components/import/parts/ImportSummaryStats.vue
 import GlobalOptionsPanel from '@/components/import/parts/GlobalOptionsPanel.vue';
 import ColorPicker from '@/components/parts/ColorPickerElement.vue';
 import IconSelector from '@/components/parts/IconSelector.vue';
-import ImportTable from '@/components/import/parts/ImportTable.vue';
 import {
   CheckIcon,
-  ExclamationTriangleIcon,
   XMarkIcon,
   MapIcon,
   ArrowPathIcon,
   MagnifyingGlassIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
 } from '@heroicons/vue/24/outline';
 
-import { ImportStatusSocket } from '@/assets/js/websocket/ImportStatusSocket';
-import { useImportProcessData, type RawImportPagePayload, type SearchResultMatch } from '@/composables/useImportProcessData';
-import { useImportFeatureEditing } from '@/composables/useImportFeatureEditing';
-import { useBulkOperations } from '@/composables/useBulkOperations';
+import { GeoVaultSocket, sameOriginWebSocketUrl, type GeoVaultSocketCloseInfo } from '@/assets/js/websocket/GeoVaultSocket';
+import { type RawImportPagePayload, type SearchResultMatch } from '@/composables/useImportProcessData';
+import { useImportProcessSession } from '@/composables/import/importProcessSession';
 
 import { formatGeometryTypeForDisplay } from '@/utils/geometryTypeFormatter';
 import { getItemClasses as getItemClassesUtil } from '@/utils/import/featureProcessing';
 import { getFeatureIconUrl, getFeatureIconUrlRaw, hasNonRecolorableIcon } from '@/utils/import/iconDetection';
-import { toastApiError } from '@/utils/apiError';
 import { PROCESSING_MESSAGES } from '@/assets/js/constants/processing-messages';
 
 const props = defineProps<{ id: string }>();
@@ -611,26 +566,16 @@ const currentId = ref<string | number | null>(props.id);
 const originalFilename = ref<string | null>(null);
 const uploadTimestamp = ref<string | null>(null);
 const isImported = ref(false);
-const lockButtons = ref(false);
 const importCustomIcons = ref(true);
 const statusMessage = ref<string | null>(null);
 const statusDetail = ref<string | null>(null);
-const waitingForImportCompletion = ref(false);
-const saveStatus = ref<'success' | 'error' | null>(null);
-let saveStatusTimeout: ReturnType<typeof setTimeout> | null = null;
 
 const fileDuplicate = reactive<{ status: string | null; originalFilename: string | null }>({
   status: null,
   originalFilename: null,
 });
 
-const loading = reactive({
-  logs: true,
-  saving: false,
-  importing: false,
-  redirecting: false,
-  recheckingDuplicates: false,
-});
+const logsLoading = ref(true);
 
 const processing = reactive<{ active: boolean; message: string; progress: number | null }>({
   active: false,
@@ -647,6 +592,7 @@ interface LogEntry {
 }
 
 const workerLog = ref<LogEntry[]>([]);
+const hasMoreLogs = ref(false);
 let lastLogId: number | null = null;
 
 const dialogs = reactive({
@@ -664,15 +610,26 @@ const featureScrollerRef = ref<ScrollerInstance | null>(null);
 // Composables
 // ---------------------------------------------------------------------------
 
-const importStatusSocket = new ImportStatusSocket();
+const importStatusSocket = new GeoVaultSocket({
+  url: () => (currentId.value == null ? '' : sameOriginWebSocketUrl(`/ws/upload/status/${currentId.value}/`)),
+  pingPayload: { type: 'ping', data: {} },
+  terminalCloseCodes: [4004],
+  maxReconnectAttempts: 5,
+});
 
-function requestPageOverSocket(page: number, pageSize: number): void {
-  importStatusSocket.send('request_page', { page, page_size: pageSize });
+function sendImportStatus(type: string, data: Record<string, unknown> = {}): void {
+  importStatusSocket.send({ type, data });
 }
 
-const importData = useImportProcessData({
+function requestPageOverSocket(page: number, pageSize: number, hideDuplicates: boolean): void {
+  sendImportStatus('request_page', { page, page_size: pageSize, hide_duplicates: hideDuplicates });
+}
+
+const session = useImportProcessSession({
   importId: currentId,
   requestPage: requestPageOverSocket,
+  sendStatus: sendImportStatus,
+  isImported,
   onUnparsableFile: () => {
     processing.active = false;
     processing.message = PROCESSING_MESSAGES.PROCESSING_FAILED;
@@ -680,60 +637,50 @@ const importData = useImportProcessData({
   },
 });
 const {
+  importData,
+  featureEditing,
+  bulkOps,
+  lockButtons,
+  saveStatus,
+  loading,
+  waitingForImportCompletion,
+  importableCount,
+  hasUnsavedChanges,
+  handlePageData,
+  saveChanges,
+  performImport,
+  recheckDuplicates,
+  setHideDuplicates,
+  rerequestCurrentPage,
+  toggleSkipItem,
+  isItemSkipped,
+  isItemHashDuplicate,
+  isItemDisabled,
+  clearImportCompletionWatch,
+  reset: resetSession,
+} = session;
+
+const {
   msg,
   loadingPage,
   itemsForUser,
   originalItems,
   pagination,
-  duplicates,
   hideDuplicates,
-  skippedFeatureIds,
-  editCache,
+  draftCount,
   totalDuplicateCount,
-  importableCount,
-  adjustedTotalPages,
-  adjustedHasNext,
-  adjustedHasPrevious,
   filteredItemsForUser,
-  showEmptyPageMessage,
   searchQuery,
   searchResults,
   totalSearchMatches,
   isSearching,
   handleSearchInput,
   clearSearch,
-  cacheCurrentPageChanges,
   nextPage,
   previousPage,
   goToPage,
-  toggleSkipItem,
-  isItemSkipped,
-  isItemDisabled: isItemDisabledFromData,
-  isItemHashDuplicate,
 } = importData;
 
-/**
- * `ImportFeatureItem.type` holds the geometry-type string (e.g. `'Point'`), not the GeoJSON
- * `Feature` discriminant `MapPreviewDialog`/`FeatureMapDialog` expect, so adapt rather than cast.
- */
-const previewFeatures = computed<GeoJsonFeature[]>(() =>
-  itemsForUser.value.map((item) => ({
-    type: 'Feature',
-    geometry: item.geometry as GeoJsonFeature['geometry'],
-    properties: item.properties,
-    geojson_hash: item.properties.geojson_hash,
-  })),
-);
-
-const featureEditing = useImportFeatureEditing({
-  importId: currentId,
-  itemsForUser,
-  originalItems,
-  pagination,
-  editCache,
-  duplicates,
-  skippedFeatureIds,
-});
 const {
   availableUserTags,
   fetchUserTags,
@@ -749,28 +696,31 @@ const {
   handleIconReset,
   handleIconColorReset,
   handleStrokeColorChangeForItem,
-  getChangedFeatures,
-  hasFeatureChanges,
-  saveFeatures,
-  saveSkipState,
-  requestImport: requestImportApi,
-  requestRecheckDuplicates,
 } = featureEditing;
 
-const bulkOps = useBulkOperations(currentId);
 const {
   isModalOpen: bulkOperationsModalOpen,
   bulkOperations,
   originalBulkOperations,
   hasBulkOperationsConfigured,
-  hasBulkOperationsChanged,
   loadBulkOperations,
   updateBulkOperations,
-  saveBulkOperations,
   openModal: openBulkOperationsModal,
   closeModal: closeBulkOperationsModal,
-  reset: resetBulkOperations,
 } = bulkOps;
+
+/**
+ * `ImportFeatureItem.type` holds the geometry-type string (e.g. `'Point'`), not the GeoJSON
+ * `Feature` discriminant `MapPreviewDialog`/`FeatureMapDialog` expect, so adapt rather than cast.
+ */
+const previewFeatures = computed<GeoJsonFeature[]>(() =>
+  itemsForUser.value.map((item) => ({
+    type: 'Feature',
+    geometry: item.geometry as GeoJsonFeature['geometry'],
+    properties: item.properties,
+    geojson_hash: item.properties.geojson_hash,
+  })),
+);
 
 // ---------------------------------------------------------------------------
 // Page-level computed
@@ -810,10 +760,6 @@ const showNoFeaturesMessage = computed<boolean>(() =>
 // Per-item helpers that need page-level state (isImported / loading.importing)
 // ---------------------------------------------------------------------------
 
-function isItemDisabled(item: ImportFeatureItem | null | undefined, index: number): boolean {
-  return isItemDisabledFromData(item, index, isImported.value, loading.importing);
-}
-
 function isItemEditable(item: ImportFeatureItem | null | undefined, index: number): boolean {
   return !isItemDisabled(item, index);
 }
@@ -832,103 +778,6 @@ function truncateDescription(description: string | null | undefined): string {
   const maxLength = 100;
   if (description.length <= maxLength) return description;
   return `${description.substring(0, maxLength)}...`;
-}
-
-function hasUnsavedChanges(): boolean {
-  return hasFeatureChanges() || hasBulkOperationsChanged.value;
-}
-
-// ---------------------------------------------------------------------------
-// Save / import / recheck orchestration (coordinates the feature-editing and
-// bulk-operations composables; this is genuinely page-level glue).
-// ---------------------------------------------------------------------------
-
-async function saveChangesInternal(): Promise<{ changedCount: number }> {
-  cacheCurrentPageChanges();
-  const changedFeatures = getChangedFeatures();
-  const bulkOpsChanged = hasBulkOperationsChanged.value;
-
-  if (bulkOpsChanged) {
-    await saveBulkOperations(originalBulkOperations.value);
-  }
-
-  await saveSkipState();
-
-  if (changedFeatures.length === 0 && !bulkOpsChanged) {
-    return { changedCount: 0 };
-  }
-
-  const result = await saveFeatures(changedFeatures);
-  return { changedCount: result.updatedCount };
-}
-
-async function saveChanges(): Promise<void> {
-  lockButtons.value = true;
-  loading.saving = true;
-  if (saveStatusTimeout) {
-    clearTimeout(saveStatusTimeout);
-    saveStatusTimeout = null;
-  }
-  saveStatus.value = null;
-
-  try {
-    await saveChangesInternal();
-    lockButtons.value = false;
-    loading.saving = false;
-    saveStatus.value = 'success';
-    saveStatusTimeout = setTimeout(() => {
-      saveStatus.value = null;
-      saveStatusTimeout = null;
-    }, 2000);
-  } catch (error) {
-    loading.saving = false;
-    // Buttons stay locked (permanently) so the user doesn't lose more work by retrying blindly.
-    saveStatus.value = 'error';
-    toastApiError(error, 'Error saving changes. Please reload the page to try again');
-  }
-}
-
-async function performImport(): Promise<void> {
-  lockButtons.value = true;
-  loading.importing = true;
-
-  try {
-    await saveChangesInternal();
-  } catch (saveError) {
-    toastApiError(saveError, 'Error saving changes before import');
-    lockButtons.value = false;
-    loading.importing = false;
-    waitingForImportCompletion.value = false;
-    return;
-  }
-
-  try {
-    // Set the flag before making the request so WebSocket events are handled correctly
-    // (WS messages can arrive before the request itself resolves).
-    waitingForImportCompletion.value = true;
-    await requestImportApi(importCustomIcons.value);
-    // Server responds immediately; completion arrives later via `item_completed`/`item_failed`.
-  } catch (error) {
-    toastApiError(error, 'Error performing import');
-    lockButtons.value = false;
-    loading.importing = false;
-    waitingForImportCompletion.value = false;
-  }
-}
-
-async function recheckDuplicates(): Promise<void> {
-  lockButtons.value = true;
-  loading.recheckingDuplicates = true;
-  try {
-    await requestRecheckDuplicates();
-    // Refresh page data + logs via the WebSocket now that duplicates have been recomputed.
-    importStatusSocket.send('refresh', {});
-  } catch (error) {
-    toastApiError(error, 'Error rechecking duplicates');
-  } finally {
-    lockButtons.value = false;
-    loading.recheckingDuplicates = false;
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1042,6 +891,9 @@ async function goToSearchResult(result: SearchResultMatch): Promise<void> {
     return;
   }
 
+  if (hideDuplicates.value) {
+    await setHideDuplicates(false);
+  }
   const isAlreadyOnPage = pagination.currentPage === result.page;
   if (!isAlreadyOnPage) {
     await goToPage(result.page);
@@ -1085,13 +937,14 @@ function closeLogModal(): void {
 }
 
 // ---------------------------------------------------------------------------
-// WebSocket wiring (`ImportStatusSocket`) -- per-item processing/page/log
-// updates. Handlers are registered once; `connectWebSocket` just (re)opens
-// the connection for the current `currentId`.
+// WebSocket wiring (`GeoVaultSocket` to `/ws/upload/status/:id/`) -- per-item
+// processing/page/log updates. Handlers are registered once; `connectWebSocket`
+// just (re)opens the connection for the current `currentId`.
 // ---------------------------------------------------------------------------
 
 interface FileDuplicateInfo {
   status: string | null;
+  original_filename?: string | null;
   originalFilename?: string | null;
 }
 
@@ -1105,6 +958,7 @@ interface InitialStatePayload {
   unparsable?: boolean;
   features?: RawImportPagePayload;
   logs?: LogEntry[];
+  has_more_logs?: boolean;
 }
 
 interface StatusUpdatePayload {
@@ -1125,7 +979,7 @@ interface DuplicateSkippedFeature {
 
 interface ItemCompletedPayload {
   message?: string;
-  duplicates_skipped?: { hash?: DuplicateSkippedFeature[]; coord?: DuplicateSkippedFeature[] };
+  duplicates_skipped?: { hash?: DuplicateSkippedFeature[]; geometry?: DuplicateSkippedFeature[] };
 }
 
 interface ItemFailedPayload {
@@ -1136,6 +990,8 @@ interface ItemFailedPayload {
 interface LogsPayload {
   logs?: LogEntry[];
   after_id?: number | null;
+  before_id?: number | null;
+  has_more_logs?: boolean;
 }
 
 interface WsErrorPayload {
@@ -1150,7 +1006,7 @@ function handleInitialState(data: InitialStatePayload): void {
   isImported.value = data.imported ?? false;
   processing.active = data.processing ?? false;
   fileDuplicate.status = data.file_duplicate?.status ?? null;
-  fileDuplicate.originalFilename = data.file_duplicate?.originalFilename ?? null;
+  fileDuplicate.originalFilename = data.file_duplicate?.original_filename ?? data.file_duplicate?.originalFilename ?? null;
 
   statusMessage.value = null;
   statusDetail.value = null;
@@ -1167,7 +1023,7 @@ function handleInitialState(data: InitialStatePayload): void {
   }
 
   if (data.features) {
-    importData.handlePageData(data.features);
+    handlePageData(data.features);
   }
 
   if (data.logs) {
@@ -1179,8 +1035,9 @@ function handleInitialState(data: InitialStatePayload): void {
       lastLogId = lastIncomingLogId;
     }
   }
+  hasMoreLogs.value = data.has_more_logs ?? false;
 
-  loading.logs = false;
+  logsLoading.value = false;
   loadingPage.value = false;
 }
 
@@ -1215,7 +1072,7 @@ function handleItemCompleted(data: ItemCompletedPayload): void {
   // Log skipped duplicates to console (silent, no user notification).
   if (data.duplicates_skipped) {
     const hashDups = data.duplicates_skipped.hash ?? [];
-    const coordDups = data.duplicates_skipped.coord ?? [];
+    const geometryDups = data.duplicates_skipped.geometry ?? [];
 
     if (hashDups.length > 0) {
       console.log(`Skipped ${hashDups.length} hash duplicate(s):`);
@@ -1225,16 +1082,16 @@ function handleItemCompleted(data: ItemCompletedPayload): void {
           : `  - ${feature.name ?? ''} (hash: ${feature.hash ?? ''})`);
       });
     }
-    if (coordDups.length > 0) {
-      console.log(`Skipped ${coordDups.length} coordinate duplicate(s):`);
-      coordDups.forEach((feature) => {
+    if (geometryDups.length > 0) {
+      console.log(`Skipped ${geometryDups.length} geometry duplicate(s):`);
+      geometryDups.forEach((feature) => {
         console.log(`  - ${feature.name ?? ''} (hash: ${feature.hash ?? ''})`);
       });
     }
   }
 
   if (waitingForImportCompletion.value) {
-    waitingForImportCompletion.value = false;
+    clearImportCompletionWatch();
     lockButtons.value = false;
     loading.importing = false;
     removeBeforeUnloadHandler();
@@ -1246,7 +1103,7 @@ function handleItemCompleted(data: ItemCompletedPayload): void {
 
   // Keep processing active to show the unified loading spinner while the refreshed page loads.
   processing.active = true;
-  importStatusSocket.send('refresh', {});
+  sendImportStatus('refresh');
 }
 
 function handleItemFailed(data: ItemFailedPayload): void {
@@ -1255,7 +1112,7 @@ function handleItemFailed(data: ItemFailedPayload): void {
   processing.progress = null;
 
   if (waitingForImportCompletion.value) {
-    waitingForImportCompletion.value = false;
+    clearImportCompletionWatch();
     lockButtons.value = false;
     loading.importing = false;
     const errorMessage = data.message ?? data.error_message ?? PROCESSING_MESSAGES.PROCESSING_FAILED_DEFAULT;
@@ -1268,10 +1125,21 @@ function handleItemFailed(data: ItemFailedPayload): void {
 
 function handleLogsData(data: LogsPayload): void {
   if (data.logs) {
-    workerLog.value = data.after_id != null ? workerLog.value.concat(data.logs) : data.logs;
-    lastLogId = data.logs.length > 0 ? data.logs[data.logs.length - 1].id : null;
+    if (data.before_id != null) {
+      workerLog.value = data.logs.concat(workerLog.value);
+    } else if (data.after_id != null) {
+      workerLog.value = workerLog.value.concat(data.logs);
+    } else {
+      workerLog.value = data.logs;
+    }
+    if (data.logs.length > 0) {
+      lastLogId = data.logs[data.logs.length - 1].id;
+    }
   }
-  loading.logs = false;
+  if (data.has_more_logs != null) {
+    hasMoreLogs.value = data.has_more_logs;
+  }
+  logsLoading.value = false;
 }
 
 function handleItemDeleted(): void {
@@ -1293,20 +1161,38 @@ function handleWebSocketError(data: WsErrorPayload): void {
   }
 }
 
-importStatusSocket.on('initial_state', handleInitialState);
-importStatusSocket.on('status', handleStatusMessage);
-importStatusSocket.on('status_updated', handleStatusUpdate);
-importStatusSocket.on('log_added', handleLogAdded);
-importStatusSocket.on('item_completed', handleItemCompleted);
-importStatusSocket.on('item_failed', handleItemFailed);
-importStatusSocket.on('page', (data) => { importData.handlePageData(data); });
-importStatusSocket.on('logs', handleLogsData);
+importStatusSocket.on<InitialStatePayload>('initial_state', handleInitialState);
+importStatusSocket.on<StatusMessagePayload>('status', handleStatusMessage);
+importStatusSocket.on<StatusUpdatePayload>('status_updated', handleStatusUpdate);
+importStatusSocket.on<LogEntry>('log_added', handleLogAdded);
+importStatusSocket.on<ItemCompletedPayload>('item_completed', handleItemCompleted);
+importStatusSocket.on<ItemFailedPayload>('item_failed', handleItemFailed);
+importStatusSocket.on<RawImportPagePayload>('page', (data) => { handlePageData(data); });
+importStatusSocket.on<{ reconnect?: boolean }>('connected', (data) => {
+  if (data.reconnect) {
+    rerequestCurrentPage();
+  }
+});
+importStatusSocket.on<LogsPayload>('logs', handleLogsData);
 importStatusSocket.on('item_deleted', handleItemDeleted);
-importStatusSocket.on('error', handleWebSocketError);
+importStatusSocket.on<WsErrorPayload>('error', handleWebSocketError);
+importStatusSocket.on<GeoVaultSocketCloseInfo>('close', (closeInfo) => {
+  if (closeInfo.code === 4004) {
+    handleWebSocketError({ code: 404, message: 'Item not found' });
+  }
+});
 
 function connectWebSocket(): void {
   if (currentId.value != null) {
-    importStatusSocket.connect(currentId.value);
+    importStatusSocket.connect();
+  }
+}
+
+function openFullLogs(): void {
+  dialogs.logs = true;
+  const oldest = workerLog.value[0];
+  if (hasMoreLogs.value && oldest) {
+    sendImportStatus('request_logs', { before_id: oldest.id });
   }
 }
 
@@ -1323,12 +1209,13 @@ function handleBeforeUnload(event: BeforeUnloadEvent): void {
 }
 
 function clearComponentState(): void {
-  importStatusSocket.close();
+  importStatusSocket.disconnect();
 
   currentId.value = null;
   originalFilename.value = null;
   uploadTimestamp.value = null;
   workerLog.value = [];
+  hasMoreLogs.value = false;
   lastLogId = null;
 
   dialogs.mapPreview = false;
@@ -1336,11 +1223,7 @@ function clearComponentState(): void {
   dialogs.featureMap.selectedIndex = 0;
   dialogs.logs = false;
 
-  loading.logs = true;
-  loading.saving = false;
-  loading.importing = false;
-  loading.redirecting = false;
-  loading.recheckingDuplicates = false;
+  logsLoading.value = true;
 
   processing.active = false;
   processing.message = '';
@@ -1349,12 +1232,10 @@ function clearComponentState(): void {
   fileDuplicate.status = null;
   fileDuplicate.originalFilename = null;
 
-  lockButtons.value = false;
   isImported.value = false;
   importCustomIcons.value = true;
 
-  importData.reset();
-  resetBulkOperations();
+  resetSession();
 }
 
 onMounted(async () => {

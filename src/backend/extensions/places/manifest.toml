@@ -1,0 +1,8 @@
+name = "places"
+version = "1.0.0"
+description = "Organize places you want to remember."
+icon = "MapPinIcon"
+enabled_by_default = true
+map_route = true
+umd_global = "PlacesExtension"
+requires_map_engine = "maplibre"

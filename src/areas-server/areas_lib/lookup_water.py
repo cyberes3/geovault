@@ -31,93 +31,35 @@ def build_lakes(rows: List[Tuple[Any, ...]]) -> List[Dict[str, Any]]:
     return out
 
 
-def run_water_single(
-        conn: Any,
-        lat: float,
-        lon: float,
-        lake_radius_miles: float,
-) -> List[Tuple[Any, ...]]:
-    """Return rows (name, water_type, distance_miles, on_water): on-water first, then near shore by distance (top N). One round-trip."""
-    radius_m = lake_radius_miles * _MILES_TO_M
-    with conn.cursor() as cur:
-        cur.execute(
-            f"""
-            WITH pt AS (
-                SELECT public.ST_SetSRID(public.ST_MakePoint(%s, %s), 4326) AS geom
-            )
-            (SELECT w.name, w.water_type, 0::float, true
-             FROM {SCHEMA}.{TABLE_NAME} w, pt
-             WHERE public.ST_Contains(w.geom, pt.geom)
-             LIMIT %s)
-            UNION ALL
-            (SELECT w.name, w.water_type,
-                    (public.ST_Distance(public.geography(w.geom), public.geography(pt.geom)) / 1609.34)::double precision,
-                    false
-             FROM {SCHEMA}.{TABLE_NAME} w, pt
-             WHERE NOT public.ST_Contains(w.geom, pt.geom)
-               AND public.ST_DWithin(public.geography(w.geom), public.geography(pt.geom), %s)
-             ORDER BY 3
-             LIMIT %s)
-            """,
-            (lon, lat, NEARBY_LAKES_LIMIT, radius_m, NEARBY_LAKES_LIMIT),
-        )
-        return list(cur.fetchall())
-
-
-def run_water_batch(
-        conn: Any,
-        indices: List[int],
-        lons: List[float],
-        lats: List[float],
-        lake_radius_miles: float,
-) -> Dict[int, List[Tuple[Any, ...]]]:
-    """Returns dict point_idx -> list of (name, water_type, distance_miles, on_water)."""
-    radius_m = lake_radius_miles * _MILES_TO_M
-    with conn.cursor() as cur:
-        cur.execute(
-            f"""
-            WITH p AS (
-                SELECT * FROM unnest(%s::bigint[], %s::double precision[], %s::double precision[])
-                AS t(point_idx, lon, lat)
-            ),
-            pt AS (
-                SELECT point_idx, lon, lat,
-                       public.ST_SetSRID(public.ST_MakePoint(lon, lat), 4326) AS geom
-                FROM p
-            ),
-            matches AS (
-                SELECT pt.point_idx, w.name, w.water_type,
-                       (CASE WHEN public.ST_Contains(w.geom, pt.geom) THEN 0.0
-                             ELSE public.ST_Distance(public.geography(w.geom), public.geography(pt.geom)) / 1609.34 END)::double precision AS distance_miles,
-                       public.ST_Contains(w.geom, pt.geom) AS on_water,
-                       ROW_NUMBER() OVER (
-                           PARTITION BY pt.point_idx
-                           ORDER BY public.ST_Contains(w.geom, pt.geom) DESC NULLS LAST,
+def sql_fragment(*, batch: bool) -> str:
+    """UNION ALL branch for lakes. Cap 5; rank on-water first, then geography distance."""
+    payload = f"""jsonb_build_object('name', w.name, 'water_type', w.water_type,
+                       'distance_miles', (CASE WHEN public.ST_Contains(w.geom, pt.geom) THEN 0.0
+                             ELSE public.ST_Distance(public.geography(w.geom), public.geography(pt.geom)) / {_MILES_TO_M} END)::double precision,
+                       'on_water', public.ST_Contains(w.geom, pt.geom))"""
+    rank = """public.ST_Contains(w.geom, pt.geom) DESC NULLS LAST,
                                  (CASE WHEN public.ST_Contains(w.geom, pt.geom) THEN 0.0
-                                       ELSE public.ST_Distance(public.geography(w.geom), public.geography(pt.geom)) / 1609.34 END)::double precision
-                       ) AS rn
-                FROM pt
-                JOIN {SCHEMA}.{TABLE_NAME} w
-                     ON public.ST_Contains(w.geom, pt.geom)
-                     OR (NOT public.ST_Contains(w.geom, pt.geom)
-                         AND public.ST_DWithin(public.geography(w.geom), public.geography(pt.geom), %s))
-            )
-            SELECT point_idx, name, water_type, distance_miles, on_water
-            FROM matches
-            WHERE rn <= %s
-            ORDER BY point_idx, rn
-            """,
-            (indices, lons, lats, radius_m, NEARBY_LAKES_LIMIT),
-        )
-        rows = cur.fetchall()
-
-    by_idx: Dict[int, List[Tuple[Any, ...]]] = {}
-    for row in rows:
-        idx = row[0]
-        if idx not in by_idx:
-            by_idx[idx] = []
-        by_idx[idx].append(row[1:])
-    return by_idx
+                                       ELSE public.ST_Distance(public.geography(w.geom), public.geography(pt.geom)) END)"""
+    match = f"""public.ST_Contains(w.geom, pt.geom)
+                 OR (NOT public.ST_Contains(w.geom, pt.geom)
+                     AND public.ST_DWithin(public.geography(w.geom), public.geography(pt.geom), %(lake_radius_m)s))"""
+    if batch:
+        return f"""
+        SELECT point_idx, 'water' AS layer, payload FROM (
+            SELECT pt.point_idx, {payload} AS payload,
+                   ROW_NUMBER() OVER (PARTITION BY pt.point_idx ORDER BY {rank}) AS rn
+            FROM pt
+            JOIN {SCHEMA}.{TABLE_NAME} w ON {match}
+        ) sub WHERE rn <= {NEARBY_LAKES_LIMIT}
+        """
+    return f"""
+        SELECT 'water' AS layer, payload FROM (
+            SELECT {payload} AS payload,
+                   ROW_NUMBER() OVER (ORDER BY {rank}) AS rn
+            FROM {SCHEMA}.{TABLE_NAME} w, pt
+            WHERE {match}
+        ) sub WHERE rn <= {NEARBY_LAKES_LIMIT}
+        """
 
 
 def get_water_stats(conn: Any) -> Dict[str, Any]:

@@ -6,7 +6,7 @@
  */
 import { markRaw, ref, shallowRef, type ComputedRef, type Ref, type ShallowRef } from 'vue';
 import { useStore } from 'vuex';
-import type { Map as MapLibreMap, MapMouseEvent, Marker, GeoJSONSource, PointLike } from 'maplibre-gl';
+import type { Map as MapLibreMap, MapMouseEvent, Marker, PointLike } from 'maplibre-gl';
 import { getLoadedMaplibreGl } from '@/utils/map/maplibre/lazyMaplibreGl.js';
 import { convertMapLibreFeature } from '@/utils/map/maplibre/featureConversion.js';
 import {
@@ -24,10 +24,12 @@ import { getInverseColor } from '@/utils/map/colorUtils';
 import { isValidMapLngLatPair } from '@/utils/map/mapGeography.js';
 import { MAX_ZOOM_LEVEL } from '@/utils/map/maplibre/mapInitialization.js';
 import { toastApiError } from '@/utils/apiError';
-import { APIHOST } from '@/config.js';
+import { downloadKmz } from '@/utils/sharing/downloadKmz';
 import type { LabelMarkerManager } from '@/utils/map/maplibre/labelMarkers.js';
-import type { GeoJsonFeatureCollection } from '@/types/geospatial';
 import type { MapPageFeature, MapUserSettings } from './mapPageTypes';
+import type { FeatureMutation } from '@/utils/map/session/FeatureMutation';
+import type { FeatureSource } from '@/utils/map/common/FeatureSource';
+import type { VaultFeature } from '@/contracts/feature';
 
 export interface UseFeatureSelectionDeps {
     map: ShallowRef<MapLibreMap | null>;
@@ -41,6 +43,8 @@ export interface UseFeatureSelectionDeps {
     shareId: ComputedRef<string | null>;
     /** Gate for hide/unhide actions: main map route, not a public share, and the user is authenticated. */
     canManageHiddenFeatures: ComputedRef<boolean>;
+    mutations: FeatureMutation;
+    featureSource: FeatureSource;
 }
 
 interface RawMapLibreFeature {
@@ -49,7 +53,7 @@ interface RawMapLibreFeature {
 }
 
 export function useFeatureSelection(deps: UseFeatureSelectionDeps) {
-    const { map, labelMarkerManager, showAllLabels, navigateAndRefresh, updateFeatureCount, updateFeaturesInExtent, getUserMapSettings, isPublicShareMode, shareId, canManageHiddenFeatures } = deps;
+    const { map, labelMarkerManager, showAllLabels, navigateAndRefresh, updateFeatureCount, updateFeaturesInExtent, getUserMapSettings, isPublicShareMode, shareId, canManageHiddenFeatures, mutations, featureSource } = deps;
     const store = useStore();
 
     const selectedFeature: Ref<MapPageFeature | null> = ref(null);
@@ -62,17 +66,7 @@ export function useFeatureSelection(deps: UseFeatureSelectionDeps) {
     const hoverMarker: ShallowRef<Marker | null> = shallowRef(null);
 
     function getSourceFeatures(): MapPageFeature[] {
-        if (!map.value?.getSource('geojson-data')) return [];
-        const source = map.value.getSource('geojson-data');
-        const serialized = source?.serialize() as { data?: GeoJsonFeatureCollection };
-        return (serialized.data?.features ?? []) as MapPageFeature[];
-    }
-
-    function setSourceFeatures(features: MapPageFeature[]): void {
-        if (!map.value?.getSource('geojson-data')) return;
-        const source: GeoJSONSource | undefined = map.value.getSource('geojson-data');
-        const collection: GeoJsonFeatureCollection = { type: 'FeatureCollection', features: features.map((f) => markRaw(f)) };
-        source?.setData(markRaw(collection));
+        return featureSource.buildRenderCollection().features as MapPageFeature[];
     }
 
     /**
@@ -121,6 +115,7 @@ export function useFeatureSelection(deps: UseFeatureSelectionDeps) {
 
     /** Full click handler: query rendered features near the click, disambiguate overlaps, select. */
     function onMapClick(e: MapMouseEvent): void {
+        if (isEditingFeature.value) return;
         const mapInstance = map.value;
         if (!mapInstance) return;
 
@@ -233,6 +228,10 @@ export function useFeatureSelection(deps: UseFeatureSelectionDeps) {
         const properties = feature.properties;
         const featureId = properties.database_id as string | number | undefined;
         if (!featureId) return;
+        const hidden = store.getters['userSettings/hiddenFeatures'] as Array<{ id: string }> | undefined;
+        if (Array.isArray(hidden) && hidden.some((item) => String(item.id) === String(featureId))) {
+            return;
+        }
 
         const existingFeatures = getSourceFeatures();
         const exists = existingFeatures.some((f) => f.properties.database_id === featureId);
@@ -263,11 +262,10 @@ export function useFeatureSelection(deps: UseFeatureSelectionDeps) {
             }
         }
 
-        existingFeatures.push(geoJsonFeature);
-        setSourceFeatures(existingFeatures);
+        mutations.add(geoJsonFeature as VaultFeature);
 
         if (labelMarkerManager.value) {
-            labelMarkerManager.value.updateMarkers(existingFeatures);
+            labelMarkerManager.value.updateMarkers(getSourceFeatures());
         }
     }
 
@@ -411,9 +409,8 @@ export function useFeatureSelection(deps: UseFeatureSelectionDeps) {
         const properties = feature?.properties ?? {};
         const featureId = properties.database_id as string | number | undefined;
 
-        if (featureId && map.value?.getSource('geojson-data')) {
-            const features = getSourceFeatures().filter((f) => f.properties.database_id !== featureId);
-            setSourceFeatures(features);
+        if (featureId) {
+            mutations.remove(String(featureId));
             updateFeatureCount();
 
             if (showAllLabels.value && labelMarkerManager.value) {
@@ -425,59 +422,62 @@ export function useFeatureSelection(deps: UseFeatureSelectionDeps) {
         isEditingFeature.value = false;
     }
 
-    function handleFeatureSaved(updatedFeature: MapPageFeature | null): void {
+    async function handleFeatureSaved(updatedFeature: MapPageFeature | null): Promise<void> {
+        if (!updatedFeature?.properties.database_id && selectedFeature.value?.properties.database_id != null) {
+            const { getFeature } = await import('@/api/services/featuresApi');
+            const id = selectedFeature.value.properties.database_id as string | number;
+            const data = await getFeature(id) as { feature?: { geojson?: MapPageFeature; id?: string | number } };
+            if (data.feature?.geojson) {
+                updatedFeature = {
+                    ...data.feature.geojson,
+                    properties: { ...data.feature.geojson.properties, database_id: data.feature.id ?? id },
+                };
+            }
+        }
         if (updatedFeature?.properties.database_id != null) {
             const featureId = updatedFeature.properties.database_id as string | number;
 
-            if (map.value?.getSource('geojson-data')) {
+            if (featureSource.has(String(featureId)) && map.value) {
                 const mapInstance = map.value;
-                const features = getSourceFeatures();
-                const featureIndex = features.findIndex((f) => f.properties.database_id === featureId && !f.properties._isLabelPoint && !f.properties._isSmallFeatureReplacement);
+                const updatedFeatureCopy = JSON.parse(JSON.stringify(updatedFeature)) as MapPageFeature;
+                updatedFeatureCopy.properties.database_id = featureId;
 
-                if (featureIndex !== -1) {
-                    const updatedFeatureCopy = JSON.parse(JSON.stringify(updatedFeature)) as MapPageFeature;
-                    updatedFeatureCopy.properties.database_id = featureId;
+                if (updatedFeatureCopy.geometry.type === 'Point') {
+                    const iconUrl = getFeatureIconUrl(updatedFeatureCopy.properties);
+                    const zoom = mapInstance.getZoom();
+                    const userSettings = getUserMapSettings();
+                    const replaceIconsLowZoom = userSettings.replace_icons_low_zoom !== undefined ? !!userSettings.replace_icons_low_zoom : true;
+                    const shouldShowIcon = !!iconUrl && shouldUseIcon(zoom, iconUrl, replaceIconsLowZoom);
 
-                    if (updatedFeatureCopy.geometry.type === 'Point') {
-                        const iconUrl = getFeatureIconUrl(updatedFeatureCopy.properties);
-                        const zoom = mapInstance.getZoom();
-                        const userSettings = getUserMapSettings();
-                        const replaceIconsLowZoom = userSettings.replace_icons_low_zoom !== undefined ? !!userSettings.replace_icons_low_zoom : true;
-                        const shouldShowIcon = !!iconUrl && shouldUseIcon(zoom, iconUrl, replaceIconsLowZoom);
+                    if (shouldShowIcon) {
+                        const resolvedUrl = getIconSourceUrl(iconUrl, updatedFeatureCopy.properties);
+                        const iconId = `icon-${resolvedUrl.replace(/[^a-zA-Z0-9]/g, '_')}`;
+                        updatedFeatureCopy.properties['_icon-id'] = iconId;
 
-                        if (shouldShowIcon) {
-                            const resolvedUrl = getIconSourceUrl(iconUrl, updatedFeatureCopy.properties);
-                            const iconId = `icon-${resolvedUrl.replace(/[^a-zA-Z0-9]/g, '_')}`;
-                            updatedFeatureCopy.properties['_icon-id'] = iconId;
-
-                            if (!mapInstance.hasImage(iconId)) {
-                                loadIconImage(mapInstance, iconId, resolvedUrl).catch((err: unknown) => {
-                                    console.warn(`Failed to load icon ${iconId}:`, err);
-                                    delete updatedFeatureCopy.properties['_icon-id'];
-                                });
-                            }
-                        } else {
-                            delete updatedFeatureCopy.properties['_icon-id'];
+                        if (!mapInstance.hasImage(iconId)) {
+                            loadIconImage(mapInstance, iconId, resolvedUrl).catch((err: unknown) => {
+                                console.warn(`Failed to load icon ${iconId}:`, err);
+                                delete updatedFeatureCopy.properties['_icon-id'];
+                            });
                         }
                     } else {
                         delete updatedFeatureCopy.properties['_icon-id'];
                     }
-
-                    features[featureIndex] = markRaw(updatedFeatureCopy);
-                    setSourceFeatures(features);
-
-                    if (showAllLabels.value && labelMarkerManager.value) {
-                        labelMarkerManager.value.updateMarkers(features);
-                    }
-
-                    updateFeaturesInExtent();
-                    updateFeatureCount();
-
-                    if (selectedFeature.value?.properties.database_id === featureId) {
-                        selectedFeature.value = markRaw(convertMapLibreFeature(updatedFeatureCopy)) as MapPageFeature;
-                    }
                 } else {
-                    console.log(`Feature ${featureId} not found on map, skipping update`);
+                    delete updatedFeatureCopy.properties['_icon-id'];
+                }
+
+                mutations.applyPatch(updatedFeatureCopy as VaultFeature);
+
+                if (showAllLabels.value && labelMarkerManager.value) {
+                    labelMarkerManager.value.updateMarkers(getSourceFeatures());
+                }
+
+                updateFeaturesInExtent();
+                updateFeatureCount();
+
+                if (selectedFeature.value?.properties.database_id === featureId) {
+                    selectedFeature.value = markRaw(convertMapLibreFeature(updatedFeatureCopy)) as MapPageFeature;
                 }
             }
         }
@@ -503,11 +503,8 @@ export function useFeatureSelection(deps: UseFeatureSelectionDeps) {
                 geometryType,
             });
 
-            if (map.value?.getSource('geojson-data')) {
-                const features = getSourceFeatures().filter((f) => f.properties.database_id !== featureId);
-                setSourceFeatures(features);
-                updateFeatureCount();
-            }
+            mutations.hide(String(featureId));
+            updateFeatureCount();
 
             if (selectedFeature.value?.properties.database_id === featureId) {
                 selectedFeature.value = null;
@@ -596,15 +593,12 @@ export function useFeatureSelection(deps: UseFeatureSelectionDeps) {
                 }
             }
 
-            const existingFeatures = getSourceFeatures();
-            existingFeatures.push(createdFeature);
-            setSourceFeatures(existingFeatures);
-
+            mutations.add(createdFeature as VaultFeature);
             updateFeatureCount();
             updateFeaturesInExtent();
 
             if (showAllLabels.value && labelMarkerManager.value) {
-                labelMarkerManager.value.updateMarkers(existingFeatures);
+                labelMarkerManager.value.updateMarkers(getSourceFeatures());
             }
         }
     }
@@ -614,14 +608,15 @@ export function useFeatureSelection(deps: UseFeatureSelectionDeps) {
         if (!feature) return;
 
         const properties = feature.properties;
-        const featureId = properties.database_id as string | number | undefined;
+        const featureId = (properties.feature_ref ?? properties.database_id) as string | number | undefined;
         if (!featureId) return;
 
-        let url = `${APIHOST}/api/export-kmz?feature=${encodeURIComponent(String(featureId))}`;
-        if (isPublicShareMode.value && shareId.value) {
-            url += `&share=${encodeURIComponent(shareId.value)}`;
-        }
-        window.open(url, '_blank');
+        void downloadKmz({
+            feature_ref: featureId,
+            share: isPublicShareMode.value && shareId.value ? shareId.value : undefined,
+        }).catch((error) => {
+            toastApiError(error, 'Failed to download KMZ.');
+        });
     }
 
     function handleElevationProfileClose(): void {
@@ -724,7 +719,5 @@ export function useFeatureSelection(deps: UseFeatureSelectionDeps) {
         handleHoverPoint,
         handleHoverClear,
         handleClickPoint,
-        getSourceFeatures,
-        setSourceFeatures,
     };
 }

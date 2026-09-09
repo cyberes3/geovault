@@ -1,19 +1,20 @@
 import './assets/css/main.css'
 
+import { PublicShareSession } from '@/utils/sharing/publicShareSession'
+import { downloadKmz } from '@/utils/sharing/downloadKmz'
+import { remapPathnameToHash, mapSocialUrl, mapSpaUrl, trackSocialUrl, trackSpaUrl } from '@/utils/sharing/shareUrl'
+
 /**
  * Dev/proxy-safe fallback:
  * If a social share URL is opened on the frontend dev server (or any origin that serves the SPA directly),
- * remap /share/map/<id>/ to the hash route before app initialization/auth checks.
+ * remap /share/map/<id>/ or /share/track/<id>/ to the hash route before app initialization/auth checks.
  */
 function remapSocialSharePathToHashRoute(): void {
     if (typeof window === 'undefined') return
-    if (window.location.hash) return
-
-    const match = window.location.pathname.match(/^\/share\/map\/([0-9a-fA-F-]{36})\/?$/)
-    if (!match) return
-
-    const shareId = match[1]
-    window.location.replace(`/#/mapshare?id=${encodeURIComponent(shareId)}`)
+    const next = remapPathnameToHash(window.location.pathname, window.location.hash)
+    if (next) {
+        window.location.replace(next)
+    }
 }
 
 remapSocialSharePathToHashRoute()
@@ -30,8 +31,6 @@ import App from './App.vue'
 import store from "@/assets/js/store";
 import router from "@/router.js";
 import '@/assets/css/root.css'
-import 'simple-code-editor/themes/themes.css'
-import 'simple-code-editor/themes/themes-base16.css'
 
 import axios from 'axios';
 import { toast } from '@/utils/toast';
@@ -42,21 +41,29 @@ import { geolocationManager } from '@/utils/map/geolocationManager.js';
 import { parseCoordinates, looksLikeCoordinates, validateCoordinates } from '@/utils/geo/coordinates';
 import { searchGeocoding, getGeocodingResultCoordinates, getGeocodingResultLabel } from '@/utils/geocodingSearch.js';
 import { listUsers } from '@/api/services/userApi';
+import { httpClient } from '@/api/httpClient';
+import { hexToRgb } from '@/utils/map/colorUtils';
+import { useExtensionSettings } from '@/extensions/useExtensionSettings';
 import { realtimeSocket } from '@/assets/js/websocket/realtimeSocket';
+import { GeoVaultSocket } from '@/assets/js/websocket/GeoVaultSocket';
 import { WebSocketHeartbeat } from '@/assets/js/websocket/WebSocketHeartbeat';
-import { tileSourceCatalog, RasterTileUrls, openLayersBasemap, OSM_TILE_SOURCE_ID } from '@/utils/map/openlayers/index.js';
+import { tileSourceCatalog } from '@/utils/map/tileSources/sharedCatalog.js';
+import { RasterTileUrls } from '@/utils/map/tileSources/RasterTileUrls.js';
+import { OSM_TILE_SOURCE_ID } from '@/utils/map/tileSources/constants.js';
 import { isValidMapLngLatPair } from '@/utils/map/mapGeography.js';
-import { createUserLocationMarker, updateUserLocationMarker, removeUserLocationMarker } from '@/utils/map/maplibre/locationMarker.js';
-import { setupCopyMapCoordinatesOnContextMenu } from '@/utils/map/copyMapCoordinatesOnContextMenu.js';
 import { useDocumentTitle } from '@/utils/documentTitle.js';
+import { firstPaintPath, mountWaitsForExtensions } from '@/utils/runtime/BootGraph';
+import { settingsReady } from '@/utils/settings/SettingsReady';
 
 import { extensionRegistry } from '@/utils/extensionRegistry.js';
 import { createRouteWrapper } from '@/extensions/routeWrapper';
 import { createPlatformStateBridge } from '@/extensions/platformState';
 import { loadExtensions } from '@/extensions/extensionLoader';
 
-import { loadOl } from '@/utils/map/openlayers/lazyOl.js';
 import { loadMaplibreGl } from '@/utils/map/maplibre/lazyMaplibreGl.js';
+import type { LocationMarkerCoords } from '@/utils/map/maplibre/locationMarker';
+import type { Map as MapLibreMap, Marker } from 'maplibre-gl';
+import type { SetupCopyMapCoordinatesDeps } from '@/utils/map/copyMapCoordinatesOnContextMenu';
 
 // PWA Install Prompt Handling
 window.addEventListener('beforeinstallprompt', (e) => {
@@ -93,38 +100,171 @@ const extensionUtils = {
     listUsers
 };
 
-// Shared platform APIs: single namespace for clarity. Top-level aliases kept for extension UMD builds.
+async function loadEngine(engine: 'maplibre' | 'none'): Promise<unknown> {
+    if (engine === 'none') {
+        return undefined;
+    }
+    const { mapCommonApi } = await import('@/utils/map/common/index.js');
+    Object.assign(gvCoreMap, mapCommonApi);
+    return mapCommonApi.loadEngine('maplibre');
+}
+
+async function createUserLocationMarker(map: MapLibreMap | null | undefined, coords: LocationMarkerCoords | null | undefined): Promise<Marker | null> {
+    const { createUserLocationMarker: createMarker } = await import('@/utils/map/maplibre/locationMarker.js');
+    return createMarker(map, coords);
+}
+
+async function updateUserLocationMarker(marker: Marker | null | undefined, coords: LocationMarkerCoords | null | undefined): Promise<void> {
+    const { updateUserLocationMarker: updateMarker } = await import('@/utils/map/maplibre/locationMarker.js');
+    updateMarker(marker, coords);
+}
+
+async function removeUserLocationMarker(marker: Marker | null | undefined): Promise<void> {
+    const { removeUserLocationMarker: removeMarker } = await import('@/utils/map/maplibre/locationMarker.js');
+    removeMarker(marker);
+}
+
+function setupCopyMapCoordinatesOnContextMenu(map: MapLibreMap, deps?: SetupCopyMapCoordinatesDeps): () => void {
+    let disposed = false;
+    let innerTeardown: (() => void) | null = null;
+    void import('@/utils/map/copyMapCoordinatesOnContextMenu.js').then(({ setupCopyMapCoordinatesOnContextMenu: setup }) => {
+        if (disposed) {
+            return;
+        }
+        innerTeardown = setup(map, deps);
+    });
+    return () => {
+        disposed = true;
+        innerTeardown?.();
+    };
+}
+
+async function createGeoJsonPreviewMap(container: HTMLElement) {
+    const { createGeoJsonPreviewMap: create } = await import('@/utils/map/common/MapLibrePreviewMap.js');
+    return create(container);
+}
+
+async function createPointPickerMap(container: HTMLElement, onPick: (lng: number, lat: number) => void) {
+    const { createPointPickerMap: create } = await import('@/utils/map/common/MapLibrePreviewMap.js');
+    return create(container, onPick);
+}
+
+async function copyToClipboard(text: string): Promise<void> {
+    await navigator.clipboard.writeText(text);
+}
+
+async function downloadBlob(url: string, filename: string): Promise<void> {
+    const response = await fetch(url, { credentials: 'include' });
+    const blob = await response.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = objectUrl;
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(objectUrl);
+}
+
+function absoluteUrl(path: string): string {
+    if (path.startsWith('http://') || path.startsWith('https://')) {
+        return path;
+    }
+    const normalized = path.startsWith('/') ? path : `/${path}`;
+    return `${window.location.origin}${normalized}`;
+}
+
+function getUnitPreference(): string {
+    const units = getNestedValue(platformState.userSettings.value, 'account.units');
+    return typeof units === 'string' ? units : 'imperial';
+}
+
+function getExtensionSetting(extensionName: string, key: string): unknown {
+    return getNestedValue(platformState.userSettings.value, `extensions.${extensionName}.${key}`);
+}
+
+function connectExtensionSocket(options: ConstructorParameters<typeof GeoVaultSocket>[0]) {
+    return new GeoVaultSocket(options);
+}
+
+const gvCoreMap = {
+    loadEngine,
+    loadMaplibreGl,
+    maplibre: null as unknown,
+    tileSourceCatalog,
+    RasterTileUrls,
+    OSM_TILE_SOURCE_ID,
+    geolocationManager,
+    isValidMapLngLatPair,
+    createUserLocationMarker,
+    updateUserLocationMarker,
+    removeUserLocationMarker,
+    setupCopyMapCoordinatesOnContextMenu,
+    createGeoJsonPreviewMap,
+    createPointPickerMap,
+    useUserLocationMarker: createUserLocationMarker,
+};
+
+const gvCoreUi = {
+    toast,
+    useDocumentTitle,
+    copyToClipboard,
+    hexToRgb,
+};
+
+const gvCoreNet = {
+    coreApi: httpClient,
+    listUsers,
+    connectExtensionSocket,
+    downloadBlob,
+};
+
+const gvCoreSettings = {
+    awaitUserSettings: () => settingsReady.awaitReady(() => store.dispatch('userSettings/fetchUserSettings')),
+    status: () => settingsReady.status,
+    getUnitPreference,
+    getExtensionSetting,
+    useExtensionSettings: (extensionName: string) => useExtensionSettings(extensionName, platformState),
+};
+
+const gvCoreSharing = {
+    absoluteUrl,
+    downloadKmz,
+    PublicShareSession,
+    mapSocialUrl,
+    mapSpaUrl,
+    trackSocialUrl,
+    trackSpaUrl,
+    remapPathnameToHash,
+};
+
+// Thin compat bag: toast/utils/platformState during this pass. Prefer gv_core.ui / .settings / .net.
 const GeoVault = {
-    registry: extensionRegistry,
     utils: extensionUtils,
     toast,
     platformState,
-    tileSourceCatalog,
-    RasterTileUrls,
-    geolocationManager
 };
 
 window.gv_core = {
+    map: gvCoreMap,
+    ui: gvCoreUi,
+    net: gvCoreNet,
+    settings: gvCoreSettings,
+    sharing: gvCoreSharing,
     GeoVault,
     Vue: VueState,
     VueRouter: VueRouterState,
     Vuex: VuexState,
     axios,
     resolveHeroiconByName,
-    // Null until something calls loadOl()/loadMaplibreGl() - see lazyOl.js/lazyMaplibreGl.js for
-    // why these aren't populated eagerly here.
-    ol: null,
-    loadOl,
     maplibre: null,
     loadMaplibreGl,
     createRouteWrapper,
     tileSourceCatalog,
     RasterTileUrls,
-    openLayersBasemap,
     OSM_TILE_SOURCE_ID,
     geolocationManager,
     platformState,
     realtimeSocket,
+    GeoVaultSocket,
     WebSocketHeartbeat,
     isValidMapLngLatPair,
     createUserLocationMarker,
@@ -132,26 +272,26 @@ window.gv_core = {
     removeUserLocationMarker,
     setupCopyMapCoordinatesOnContextMenu,
     useDocumentTitle,
-    BaseButton: null, // set below after import
-    BaseModal: null, // set below after import
-    Loader: null, // set below after import
-    LocationIcon: null, // set below after import
-    ScrollingSelect: null, // set below after import
-    SearchableCheckboxList: null, // set below after import
-    ToggleButton: null, // set below after import
-    SettingsInput: null // set below after import
+    BaseButton: null,
+    BaseModal: null,
+    Loader: null,
+    LocationIcon: null,
+    ScrollingSelect: null,
+    SearchableCheckboxList: null,
+    ToggleButton: null,
+    SettingsInput: null
 };
 
-// Top-level aliases so extension UMD bundles (external vue, ol, etc.) keep working
+// Top-level aliases so extension UMD bundles (external vue, etc.) keep working
 window.GeoVault = window.gv_core.GeoVault;
 window.Vue = window.gv_core.Vue;
 window.VueRouter = window.gv_core.VueRouter;
 window.Vuex = window.gv_core.Vuex;
 window.axios = window.gv_core.axios;
 
-// No eager `loadOl()`/`loadMaplibreGl()` calls here on purpose - see lazyOl.js/lazyMaplibreGl.js.
-// Map-rendering code calls `window.gv_core.loadOl()`/`loadMaplibreGl()` itself, right before it
-// needs to render a map. Both populate `window.ol`/`window.maplibregl` as a side effect once resolved.
+// No eager `loadMaplibreGl()` calls here on purpose - see lazyMaplibreGl.js.
+// Map-rendering code calls `window.gv_core.loadMaplibreGl()` itself, right before it
+// needs to render a map. That populates `window.maplibregl` as a side effect once resolved.
 
 import BaseButton from '@/components/parts/BaseButton.vue';
 import ToggleButton from '@/components/parts/ToggleButton.vue';
@@ -190,16 +330,33 @@ app.component('SettingsInput', SettingsInput);
 app.component('BaseModal', BaseModal);
 app.component('ColorPickerElement', ColorPickerElement);
 
-// Start app after loading extensions (extension routes are added during loadExtensions)
-void loadExtensions({ app, router, store, platformState, utils: extensionUtils, toast }).then(() => {
-    // Add catch-all last so /extensions/* routes match before NotFound
+app.use(router).use(store);
+
+function addNotFoundRoute(): void {
+    if (router.hasRoute('NotFound')) {
+        return;
+    }
     router.addRoute({
         path: '/:pathMatch(.*)*',
         name: 'NotFound',
         meta: { title: 'Not Found' },
         component: () => import('./components/NotFoundPage.vue'),
     });
-    app.use(router)
-        .use(store)
-        .mount('#app');
-});
+}
+
+const extensionLoad = loadExtensions({ app, router, store, platformState, utils: extensionUtils, toast });
+
+if (mountWaitsForExtensions(firstPaintPath())) {
+    void extensionLoad.then(() => {
+        addNotFoundRoute();
+        app.mount('#app');
+    });
+} else {
+    app.mount('#app');
+    void extensionLoad.then(() => {
+        addNotFoundRoute();
+        if (router.currentRoute.value.matched.length === 0) {
+            void router.replace(router.currentRoute.value.fullPath);
+        }
+    });
+}

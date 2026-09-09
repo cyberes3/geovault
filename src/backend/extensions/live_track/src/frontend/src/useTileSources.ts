@@ -6,7 +6,7 @@
  */
 import { ref, type Ref } from 'vue';
 import { defaultOsmSource } from './mapTileUtils';
-import type { TileSource } from './types/gv-core';
+import type { TileSource } from '@geovault/extension-sdk';
 
 export interface UseTileSourcesOptions {
   defaultSource?: TileSource;

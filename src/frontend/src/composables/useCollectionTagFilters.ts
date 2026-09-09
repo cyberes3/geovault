@@ -1,21 +1,19 @@
 /**
- * Collection ("`?collection=`") and tag ("`?tag=`") filter modes: loads ALL features for the
- * collection/tag (not just the viewport) so the whole set can be zoomed-to, and owns the
- * available-tags list used by the sidebar's tag filter dropdown.
+ * Collection (`?collection=`) and tag (`?tag=`) filter modes: bbox loads through the map
+ * session pipeline, plus the available-tags list for the sidebar dropdown.
  */
 import { computed, markRaw, ref, type ComputedRef, type Ref, type ShallowRef } from 'vue';
 import { useRoute } from 'vue-router';
 import { useStore } from 'vuex';
-import type { Map as MapLibreMap, GeoJSONSource } from 'maplibre-gl';
+import type { Map as MapLibreMap } from 'maplibre-gl';
 import { getLoadedMaplibreGl } from '@/utils/map/maplibre/lazyMaplibreGl.js';
-import { getCollection, getCollectionFeatures } from '@/api/services/collectionsApi';
-import { getFeature, filterFeaturesByTags } from '@/api/services/featuresApi';
+import { getCollection } from '@/api/services/collectionsApi';
+import { getFeature } from '@/api/services/featuresApi';
 import { convertMapLibreFeature } from '@/utils/map/maplibre/featureConversion.js';
 import { toastApiError } from '@/utils/apiError';
 import { toast } from '@/utils/toast';
 import { sortTagsByPriority, sortUserTagsAlphabetically } from '@/utils/tagUtils.js';
 import { getFeatureCoordinates } from '@/utils/map/maplibre';
-import { filterPointsOnBorders } from '@/utils/map/maplibre/featureFiltering.js';
 import { MAX_ZOOM_LEVEL } from '@/utils/map/maplibre/mapInitialization.js';
 import type { RootState } from '@/assets/js/store';
 import type { UserInfo } from '@/assets/js/types/store-types';
@@ -33,20 +31,13 @@ export interface UseCollectionTagFiltersDeps {
     labelMarkerManager: ShallowRef<LabelMarkerManager | null>;
     isDataLoading: Ref<boolean>;
     loadError: Ref<string | null>;
-    featuresInExtent: Ref<MapPageFeature[]>;
-    featureCount: Ref<number>;
-    cachedGeoJsonData: ShallowRef<GeoJsonFeatureCollection | null>;
     selectedFeature: Ref<MapPageFeature | null>;
     navigateAndRefresh: (navigationFn: () => void, clearAllBounds?: boolean) => Promise<void>;
     addFeaturesToMap: (geojsonData: GeoJsonFeatureCollection) => Promise<void>;
-    invalidateSourceCache: () => void;
-    clearLoadedBounds: () => void;
+    resetFeatureState: () => void;
     loadDataForCurrentView: () => Promise<void>;
     waitForMap: () => Promise<void>;
-    waitForMapEvent: (eventName: string, timeout?: number) => Promise<void>;
     zoomToFeature: (feature: MapPageFeature) => Promise<void>;
-    updateFeatureCount: () => void;
-    updateFeaturesInExtent: () => void;
 }
 
 export function useCollectionTagFilters(deps: UseCollectionTagFiltersDeps) {
@@ -55,20 +46,13 @@ export function useCollectionTagFilters(deps: UseCollectionTagFiltersDeps) {
         labelMarkerManager,
         isDataLoading,
         loadError,
-        featuresInExtent,
-        featureCount,
-        cachedGeoJsonData,
         selectedFeature,
         navigateAndRefresh,
         addFeaturesToMap,
-        invalidateSourceCache,
-        clearLoadedBounds,
+        resetFeatureState,
         loadDataForCurrentView,
         waitForMap,
-        waitForMapEvent,
         zoomToFeature,
-        updateFeatureCount,
-        updateFeaturesInExtent,
     } = deps;
 
     const route = useRoute();
@@ -93,10 +77,10 @@ export function useCollectionTagFilters(deps: UseCollectionTagFiltersDeps) {
         const getters = store.getters as RootGetters;
         if (!getters['auth/userInfo']) return;
         try {
-            const { getFeaturesByTag } = await import('@/api/services/featuresApi');
-            const data = (await getFeaturesByTag()) as { user_tags?: Record<string, unknown>; system_tags?: Record<string, unknown> };
-            const userTags = data.user_tags ? Object.keys(data.user_tags) : [];
-            const systemTags = data.system_tags ? Object.keys(data.system_tags) : [];
+            const { getTagCatalog } = await import('@/api/services/featuresApi');
+            const page = await getTagCatalog({ page_size: '100' });
+            const userTags = page.items.filter((item) => item.kind === 'user').map((item) => item.name);
+            const systemTags = page.items.filter((item) => item.kind === 'system').map((item) => item.name);
 
             const sortedUserTags = sortUserTagsAlphabetically(userTags);
             const sortedSystemTags = sortTagsByPriority(systemTags);
@@ -168,42 +152,13 @@ export function useCollectionTagFilters(deps: UseCollectionTagFiltersDeps) {
         });
     }
 
-    /** Ensure the map source is fully empty before merging in an "ALL features" (non-bbox) response. */
-    async function ensureSourceEmpty(): Promise<void> {
-        const mapInstance = map.value;
-        if (!mapInstance?.getSource('geojson-data')) return;
-
-        const maxAttempts = 3;
-        for (let attempts = 0; attempts < maxAttempts; attempts++) {
-            const source: GeoJSONSource | undefined = mapInstance.getSource('geojson-data');
-            const serialized = source?.serialize() as { data?: GeoJsonFeatureCollection };
-            const currentData = serialized.data ?? { type: 'FeatureCollection' as const, features: [] };
-
-            if (currentData.features.length === 0) {
-                break;
-            }
-
-            source?.setData({ type: 'FeatureCollection', features: [] });
-            if (attempts < maxAttempts - 1) {
-                await waitForMapEvent('idle');
-            }
-        }
-    }
-
     function clearMapForFilterSwitch(): void {
-        const source: GeoJSONSource | undefined = map.value?.getSource('geojson-data');
-        source?.setData({ type: 'FeatureCollection', features: [] });
-        featuresInExtent.value = [];
         selectedFeature.value = null;
-        featureCount.value = 0;
-        clearLoadedBounds();
+        resetFeatureState();
 
         if (labelMarkerManager.value) {
             labelMarkerManager.value.clearAllMarkers();
         }
-
-        invalidateSourceCache();
-        cachedGeoJsonData.value = null;
     }
 
     async function handleCollectionFilter(collectionIdParam: string | null): Promise<void> {
@@ -222,47 +177,13 @@ export function useCollectionTagFilters(deps: UseCollectionTagFiltersDeps) {
             isCollectionMode.value = true;
 
             clearMapForFilterSwitch();
-
-            await waitForMapEvent('idle');
-
-            const featuresData = (await getCollectionFeatures(collectionIdParam)) as { data?: GeoJsonFeatureCollection };
-            if (!featuresData.data) {
-                console.error('Collection features response missing data:', featuresData);
-                throw new Error('Invalid collection features response');
-            }
-
-            const geojsonData = featuresData.data;
-            if (Array.isArray(geojsonData.features)) {
-                await ensureSourceEmpty();
-
-                const rawData = markRaw(geojsonData);
-                await addFeaturesToMap(rawData);
-
-                await waitForMapEvent('idle');
-
-                if (map.value?.getSource('geojson-data')) {
-                    const source: GeoJSONSource | undefined = map.value.getSource('geojson-data');
-                    const serialized = source?.serialize() as { data?: GeoJsonFeatureCollection };
-                    const sourceData = serialized.data ?? { type: 'FeatureCollection' as const, features: [] };
-                    const features = sourceData.features.filter((f) => !f.properties._isLabelPoint && !f.properties._isSmallFeatureReplacement) as MapPageFeature[];
-
-                    if (features.length > 0) {
-                        await zoomToTaggedFeatures(features);
-                    } else {
-                        console.warn('Collection loaded but no features found after processing');
-                    }
-                }
-            } else {
-                console.warn('Collection has no features or invalid feature data:', geojsonData);
-            }
+            await loadDataForCurrentView();
         } catch (error) {
             console.error('Error loading collection:', error);
             toastApiError(error, 'Failed to load collection');
             collectionName.value = null;
             isCollectionMode.value = false;
-            const source: GeoJSONSource | undefined = map.value?.getSource('geojson-data');
-            source?.setData({ type: 'FeatureCollection', features: [] });
-            clearLoadedBounds();
+            resetFeatureState();
             await loadDataForCurrentView();
         } finally {
             isDataLoading.value = false;
@@ -298,22 +219,12 @@ export function useCollectionTagFilters(deps: UseCollectionTagFiltersDeps) {
             isDataLoading.value = false;
 
             await waitForMap();
+            await addFeaturesToMap({ type: 'FeatureCollection', features: [feature] });
 
-            if (map.value?.getSource('geojson-data')) {
-                const source: GeoJSONSource | undefined = map.value.getSource('geojson-data');
-                const serialized = source?.serialize() as { data?: GeoJsonFeatureCollection };
-                const currentData = serialized.data ?? { type: 'FeatureCollection' as const, features: [] };
-                const existingFeatures = currentData.features;
-
-                const exists = existingFeatures.some((f) => f.properties.database_id === featureIdParam);
-                if (!exists) {
-                    existingFeatures.push(feature);
-                    source?.setData({ type: 'FeatureCollection', features: existingFeatures });
-                }
-
-                await zoomToFeature(markRaw(convertMapLibreFeature(feature)) as MapPageFeature);
-                removeFeatureIdFromUrl();
-            }
+            const normalized = markRaw(convertMapLibreFeature(feature)) as MapPageFeature;
+            selectedFeature.value = normalized;
+            await zoomToFeature(normalized);
+            removeFeatureIdFromUrl();
         } catch (error) {
             console.error(`Error fetching feature ${featureIdParam}:`, error);
             toastApiError(error, `Failed to load feature ${featureIdParam}`);
@@ -343,29 +254,7 @@ export function useCollectionTagFilters(deps: UseCollectionTagFiltersDeps) {
         isDataLoading.value = true;
         try {
             clearMapForFilterSwitch();
-
-            await waitForMapEvent('idle');
-
-            const data = (await filterFeaturesByTags(currentTags.value, currentTagMatchMode.value)) as { data?: GeoJsonFeatureCollection };
-            if (data.data?.features) {
-                await ensureSourceEmpty();
-
-                const rawData = markRaw(data.data);
-                await addFeaturesToMap(rawData);
-
-                await waitForMapEvent('idle');
-
-                if (map.value?.getSource('geojson-data')) {
-                    const source: GeoJSONSource | undefined = map.value.getSource('geojson-data');
-                    const serialized = source?.serialize() as { data?: GeoJsonFeatureCollection };
-                    const sourceData = serialized.data ?? { type: 'FeatureCollection' as const, features: [] };
-                    const features = sourceData.features.filter((f) => !f.properties._isLabelPoint && !f.properties._isSmallFeatureReplacement) as MapPageFeature[];
-
-                    if (features.length > 0) {
-                        await zoomToTaggedFeatures(features);
-                    }
-                }
-            }
+            await loadDataForCurrentView();
         } catch (error) {
             console.error('Error loading tag-filtered features:', error);
             loadError.value = error instanceof Error ? error.message : 'Failed to load tag-filtered features';
@@ -382,7 +271,7 @@ export function useCollectionTagFilters(deps: UseCollectionTagFiltersDeps) {
             currentTags.value = null;
             currentTagMatchMode.value = 'AND';
 
-            clearLoadedBounds();
+            resetFeatureState();
             void loadDataForCurrentView();
             return;
         }
@@ -391,62 +280,8 @@ export function useCollectionTagFilters(deps: UseCollectionTagFiltersDeps) {
         currentTags.value = tags;
         currentTagMatchMode.value = matchMode ?? 'AND';
 
-        clearLoadedBounds();
+        resetFeatureState();
         void loadDataForCurrentView();
-    }
-
-    /** Immediate client-side pre-filter of already-loaded features while `handleTagFilterChange`'s reload is in flight. */
-    function filterExistingFeaturesByTags(selectedTags: string[] | null): void {
-        const mapInstance = map.value;
-        if (!mapInstance?.getSource('geojson-data') || !selectedTags || selectedTags.length === 0) {
-            return;
-        }
-
-        isTagFilterActive.value = true;
-
-        const source: GeoJSONSource | undefined = mapInstance.getSource('geojson-data');
-        const serialized = source?.serialize() as { data?: GeoJsonFeatureCollection };
-        const data = serialized.data ?? { type: 'FeatureCollection' as const, features: [] };
-        const allFeatures = data.features as MapPageFeature[];
-
-        const filteredFeatures = allFeatures.filter((f) => {
-            if (f.properties._isLabelPoint || f.properties._isSmallFeatureReplacement) return false;
-
-            const props = f.properties;
-            let tags: unknown = props.tags ?? [];
-            if (typeof tags === 'string') {
-                try {
-                    tags = JSON.parse(tags);
-                } catch {
-                    tags = [];
-                }
-            }
-            if (!Array.isArray(tags)) tags = [];
-
-            let systemTags: unknown = props.system_tags ?? [];
-            if (typeof systemTags === 'string') {
-                try {
-                    systemTags = JSON.parse(systemTags);
-                } catch {
-                    systemTags = [];
-                }
-            }
-            if (!Array.isArray(systemTags)) systemTags = [];
-
-            const allFeatureTags = [...(tags as string[]), ...(systemTags as string[])];
-            return selectedTags.every((tag) => allFeatureTags.includes(tag));
-        });
-
-        if (filteredFeatures.length > 0) {
-            const filteredGeojsonFeatures = filterPointsOnBorders(filteredFeatures) as MapPageFeature[];
-            const filteredCollection: GeoJsonFeatureCollection = { type: 'FeatureCollection', features: filteredGeojsonFeatures.map((f) => markRaw(f)) };
-            source?.setData(markRaw(filteredCollection));
-        } else {
-            const emptyCollection: GeoJsonFeatureCollection = { type: 'FeatureCollection', features: [] };
-            source?.setData(markRaw(emptyCollection));
-        }
-        updateFeatureCount();
-        updateFeaturesInExtent();
     }
 
     return {
@@ -465,6 +300,5 @@ export function useCollectionTagFilters(deps: UseCollectionTagFiltersDeps) {
         handleUrlFeatureId,
         handleUrlTag,
         handleTagFilterChange,
-        filterExistingFeaturesByTags,
     };
 }

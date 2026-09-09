@@ -16,7 +16,10 @@ import type {
     ScopedExtensionRegistry,
     ToastService
 } from '@/extensions/extensionContractTypes';
-import type { TileSourceCatalog, RasterTileUrls, OpenLayersBasemapFactory } from '@/utils/map/openlayers';
+import type { TileSourceCatalog } from '@/utils/map/tileSources/TileSourceCatalog';
+import type { RasterTileUrls } from '@/utils/map/tileSources/RasterTileUrls';
+import type { MapLibrePreviewMap } from '@/utils/map/common/MapLibrePreviewMap';
+import type { GeoVaultSocket, GeoVaultSocketOptions } from '@/assets/js/websocket/GeoVaultSocket';
 import type { WebSocketHeartbeat, WebSocketHeartbeatOptions } from '@/assets/js/websocket/WebSocketHeartbeat';
 import type { GeolocationManager } from '@/utils/map/geolocationManager.js';
 import type { LocationMarkerCoords } from '@/utils/map/maplibre/locationMarker.js';
@@ -43,15 +46,11 @@ export interface ExtensionSettingSchema {
     secret?: boolean;
 }
 
-/** Global platform surface exposed on `window.gv_core.GeoVault`. */
+/** Thin compat bag on `window.gv_core.GeoVault`. Prefer gv_core.ui / .settings / .net. */
 export interface GeoVaultGlobal {
-    registry: ScopedExtensionRegistry;
     utils: ExtensionSetupUtils;
     toast: ToastService;
     platformState: PlatformStateBridge;
-    tileSourceCatalog: TileSourceCatalog;
-    RasterTileUrls: typeof RasterTileUrls;
-    geolocationManager: GeolocationManager;
 }
 
 /**
@@ -62,6 +61,60 @@ export interface GeoVaultGlobal {
 declare global {
     interface Window {
         gv_core: {
+            map: {
+                loadEngine: (engine: 'maplibre' | 'none') => Promise<unknown>;
+                loadMaplibreGl: () => Promise<unknown>;
+                maplibre: unknown;
+                tileSourceCatalog: TileSourceCatalog;
+                RasterTileUrls: typeof RasterTileUrls;
+                OSM_TILE_SOURCE_ID: string;
+                geolocationManager: GeolocationManager;
+                isValidMapLngLatPair: (lon: number, lat: number) => boolean;
+                createUserLocationMarker: (map: MapLibreMap | null | undefined, coords: LocationMarkerCoords | null | undefined) => Promise<Marker | null>;
+                useUserLocationMarker: (map: MapLibreMap | null | undefined, coords: LocationMarkerCoords | null | undefined) => Promise<Marker | null>;
+                updateUserLocationMarker: (marker: Marker | null | undefined, coords: LocationMarkerCoords | null | undefined) => Promise<void> | void;
+                removeUserLocationMarker: (marker: Marker | null | undefined) => Promise<void> | void;
+                setupCopyMapCoordinatesOnContextMenu: (map: MapLibreMap, deps?: SetupCopyMapCoordinatesDeps) => () => void;
+                createPointPickerMap: (container: HTMLElement, onPick: (lng: number, lat: number) => void) => Promise<MapLibrePreviewMap>;
+                createGeoJsonPreviewMap: (container: HTMLElement) => Promise<MapLibrePreviewMap>;
+                MapLibrePreviewMap: typeof MapLibrePreviewMap;
+            };
+            ui: {
+                toast: ToastService;
+                useDocumentTitle: (titleSource: MaybeRefOrGetter<string>) => void;
+                copyToClipboard: (text: string) => Promise<void>;
+                hexToRgb: (hex: string) => [number, number, number] | null;
+            };
+            net: {
+                coreApi: unknown;
+                listUsers: () => Promise<Array<{ id: number; email: string }>>;
+                connectExtensionSocket: (options: GeoVaultSocketOptions) => GeoVaultSocket;
+                downloadBlob: (url: string, filename: string) => Promise<void>;
+            };
+            settings: {
+                awaitUserSettings: () => Promise<void>;
+                status: () => 'idle' | 'loading' | 'ready' | 'error';
+                getUnitPreference: () => string;
+                getExtensionSetting: (extensionName: string, key: string) => unknown;
+                useExtensionSettings: (extensionName: string) => {
+                    get(key: string): unknown;
+                    save(key: string, value: unknown): Promise<Record<string, unknown>>;
+                };
+            };
+            sharing: {
+                absoluteUrl: (path: string) => string;
+                PublicShareSession: new () => {
+                    status: 'idle' | 'loading' | 'ready' | 'invalid';
+                    info: unknown;
+                    error: string | null;
+                    shareId: string | null;
+                    readonly allowDownloads: boolean;
+                    readonly includeTags: boolean;
+                    resetForShareIdChange(shareId?: string | null): void;
+                    ensureInfo(signal?: AbortSignal): Promise<boolean>;
+                    toMapShareInfo(): unknown;
+                };
+            };
             GeoVault: GeoVaultGlobal;
             Vue: unknown;
             VueRouter: unknown;
@@ -69,10 +122,6 @@ declare global {
             axios: unknown;
             /** Resolves an outline heroicon by name, lazily (never on the eager boot path). Rejects for an unrecognized name - see `resolveExtensionIcon.ts`'s `createHeroiconResolver` and `extensions/lazyHeroiconResolver.ts`. */
             resolveHeroiconByName: (name: string) => Promise<Component>;
-            /** Null until `loadOl()` resolves - OpenLayers is loaded lazily, not eagerly at boot. */
-            ol: unknown;
-            /** Lazily loads OpenLayers (core + submodules), caching the result. Prefer this over reading `ol` directly when you can't guarantee it has already loaded. */
-            loadOl: () => Promise<unknown>;
             /** Null until `loadMaplibreGl()` resolves - MapLibre GL JS is loaded lazily, not eagerly at boot. */
             maplibre: unknown;
             /** Lazily loads MapLibre GL JS (and its CSS), caching the result. Prefer this over reading `maplibre` directly when you can't guarantee it has already loaded. */
@@ -88,11 +137,11 @@ declare global {
             SettingsInput: unknown;
             tileSourceCatalog: TileSourceCatalog;
             RasterTileUrls: typeof RasterTileUrls;
-            openLayersBasemap: OpenLayersBasemapFactory;
             OSM_TILE_SOURCE_ID: string;
             geolocationManager: GeolocationManager;
             platformState: PlatformStateBridge;
             realtimeSocket: unknown;
+            GeoVaultSocket: new (options: GeoVaultSocketOptions) => GeoVaultSocket;
             WebSocketHeartbeat: new (options: WebSocketHeartbeatOptions) => WebSocketHeartbeat;
             isValidMapLngLatPair: (lon: number, lat: number) => boolean;
             createUserLocationMarker: (map: MapLibreMap | null | undefined, coords: LocationMarkerCoords | null | undefined) => Promise<Marker | null>;
@@ -102,8 +151,6 @@ declare global {
             useDocumentTitle: (titleSource: MaybeRefOrGetter<string>) => void;
         };
         GeoVault: GeoVaultGlobal;
-        /** Mirrors `window.gv_core.ol` once `loadOl()` resolves - see `lazyOl.js`. */
-        ol: unknown;
         /** Mirrors `window.gv_core.maplibre` once `loadMaplibreGl()` resolves - see `lazyMaplibreGl.js`. */
         maplibregl: unknown;
         /** Vue ecosystem + shared UI parts, also exposed at top level so UMD extension builds that externalize these deps keep working. Prefer `window.gv_core.*` in core source. */

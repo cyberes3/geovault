@@ -1,3 +1,5 @@
+import type { DuplicateVerdictWire } from '@/contracts/duplicates';
+import { emptyVerdict } from '@/contracts/duplicates';
 import type { ImportFeatureGeometry, ImportFeatureProperties } from './import-types';
 
 enum GeoFeatureType {
@@ -17,6 +19,7 @@ export interface GeoFeatureProps {
     type?: string;
     geometry: ImportFeatureGeometry;
     properties: ImportFeatureProperties;
+    duplicate_verdict?: DuplicateVerdictWire;
 }
 
 class GeoFeature {
@@ -24,12 +27,14 @@ class GeoFeature {
     type: GeoFeatureType;
     geometry: ImportFeatureGeometry;
     properties: ImportFeatureProperties;
+    duplicate_verdict: DuplicateVerdictWire;
 
     constructor(props: GeoFeatureProps, type: GeoFeatureType) {
         this.id = props.id;
         this.type = type;
         this.geometry = props.geometry;
         this.properties = props.properties;
+        this.duplicate_verdict = props.duplicate_verdict ?? emptyVerdict();
     }
 }
 

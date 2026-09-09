@@ -8,7 +8,6 @@ Each invocation is one tracking session: every point shares the same
 The command supports activity styles (walk/run/bike/drive), can resume from the
 latest existing point, and writes richer point_params for UI/testing.
 """
-import bisect
 import math
 import random
 import secrets
@@ -18,10 +17,10 @@ import uuid
 from django.apps import apps
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
-from django.db import transaction
 from django.utils import timezone
 
-from ...helpers import DEFAULT_TRACK_COLOR, broadcast_track_updated
+from ...helpers import DEFAULT_TRACK_COLOR
+from ...writer import point_writer
 
 EARTH_RADIUS_METERS = 6371000
 FEET_TO_METERS = 0.3048
@@ -138,8 +137,6 @@ class Command(BaseCommand):
                 name=options["name"],
                 user=user,
                 settings={"color": DEFAULT_TRACK_COLOR},
-                geometry={"type": "LineString", "coordinates": []},
-                point_params=[],
             )
             self.stdout.write(self.style.SUCCESS(f"Created tracker: {track.name} ({track.id})"))
         else:
@@ -189,7 +186,6 @@ class Command(BaseCommand):
         try:
             while True:
                 timestamp_ms = int(timezone.now().timestamp() * 1000)
-                new_point = [round(lon, 6), round(lat, 6), timestamp_ms]
                 speed_kph = max(0.2, base_speed_kph + rng.gauss(0.0, base_speed_kph * 0.12))
                 acc_m = max(1.0, rng.uniform(3.0, 20.0))
                 sat = int(max(3, min(18, sat + rng.randint(-1, 1))))
@@ -216,28 +212,7 @@ class Command(BaseCommand):
                     "ischarging": charging,
                 }
 
-                with transaction.atomic():
-                    track_locked = LiveTrack.objects.select_for_update().get(pk=track.id)
-                    geom = track_locked.geometry or {"type": "LineString", "coordinates": []}
-                    coords = list(geom.get("coordinates") or [])
-                    point_params = list(track_locked.point_params or [])
-                    # Keep point_params length aligned with coordinates.
-                    if len(point_params) < len(coords):
-                        point_params.extend({} for _ in range(len(coords) - len(point_params)))
-                    elif len(point_params) > len(coords):
-                        point_params = point_params[:len(coords)]
-                    ts_list = [c[2] for c in coords]
-                    idx = bisect.bisect_right(ts_list, timestamp_ms)
-                    coords.insert(idx, new_point)
-                    point_params.insert(idx, extra)
-                    track_locked.geometry = {"type": "LineString", "coordinates": coords}
-                    track_locked.point_params = point_params
-                    track_locked.updated_at = timezone.now()
-                    track_locked.save(update_fields=["geometry", "point_params", "updated_at"])
-                    broadcast_idx = idx if 0 <= idx < len(coords) else None
-
-                if broadcast_idx is not None:
-                    broadcast_track_updated(track_locked, new_point, extra, index=broadcast_idx)
+                point_writer.append(track, lat, lon, timestamp_ms, extra)
 
                 count += 1
                 if count % 10 == 0 or count == 1:

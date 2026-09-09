@@ -5,19 +5,26 @@
  * and maintains the feature cache used by the sidebar feature list, feature count, and cleanup
  * of features that have scrolled far outside the viewport.
  */
-import { markRaw, ref, shallowRef, type ComputedRef, type Ref, type ShallowRef } from 'vue';
-import type { Map as MapLibreMap, GeoJSONSource } from 'maplibre-gl';
+import { markRaw, ref, type ComputedRef, type Ref, type ShallowRef } from 'vue';
+import type { Map as MapLibreMap } from 'maplibre-gl';
 import { getLoadedMaplibreGl } from '@/utils/map/maplibre/lazyMaplibreGl.js';
-import { addFeaturesToMap as addFeaturesToMapUtil, updateSmallFeatureFlags, getBoundingBoxKey, getBoundingBoxString } from '@/utils/map/maplibre';
+import { addFeaturesToMap as addFeaturesToMapUtil, updateSmallFeatureFlags } from '@/utils/map/maplibre';
 import { getCoordinatesFromGeometry, filterFeaturesByBounds, cleanupDistantFeatures as cleanupDistantFeaturesUtil } from '@/utils/map/featureExtent.js';
-import { convertMapLibreFeature } from '@/utils/map/maplibre/featureConversion.js';
+import { convertMapLibreFeature, type ConvertibleMapLibreFeature } from '@/utils/map/maplibre/featureConversion.js';
+import { canonicalFeatureId, isSyntheticFeature } from '@/utils/map/common/featureIdentity';
 import { getFeatureIconUrl, getIconSourceUrl, loadIconImage } from '@/utils/map/maplibre/featureStyling.js';
-import { getFeaturesInBbox, getExtentHint } from '@/api/services/featuresApi';
-import { getPublicShareTagFeatures, getPublicShareCollectionFeatures, getPublicShareFeature } from '@/api/services/sharingApi';
+import { getExtentHint } from '@/api/services/featuresApi';
 import { ApiError, isAbortError } from '@/utils/apiError';
 import type { LabelMarkerManager } from '@/utils/map/maplibre/labelMarkers.js';
 import type { GeoJsonFeatureCollection } from '@/types/geospatial';
-import type { LoadContext, MapPageFeature, MapUserSettings } from './mapPageTypes';
+import type { MapPageFeature, MapUserSettings } from './mapPageTypes';
+import type { FeatureSource } from '@/utils/map/common/FeatureSource';
+import type { LoadPipeline } from '@/utils/map/session/LoadPipeline';
+import type { HiddenFeatureSet } from '@/utils/map/session/HiddenFeatureSet';
+import type { ElevationStore } from '@/utils/map/session/ElevationStore';
+import type { LoadContext as SessionLoadContext } from '@/utils/map/session/types';
+import type { VaultFeature } from '@/contracts/feature';
+import type { MapFeature } from '@/utils/map/maplibre/mapFeatureTypes';
 
 export interface UseFeatureDataDeps {
     map: ShallowRef<MapLibreMap | null>;
@@ -26,8 +33,7 @@ export interface UseFeatureDataDeps {
     isMapInitializing: Ref<boolean>;
     waitForMapEvent: (eventName: string, timeout?: number) => Promise<void>;
     getUserMapSettings: () => MapUserSettings;
-    /** Builds the current load context (default/collection/share_*) from route + share/tag state. */
-    getLoadContext: () => LoadContext;
+    getSessionLoadContext: () => SessionLoadContext;
     ensurePublicShareInfo: (signal?: AbortSignal) => Promise<boolean>;
     handlePublicShareError: (message: string) => void;
     /** Re-applies hover/selection highlight paint properties after the source data changes. */
@@ -38,6 +44,10 @@ export interface UseFeatureDataDeps {
     publicShareRefinedFitShareId: Ref<string | null>;
     /** Any public mapshare URL - the extent hint (aggregate main-map-only) does not apply there. */
     isMapshareRoute: ComputedRef<boolean>;
+    featureSource: FeatureSource;
+    loadPipeline: LoadPipeline;
+    hiddenFeatures: HiddenFeatureSet;
+    elevations: ElevationStore;
 }
 
 export function useFeatureData(deps: UseFeatureDataDeps) {
@@ -48,7 +58,7 @@ export function useFeatureData(deps: UseFeatureDataDeps) {
         isMapInitializing,
         waitForMapEvent,
         getUserMapSettings,
-        getLoadContext,
+        getSessionLoadContext,
         ensurePublicShareInfo,
         handlePublicShareError,
         onAfterFeaturesChanged,
@@ -56,6 +66,10 @@ export function useFeatureData(deps: UseFeatureDataDeps) {
         zoomToTaggedFeatures,
         publicShareRefinedFitShareId,
         isMapshareRoute,
+        featureSource,
+        loadPipeline,
+        hiddenFeatures,
+        elevations,
     } = deps;
 
     const isDataLoading = ref(false);
@@ -65,13 +79,6 @@ export function useFeatureData(deps: UseFeatureDataDeps) {
     const featureCount = ref(0);
     const loadedBounds = new Set<string>();
 
-    /** Persistent cache of GeoJSON features that survives `setStyle()` calls. */
-    const cachedGeoJsonData: ShallowRef<GeoJsonFeatureCollection | null> = shallowRef(null);
-    let cachedSerializedData: { data?: GeoJsonFeatureCollection } | null = null;
-    let lastSerializedZoom: number | null = null;
-    let localFeaturesCache: MapPageFeature[] | null = null;
-    let lastCacheZoom: number | null = null;
-    let lastCacheUpdateTime: number | null = null;
     let lastProcessedZoom: number | null = null;
     let lastLabelUpdateZoom = 0;
     let lastIconVisibilityZoom: number | null = null;
@@ -103,49 +110,11 @@ export function useFeatureData(deps: UseFeatureDataDeps) {
         if (!map.value?.getSource('geojson-data')) {
             return null;
         }
-
-        const source = map.value.getSource('geojson-data');
-        const currentZoom = map.value.getZoom();
-        const now = Date.now();
-
-        if (
-            localFeaturesCache &&
-            lastCacheZoom !== null &&
-            Math.abs(currentZoom - lastCacheZoom) < 0.2 &&
-            lastCacheUpdateTime !== null &&
-            now - lastCacheUpdateTime < 5000
-        ) {
-            return { data: { type: 'FeatureCollection', features: localFeaturesCache } };
-        }
-
-        if (cachedSerializedData && lastSerializedZoom !== null && Math.abs(currentZoom - lastSerializedZoom) < 0.1) {
-            if (cachedSerializedData.data?.features) {
-                localFeaturesCache = cachedSerializedData.data.features as MapPageFeature[];
-                lastCacheZoom = currentZoom;
-                lastCacheUpdateTime = now;
-            }
-            return cachedSerializedData;
-        }
-
-        const serialized = source?.serialize() as { data?: GeoJsonFeatureCollection };
-        cachedSerializedData = serialized;
-        lastSerializedZoom = currentZoom;
-
-        if (serialized.data?.features) {
-            localFeaturesCache = serialized.data.features as MapPageFeature[];
-            lastCacheZoom = currentZoom;
-            lastCacheUpdateTime = now;
-        }
-
-        return serialized;
+        return { data: featureSource.buildRenderCollection(hiddenFeatures) };
     }
 
     function invalidateSourceCache(): void {
-        cachedSerializedData = null;
-        lastSerializedZoom = null;
-        localFeaturesCache = null;
-        lastCacheZoom = null;
-        lastCacheUpdateTime = null;
+        lastProcessedZoom = null;
     }
 
     function debouncedLoadData(): void {
@@ -162,13 +131,7 @@ export function useFeatureData(deps: UseFeatureDataDeps) {
         featureCountUpdatePending = true;
 
         void Promise.resolve().then(() => {
-            if (map.value?.getSource('geojson-data')) {
-                const source = map.value.getSource('geojson-data');
-                const serialized = source?.serialize() as { data?: GeoJsonFeatureCollection };
-                const data = serialized.data ?? { type: 'FeatureCollection' as const, features: [] };
-                const realFeatures = data.features.filter((f) => !f.properties._isLabelPoint);
-                featureCount.value = realFeatures.length;
-            }
+            featureCount.value = featureSource.size();
             featureCountUpdatePending = false;
         });
     }
@@ -188,17 +151,6 @@ export function useFeatureData(deps: UseFeatureDataDeps) {
 
         const data = serialized.data ?? { type: 'FeatureCollection' as const, features: [] };
         const features = data.features;
-
-        if (features.length > 0) {
-            try {
-                cachedGeoJsonData.value = markRaw({
-                    type: 'FeatureCollection',
-                    features: features.map((f) => markRaw(f)),
-                }) as GeoJsonFeatureCollection;
-            } catch (error) {
-                console.warn('Failed to update cached GeoJSON data:', error);
-            }
-        }
 
         const featuresInBounds = filterFeaturesByBounds(features, bounds, true, true) as MapPageFeature[];
         featuresInExtent.value = featuresInBounds.map((f) => markRaw(convertMapLibreFeature(f)) as MapPageFeature);
@@ -236,18 +188,17 @@ export function useFeatureData(deps: UseFeatureDataDeps) {
         };
 
         if (removedCount > 0) {
-            console.log(`Cleaned up ${removedCount} features more than 500 miles outside viewport`);
-
-            const source: GeoJSONSource | undefined = map.value.getSource('geojson-data');
-            const filteredFeatures = featuresWithinBuffer.map((f) => markRaw(f));
-            const filteredCollection: GeoJsonFeatureCollection = { type: 'FeatureCollection', features: filteredFeatures };
-            source?.setData(markRaw(filteredCollection));
-
-            localFeaturesCache = filteredFeatures;
-            lastCacheZoom = map.value.getZoom();
-            lastCacheUpdateTime = Date.now();
-            cachedSerializedData = null;
-            lastSerializedZoom = null;
+            const keepIds = new Set(
+                featuresWithinBuffer
+                    .map((feature) => canonicalFeatureId(feature as VaultFeature))
+                    .filter((id): id is string => !!id),
+            );
+            for (const id of featureSource.ids()) {
+                if (!keepIds.has(id)) {
+                    featureSource.remove(id);
+                }
+            }
+            featureSource.commit(hiddenFeatures);
 
             invalidateSourceCache();
             updateFeatureCount();
@@ -273,7 +224,7 @@ export function useFeatureData(deps: UseFeatureDataDeps) {
 
             const zoom = mapInstance.getZoom();
             const run = () => {
-                updateSmallFeatureFlags(mapInstance, zoom);
+                updateSmallFeatureFlags(mapInstance, zoom, featureSource, hiddenFeatures);
                 invalidateSourceCache();
             };
 
@@ -321,15 +272,13 @@ export function useFeatureData(deps: UseFeatureDataDeps) {
                 }
 
                 if (needsUpdate && map.value) {
-                    const source: GeoJSONSource | undefined = map.value.getSource('geojson-data');
-                    const updatedFeatures = features.map((f) => markRaw(f));
-                    const updatedCollection: GeoJsonFeatureCollection = { type: 'FeatureCollection', features: updatedFeatures };
-                    source?.setData(markRaw(updatedCollection));
-                    localFeaturesCache = updatedFeatures;
-                    lastCacheZoom = currentZoom;
-                    lastCacheUpdateTime = Date.now();
-                    cachedSerializedData = null;
-                    lastSerializedZoom = null;
+                    for (const feature of features) {
+                        const id = canonicalFeatureId(feature);
+                        if (!id) continue;
+                        featureSource.setRuntime(id, { iconId: typeof feature.properties['_icon-id'] === 'string' ? feature.properties['_icon-id'] : undefined });
+                    }
+                    featureSource.commit(hiddenFeatures);
+                    invalidateSourceCache();
                 }
             }
         }
@@ -387,16 +336,13 @@ export function useFeatureData(deps: UseFeatureDataDeps) {
         }
 
         if (needsUpdate) {
-            const source: GeoJSONSource | undefined = map.value.getSource('geojson-data');
-            const updatedFeatures = features.map((f) => markRaw(f));
-            const updatedCollection: GeoJsonFeatureCollection = { type: 'FeatureCollection', features: updatedFeatures };
-            source?.setData(markRaw(updatedCollection));
-            const currentZoom = map.value.getZoom();
-            localFeaturesCache = updatedFeatures;
-            lastCacheZoom = currentZoom;
-            lastCacheUpdateTime = Date.now();
-            cachedSerializedData = null;
-            lastSerializedZoom = null;
+            for (const feature of features) {
+                const id = canonicalFeatureId(feature);
+                if (!id) continue;
+                featureSource.setRuntime(id, { iconId: typeof feature.properties['_icon-id'] === 'string' ? feature.properties['_icon-id'] : undefined });
+            }
+            featureSource.commit(hiddenFeatures);
+            invalidateSourceCache();
         }
 
         if (map.value.getLayer('point-icons')) {
@@ -437,7 +383,7 @@ export function useFeatureData(deps: UseFeatureDataDeps) {
      *
      * Perf: `addFeaturesToMapUtil` already returns the in-memory merged `FeatureCollection` it
      * just built (or skipped rebuilding, if nothing changed) - reuse that directly instead of an
-     * extra `source.serialize()` round trip to re-derive the same data.
+     * extra FeatureSource rebuild to re-derive the same data.
      */
     async function addFeaturesToMap(geojsonData: GeoJsonFeatureCollection): Promise<void> {
         if (!map.value?.getSource('geojson-data')) return;
@@ -445,22 +391,24 @@ export function useFeatureData(deps: UseFeatureDataDeps) {
         const zoom = map.value.getZoom();
         const userSettings = getUserMapSettings();
         const replaceIconsLowZoom = userSettings.replace_icons_low_zoom !== undefined ? !!userSettings.replace_icons_low_zoom : true;
+        const incoming = (geojsonData.features ?? []) as VaultFeature[];
+        for (const feature of incoming) {
+            elevations.capture(feature);
+        }
+        featureSource.upsert(incoming, hiddenFeatures);
+        const existing = featureSource.buildRenderCollection(hiddenFeatures).features as MapFeature[];
 
-        const mergedCollection = await addFeaturesToMapUtil(map.value, geojsonData, showAllLabels.value, zoom, replaceIconsLowZoom);
+        const mergedCollection = await addFeaturesToMapUtil(map.value, geojsonData, showAllLabels.value, zoom, replaceIconsLowZoom, {
+            existingFeatures: existing,
+            hiddenIds: new Set(hiddenFeatures.values()),
+            featureSource,
+            hidden: hiddenFeatures,
+        });
 
         invalidateSourceCache();
         onAfterFeaturesChanged();
 
         if (mergedCollection?.features) {
-            try {
-                cachedGeoJsonData.value = markRaw({
-                    type: 'FeatureCollection',
-                    features: mergedCollection.features.map((f) => markRaw(f)),
-                }) as GeoJsonFeatureCollection;
-            } catch (error) {
-                console.warn('Failed to update cached GeoJSON data:', error);
-            }
-
             if (showAllLabels.value && labelMarkerManager.value) {
                 labelMarkerManager.value.updateMarkers(mergedCollection.features);
             }
@@ -499,44 +447,7 @@ export function useFeatureData(deps: UseFeatureDataDeps) {
         pendingExtentFitWithoutGeolocation.value = shouldFit;
     }
 
-    async function fetchLoadData(context: LoadContext, bboxString: string, zoom: number, signal: AbortSignal): Promise<{ data: GeoJsonFeatureCollection } | null> {
-        switch (context.type) {
-            case 'share_tag':
-                return context.shareId ? await getPublicShareTagFeatures(context.shareId, bboxString, zoom, signal) : null;
-            case 'share_collection':
-                return context.shareId ? await getPublicShareCollectionFeatures(context.shareId, bboxString, zoom, signal) : null;
-            case 'share_feature': {
-                if (!isInitialLoad.value || !context.shareId) return null;
-                const result = await getPublicShareFeature(context.shareId, signal);
-                return { data: { type: 'FeatureCollection', features: result.features } };
-            }
-            case 'share_unknown':
-                console.warn('Attempting to build URL for unknown share type. Share info should be loaded first.');
-                return null;
-            case 'collection':
-                return await getFeaturesInBbox({
-                    bbox: bboxString,
-                    zoom,
-                    collection: context.collectionId,
-                    tags: context.tags,
-                    matchMode: context.matchMode,
-                    signal,
-                });
-            case 'default':
-                return await getFeaturesInBbox({
-                    bbox: bboxString,
-                    zoom,
-                    tags: context.tags,
-                    matchMode: context.matchMode,
-                    signal,
-                });
-            default:
-                console.error('Unknown load context type:', context.type);
-                return null;
-        }
-    }
-
-    function handleLoadError(message: string, context: LoadContext): void {
+    function handleLoadError(message: string, context: SessionLoadContext): void {
         if (context.isPublicShare) {
             handlePublicShareError(message);
         } else {
@@ -544,41 +455,36 @@ export function useFeatureData(deps: UseFeatureDataDeps) {
         }
     }
 
-    async function handleLoadSuccess(data: { data: GeoJsonFeatureCollection }, context: LoadContext, bboxKey: string): Promise<void> {
-        if (!Array.isArray(data.data.features)) {
-            data.data.features = [];
-        }
-
-        if (context.type !== 'share_feature' && bboxKey) {
-            loadedBounds.add(bboxKey);
-        }
-
+    async function handleLoadSuccess(features: VaultFeature[], context: SessionLoadContext, firstReplaceLoad: boolean): Promise<void> {
         updateFeatureCount();
 
-        const rawData = markRaw(data.data) as GeoJsonFeatureCollection;
+        const rawData = markRaw({ type: 'FeatureCollection', features }) as GeoJsonFeatureCollection;
         await addFeaturesToMap(rawData);
 
-        if (context.type === 'share_feature' && data.data.features.length > 0) {
-            const feature = markRaw(convertMapLibreFeature(data.data.features[0])) as MapPageFeature;
+        if (context.kind === 'share' && context.shareType === 'feature' && features.length > 0) {
+            const feature = markRaw(convertMapLibreFeature(features[0] as unknown as ConvertibleMapLibreFeature)) as MapPageFeature;
             await onFeatureShareLoaded(feature);
         }
 
-        if (
-            context.isPublicShare &&
-            context.shareId &&
-            (context.type === 'share_tag' || context.type === 'share_collection') &&
-            publicShareRefinedFitShareId.value !== context.shareId
-        ) {
-            const usable = data.data.features.filter((f) => !f.properties._isLabelPoint && !f.properties._isSmallFeatureReplacement) as MapPageFeature[];
-            if (usable.length > 0) {
+        const shouldFitShare =
+            context.kind === 'share' &&
+            (context.shareType === 'tag' || context.shareType === 'collection') &&
+            publicShareRefinedFitShareId.value !== context.shareId;
+        const shouldFitScoped = firstReplaceLoad && (context.kind === 'tag' || context.kind === 'collection');
+
+        if (shouldFitShare || shouldFitScoped) {
+            const usable = features.filter((f) => !isSyntheticFeature(f)) as MapPageFeature[];
+            if (shouldFitShare) {
                 publicShareRefinedFitShareId.value = context.shareId;
+            }
+            if (usable.length > 0) {
                 await waitForMapEvent('idle');
-                await zoomToTaggedFeatures(usable, { padding: 28, duration: 0 });
+                await zoomToTaggedFeatures(usable, { padding: shouldFitShare ? 28 : 50, duration: 0 });
             }
         }
 
-        if (pendingExtentFitWithoutGeolocation.value && context.type === 'default' && !context.isPublicShare) {
-            const usable = data.data.features.filter((f) => !f.properties._isLabelPoint && !f.properties._isSmallFeatureReplacement) as MapPageFeature[];
+        if (pendingExtentFitWithoutGeolocation.value && context.kind === 'main') {
+            const usable = features.filter((f) => !isSyntheticFeature(f)) as MapPageFeature[];
             if (usable.length > 0) {
                 pendingExtentFitWithoutGeolocation.value = false;
                 await waitForMapEvent('idle');
@@ -594,9 +500,9 @@ export function useFeatureData(deps: UseFeatureDataDeps) {
         debouncedUpdateFeaturesInExtent();
     }
 
-    /** Unified data-loading entry point; handles default view, collection, and all public-share modes. */
-    async function loadDataForCurrentView(): Promise<void> {
+    async function loadDataForCurrentView(options: { force?: boolean } = {}): Promise<void> {
         if (!map.value) return;
+        const startedGeneration = loadPipeline.generation;
 
         try {
             let bounds;
@@ -606,77 +512,61 @@ export function useFeatureData(deps: UseFeatureDataDeps) {
                 return;
             }
 
-            if (currentAbortController) {
-                currentAbortController.abort();
-            }
-            currentAbortController = new AbortController();
             loadError.value = null;
 
             try {
-                let context = getLoadContext();
-
-                if (context.isPublicShare) {
+                if (isMapshareRoute.value) {
                     isDataLoading.value = true;
-                    const shareInfoLoaded = await ensurePublicShareInfo(currentAbortController.signal);
+                    const shareInfoLoaded = await ensurePublicShareInfo();
                     if (!shareInfoLoaded) return;
-                    context = getLoadContext();
-
-                    if (!context.shareInfo || context.type === 'share_unknown') {
-                        console.error('Share info not properly loaded after ensurePublicShareInfo', { context });
-                        handlePublicShareError('Failed to load share information');
-                        return;
-                    }
                 }
 
-                // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- map.value can become null here if the component is deactivated (map destroyed) while ensurePublicShareInfo() above was in flight
+                const context = getSessionLoadContext();
                 if (!map.value) return;
                 bounds = map.value.getBounds();
                 const zoom = map.value.getZoom();
                 const viewportBbox: [number, number, number, number] = [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()];
-
-                const isFirstPublicBboxShareLoad =
-                    !!context.shareId && (context.type === 'share_tag' || context.type === 'share_collection') && publicShareRefinedFitShareId.value !== context.shareId;
-                const bboxForApi: [number, number, number, number] = isFirstPublicBboxShareLoad ? [-180, -85.05112878, 180, 85.05112878] : viewportBbox;
-
-                let bboxKey = getBoundingBoxKey(bboxForApi, zoom);
-                if (context.isPublicShare && context.shareId) {
-                    bboxKey = `${bboxKey}_share_${context.shareId}`;
-                } else if (context.type === 'collection' && context.collectionId) {
-                    bboxKey = `${bboxKey}_collection_${context.collectionId}`;
-                } else if (context.tags && context.tags.length > 0) {
-                    const sortedTags = [...context.tags].sort();
-                    const tagsKey = sortedTags.map((tag) => encodeURIComponent(tag)).join('_');
-                    bboxKey = `${bboxKey}_tags_${tagsKey}`;
-                }
-
-                if (context.type !== 'share_feature' && loadedBounds.has(bboxKey)) {
-                    return;
-                }
-
-                const bboxString = getBoundingBoxString(bboxForApi);
+                const firstReplaceLoad = context.replaceSource && loadedBounds.size === 0;
+                const bboxForApi: [number, number, number, number] =
+                    context.spatial === 'global' || firstReplaceLoad
+                        ? [-180, -85.05112878, 180, 85.05112878]
+                        : viewportBbox;
+                const bboxKey = bboxForApi.map((value) => value.toFixed(4)).join(',');
 
                 isDataLoading.value = true;
-                // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- cancelPendingRequests() (called on deactivate) can null this out while ensurePublicShareInfo() above was in flight
-                if (!currentAbortController) {
-                    currentAbortController = new AbortController();
+                const result = await loadPipeline.load({
+                    context,
+                    bbox: bboxForApi,
+                    zoom,
+                    replaceSource: context.replaceSource,
+                    force: options.force,
+                });
+                if (!result) return;
+
+                if (context.kind !== 'featureFocus' && !(context.kind === 'share' && context.shareType === 'feature')) {
+                    loadedBounds.add(bboxKey);
                 }
 
-                const data = await fetchLoadData(context, bboxString, zoom, currentAbortController.signal);
-                if (data === null) return;
-
-                await handleLoadSuccess(data, context, bboxKey);
+                await handleLoadSuccess(result.features, context, firstReplaceLoad);
             } catch (error) {
                 if (isAbortError(error)) return;
                 console.error('Error loading data:', error);
-                const context = getLoadContext();
+                let context: SessionLoadContext;
+                try {
+                    context = getSessionLoadContext();
+                } catch {
+                    loadError.value = error instanceof ApiError ? error.message : error instanceof Error ? error.message : 'Failed to load map data.';
+                    return;
+                }
                 const message = error instanceof ApiError ? error.message : error instanceof Error ? error.message : 'Failed to load map data.';
                 handleLoadError(message, context);
             }
         } finally {
-            isDataLoading.value = false;
-            currentAbortController = null;
-            if (isInitialLoad.value) {
-                isInitialLoad.value = false;
+            if (loadPipeline.generation === startedGeneration || loadPipeline.generation === startedGeneration + 1) {
+                isDataLoading.value = false;
+                if (isInitialLoad.value) {
+                    isInitialLoad.value = false;
+                }
             }
         }
     }
@@ -728,6 +618,7 @@ export function useFeatureData(deps: UseFeatureDataDeps) {
 
     /** Cancel in-flight requests and pending timers; used before destroying the map on navigate-away. */
     function cancelPendingRequests(): void {
+        loadPipeline.cancel();
         if (currentAbortController) {
             currentAbortController.abort();
             currentAbortController = null;
@@ -749,11 +640,12 @@ export function useFeatureData(deps: UseFeatureDataDeps) {
     /** Reset feature-list/cache state; used on navigate-away and before loading a new collection/tag scope. */
     function resetFeatureState(): void {
         loadedBounds.clear();
+        featureSource.clear();
+        featureSource.commit(hiddenFeatures);
         featuresInExtent.value = [];
         featureCount.value = 0;
         featureCountUpdatePending = false;
         invalidateSourceCache();
-        cachedGeoJsonData.value = null;
     }
 
     return {
@@ -762,7 +654,6 @@ export function useFeatureData(deps: UseFeatureDataDeps) {
         loadError,
         featuresInExtent,
         featureCount,
-        cachedGeoJsonData,
         pendingExtentFitWithoutGeolocation,
         mainMapExtentHintRequested,
         hasLoadedBounds,

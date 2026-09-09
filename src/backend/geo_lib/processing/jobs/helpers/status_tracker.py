@@ -34,6 +34,7 @@ class JobType(Enum):
     DELETE = "delete"  # Item deletion job
     BULK_IMPORT = "bulk_import"  # Bulk import job
     BULK_DELETE = "bulk_delete"  # Bulk delete job
+    RECHECK = "recheck"
 
 
 @dataclass

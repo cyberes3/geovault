@@ -19,8 +19,8 @@ VISIBILITY_CHOICES = [
 
 class LiveTrack(models.Model):
     """
-    A single live track: metadata plus geometry (LineString with [lon, lat, timestamp_ms] per point)
-    and point_params (one object per coordinate). Identified for ingress by Basic Auth (tracker_secret).
+    A single live track: metadata plus point_rows (one LiveTrackPoint per coordinate).
+    Identified for ingress by Basic Auth (tracker_secret).
     """
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -36,8 +36,6 @@ class LiveTrack(models.Model):
     )
     share_params_with_recipients = models.BooleanField(default=False)
     share_params_with_world = models.BooleanField(default=False)
-    geometry = models.JSONField(default=dict)
-    point_params = models.JSONField(default=list)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -52,43 +50,26 @@ class LiveTrack(models.Model):
         return f"LiveTrack({self.name})"
 
 
-class LiveTrackShare(models.Model):
-    """Direct share with a user; only meaningful when track visibility is 'shared'."""
+class LiveTrackPoint(models.Model):
+    """One live point. Wire projection is coordinates[i] + point_params[i] in (timestamp_ms, seq) order."""
 
-    track = models.ForeignKey(LiveTrack, on_delete=models.CASCADE, related_name="share_entries")
-    shared_with = models.ForeignKey(User, on_delete=models.CASCADE, related_name="live_track_shares_received")
+    track = models.ForeignKey(LiveTrack, on_delete=models.CASCADE, related_name="point_rows")
+    seq = models.PositiveIntegerField()
+    timestamp_ms = models.BigIntegerField()
+    lon = models.FloatField()
+    lat = models.FloatField()
+    params = models.JSONField(default=dict)
 
     class Meta:
         app_label = "live_track"
+        db_table = "live_track_point"
         constraints = [
-            models.UniqueConstraint(fields=["track", "shared_with"], name="live_track_share_unique")
+            models.UniqueConstraint(fields=["track", "seq"], name="live_track_point_unique_track_seq"),
         ]
-
-
-class LiveTrackWorldShare(models.Model):
-    """World (unauthenticated) share link for a track; one per track. When enabled, anyone with the URL can view the track (read-only). Distinct from visibility=public (all authenticated users)."""
-
-    share_id = models.CharField(max_length=36, unique=True, db_index=True)
-    track = models.OneToOneField(LiveTrack, on_delete=models.CASCADE, related_name="world_share")
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        app_label = "live_track"
-
-
-class LiveTrackInternalShare(models.Model):
-    """Authenticated share link for a track; authorization is still governed by track visibility and share recipients."""
-
-    share_id = models.CharField(max_length=36, unique=True, db_index=True)
-    track = models.OneToOneField(LiveTrack, on_delete=models.CASCADE, related_name="internal_share")
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="live_track_internal_shares")
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        app_label = "live_track"
         indexes = [
-            models.Index(fields=["user", "created_at"], name="lt_int_user_created_idx"),
+            models.Index(fields=["track", "timestamp_ms", "seq"], name="live_track_point_latest_idx"),
         ]
+        ordering = ["timestamp_ms", "seq"]
 
 
 class LiveTrackSubscription(models.Model):
@@ -128,19 +109,6 @@ class LiveTrackGroup(models.Model):
         ordering = ["name"]
 
 
-class LiveTrackGroupShare(models.Model):
-    """Direct share with a user; only meaningful when group visibility is 'shared'."""
-
-    group = models.ForeignKey(LiveTrackGroup, on_delete=models.CASCADE, related_name="share_entries")
-    shared_with = models.ForeignKey(User, on_delete=models.CASCADE, related_name="live_track_group_shares_received")
-
-    class Meta:
-        app_label = "live_track"
-        constraints = [
-            models.UniqueConstraint(fields=["group", "shared_with"], name="live_track_group_share_unique")
-        ]
-
-
 class LiveTrackGroupSubscription(models.Model):
     """User has explicitly accepted a shared group."""
 
@@ -160,32 +128,6 @@ class LiveTrackGroupSubscription(models.Model):
         app_label = "live_track"
         constraints = [
             models.UniqueConstraint(fields=["user", "group"], name="live_track_group_subscription_unique")
-        ]
-
-
-class LiveTrackGroupWorldShare(models.Model):
-    """World (unauthenticated) share link for a group; one per group. When enabled, anyone with the URL can view the group's tracks (read-only)."""
-
-    share_id = models.CharField(max_length=36, unique=True, db_index=True)
-    group = models.OneToOneField(LiveTrackGroup, on_delete=models.CASCADE, related_name="world_share")
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        app_label = "live_track"
-
-
-class LiveTrackGroupInternalShare(models.Model):
-    """Authenticated share link for a group; authorization is still governed by group visibility and share recipients."""
-
-    share_id = models.CharField(max_length=36, unique=True, db_index=True)
-    group = models.OneToOneField(LiveTrackGroup, on_delete=models.CASCADE, related_name="internal_share")
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="live_track_group_internal_shares")
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        app_label = "live_track"
-        indexes = [
-            models.Index(fields=["user", "created_at"], name="lt_grp_int_user_created_idx"),
         ]
 
 

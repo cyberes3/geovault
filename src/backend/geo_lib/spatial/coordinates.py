@@ -2,7 +2,7 @@ import math
 from typing import List, Tuple
 
 from geo_lib.reverse_geocoding.constants import COORDINATE_PRECISION
-from geo_lib.processing.duplicate_detection.constants import COORDINATE_TOLERANCE
+from geo_lib.duplicates.constants import COORDINATE_TOLERANCE
 
 
 def _decimal_places_for_tolerance(tolerance: float) -> int:

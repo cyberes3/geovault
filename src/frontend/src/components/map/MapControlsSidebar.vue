@@ -163,8 +163,8 @@ Map
 
 <script lang="ts">
 import { defineComponent, type PropType } from 'vue'
-import {APIHOST} from '@/config.js'
 import BaseButton from '@/components/parts/BaseButton.vue'
+import { downloadKmz } from '@/utils/sharing/downloadKmz'
 import {ArrowDownTrayIcon, FolderIcon, MapPinIcon, ShareIcon, TagIcon, XMarkIcon} from '@heroicons/vue/24/outline'
 import HiddenFeaturesWidget from './HiddenFeaturesWidget.vue'
 import ToggleButton from '@/components/parts/ToggleButton.vue'
@@ -272,7 +272,7 @@ export default defineComponent({
           'flex-col',
           'fixed',
           'inset-0',
-          'z-50',
+          'z-[310]',
           'w-full',
           'h-full',
           'lg:hidden'
@@ -312,8 +312,7 @@ export default defineComponent({
       if (!this.shareId) {
         return
       }
-      const url = `${APIHOST}/api/export-kmz?share=${encodeURIComponent(this.shareId)}`
-      window.open(url, '_blank')
+      void downloadKmz({ share: this.shareId })
     }
   }
 })

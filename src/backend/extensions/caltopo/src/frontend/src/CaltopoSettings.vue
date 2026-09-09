@@ -313,8 +313,8 @@ import {
 import CaltopoSetupModal from './CaltopoSetupModal.vue'
 import BaseButton from 'platform/components/parts/BaseButton.vue'
 import Loader from 'platform/components/parts/Loader.vue'
-import type { ExtensionApi } from './types/extension-api'
-import type { RouterLike } from './types/extension-setup'
+import type { ExtensionApi } from '@geovault/extension-sdk'
+import type { RouterLike } from '@geovault/extension-sdk'
 
 interface CaltopoMap {
   id: string;

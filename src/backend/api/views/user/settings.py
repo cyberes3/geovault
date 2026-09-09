@@ -136,8 +136,15 @@ def bulk_update_hidden_features(request, validated_data):
     if remove_ids_set:
         current_hidden_set -= remove_ids_set
 
-    # Add new IDs (set union)
     if add_ids_set:
+        candidate_ids = [int(fid) for fid in add_ids_set if str(fid).isdigit()]
+        valid_ids = {
+            str(feature_id)
+            for feature_id in FeatureStore.objects.owned_by(request.user).main_map().filter(
+                id__in=candidate_ids
+            ).values_list('id', flat=True)
+        }
+        add_ids_set &= valid_ids
         current_hidden_set |= add_ids_set
 
     # Convert back to list (preserve order by keeping existing order, then appending new ones)
@@ -178,6 +185,19 @@ def deep_merge(base: dict, update: dict) -> dict:
             result[key] = value
 
     return result
+
+
+def prune_hidden_feature_ids(user, feature_ids):
+    user_settings = UserSettings.objects.filter(user=user).first()
+    if not user_settings:
+        return
+    prune = {str(feature_id) for feature_id in feature_ids}
+    current = _normalize_hidden_features(getattr(user_settings, 'hidden_features', []))
+    next_list = [feature_id for feature_id in current if feature_id not in prune]
+    if next_list == current:
+        return
+    user_settings.hidden_features = next_list
+    user_settings.save(update_fields=['hidden_features'])
 
 
 def _normalize_hidden_features(hidden_list):

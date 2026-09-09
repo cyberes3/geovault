@@ -370,3 +370,34 @@ class TestUserSettingsAPI(TestCase):
         self.assertEqual(response.status_code, 400)
         data = json.loads(response.content)
         self.assertIn('error', data)
+
+    def test_bulk_update_hidden_features_rejects_scoped_feature(self):
+        scoped = FeatureStore.objects.create(
+            user=self.user,
+            geojson=self.feature_data,
+            geometry=self.feature.geometry,
+            geojson_hash=generate_geojson_hash(self.feature_data),
+            scope='places',
+        )
+        UserSettings.objects.create(user=self.user, settings={}, hidden_features=[])
+
+        response = self.client.post(
+            '/api/user/settings/hidden-features/bulk/',
+            data=json.dumps({'add': [scoped.id]}),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 204)
+        user_settings = UserSettings.objects.get(user=self.user)
+        self.assertEqual(user_settings.hidden_features, [])
+
+    def test_delete_feature_prunes_hidden_features(self):
+        UserSettings.objects.create(
+            user=self.user,
+            settings={},
+            hidden_features=[str(self.feature.id)]
+        )
+
+        response = self.client.delete(f'/api/feature/{self.feature.id}/delete/')
+        self.assertEqual(response.status_code, 200)
+        user_settings = UserSettings.objects.get(user=self.user)
+        self.assertEqual(user_settings.hidden_features, [])

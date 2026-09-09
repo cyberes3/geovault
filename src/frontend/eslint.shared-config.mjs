@@ -94,10 +94,20 @@ const sharedRules = {
   'no-var': 'error'
 }
 
+const mapEngineImportBan = {
+  '@typescript-eslint/no-restricted-imports': ['error', {
+    paths: [
+      { name: 'ol', message: 'OpenLayers is not part of the map kernel.', allowTypeImports: true },
+      { name: 'maplibre-gl', message: 'Load MapLibre through gv_core.map.loadEngine("maplibre").', allowTypeImports: true }
+    ]
+  }]
+}
+
 /**
- * @param {{ tsconfigRootDir: string, project?: string }} options
+ * @param {{ tsconfigRootDir: string, project?: string, banMapEngineImports?: boolean }} options
  */
-export function createSharedEslintConfig({ tsconfigRootDir, project = './tsconfig.json' }) {
+export function createSharedEslintConfig({ tsconfigRootDir, project = './tsconfig.json', banMapEngineImports = false }) {
+  const rules = banMapEngineImports ? { ...sharedRules, ...mapEngineImportBan } : sharedRules
   return [
     js.configs.recommended,
     ...vue.configs['flat/recommended'],
@@ -109,7 +119,7 @@ export function createSharedEslintConfig({ tsconfigRootDir, project = './tsconfi
         globals: sharedGlobals
       },
       plugins: { '@typescript-eslint': typescript },
-      rules: sharedRules
+      rules
     },
     {
       files: ['**/*.vue'],
@@ -126,7 +136,7 @@ export function createSharedEslintConfig({ tsconfigRootDir, project = './tsconfi
         globals: sharedGlobals
       },
       plugins: { '@typescript-eslint': typescript },
-      rules: { ...sharedRules, 'vue/no-unused-vars': 'off' }
+      rules: { ...rules, 'vue/no-unused-vars': 'off' }
     },
     {
       ignores: ['dist/', 'node_modules/', '*.config.js', '*.config.ts']

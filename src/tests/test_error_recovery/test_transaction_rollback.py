@@ -136,7 +136,6 @@ class TestTransactionRollback:
             user=user,
             original_filename='test.kml',
             raw_file='<kml>test</kml>',
-            geofeatures=[]
         )
         
         # Simulate processing that creates some features then fails

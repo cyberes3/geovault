@@ -12,6 +12,7 @@ from channels.layers import get_channel_layer
 from django.db import transaction
 
 from api.models import ImportQueue
+from geo_lib.importing.jobs.dispatch import BULK_DELETE_CELERY_TASK_NAME, dispatch_named_job
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.processing.jobs.base_job import BaseJob
 from geo_lib.processing.jobs.helpers.delete import delete_associated_logs
@@ -48,11 +49,8 @@ class BulkDeleteJob(BaseJob):
             JobType.BULK_DELETE
         )
 
-        # Start the job
-        if self.start_job(job_id, item_ids=item_ids, user_id=user_id):
-            return job_id
-        else:
-            return None
+        dispatch_named_job(BULK_DELETE_CELERY_TASK_NAME, [job_id, item_ids, user_id, 600], 600)
+        return job_id
 
     def _execute_job(self, job_id: str, kwargs: Dict[str, Any]):
         """

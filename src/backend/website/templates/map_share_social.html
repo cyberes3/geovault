@@ -10,18 +10,20 @@
     <meta property="og:description" content="{{ page_description }}">
     <meta property="og:type" content="website">
     <meta property="og:url" content="{{ canonical_url }}">
+    {% if preview_image_url %}
     <meta property="og:image" content="{{ preview_image_url }}">
+    {% endif %}
     <meta property="og:site_name" content="{{ site_name }}">
 
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="{{ page_title }}">
     <meta name="twitter:description" content="{{ page_description }}">
+    {% if preview_image_url %}
     <meta name="twitter:image" content="{{ preview_image_url }}">
-
-    <meta http-equiv="refresh" content="0;url={{ app_url }}">
+    {% endif %}
 </head>
 <body>
-<p>Opening shared map...</p>
-<p><a href="{{ app_url }}">Open shared map</a></p>
+<p>{{ opening_label }}</p>
+<p><a href="{{ app_url }}">{{ open_label }}</a></p>
 </body>
 </html>

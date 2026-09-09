@@ -263,7 +263,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, inject, computed } from 'vue';
-import type { ExtensionApi } from './types/extension-api';
+import type { ExtensionApi } from '@geovault/extension-sdk';
 
 interface ExampleItem {
   id: string | number;
@@ -297,7 +297,7 @@ const api = inject('extensionApi') as ExtensionApi;
   Use toast for success messages, error messages, and custom notifications.
   ExtensionApi does NOT automatically show toasts - you handle errors explicitly.
 */
-const toast = window.gv_core.GeoVault.toast;
+const toast = window.gv_core.ui.toast;
 
 // Local component state for items
 const items = ref<ExampleItem[]>([]);
@@ -328,7 +328,8 @@ const fetchItems = async (): Promise<void> => {
   try {
     // api.get() automatically handles CSRF token
     const response = await api.get('/items/');
-    items.value = response.data as ExampleItem[];
+    const payload = response.data as { items?: ExampleItem[] };
+    items.value = payload.items ?? [];
   } catch (e) {
     // Handle errors explicitly
     const errorInfo = api.handleError(e);
@@ -403,25 +404,14 @@ const canCreateFeature = computed((): boolean => {
 });
 
 /**
- * Fetch all features from the main platform API
+ * Fetch features owned by this extension (scoped FeatureStore rows).
  */
 const fetchFeatures = async (): Promise<void> => {
   loadingFeatures.value = true;
   try {
-    // Use fetch directly for main platform API (not extension API)
-    const response = await fetch('/api/features/all/', {
-      credentials: 'include',
-      headers: {
-        'X-CSRFToken': getCookie('csrftoken') ?? ''
-      }
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-    }
-
-    const data = await response.json() as { data?: { features?: ExampleFeature[] } };
-    features.value = data.data?.features ?? [];
+    const response = await api.get('/features/');
+    const payload = response.data as { features?: ExampleFeature[] };
+    features.value = payload.features ?? [];
   } catch (e) {
     console.error('Failed to fetch features:', e);
     api.toastError(e, 'Failed to load features');
@@ -527,16 +517,6 @@ const deleteFeature = async (featureId: string | number | undefined): Promise<vo
   } finally {
     deletingFeatureId.value = null;
   }
-};
-
-/**
- * Helper function to get CSRF cookie
- */
-const getCookie = (name: string): string | null => {
-  const value = `; ${document.cookie}`;
-  const parts = value.split(`; ${name}=`);
-  if (parts.length === 2) return parts.pop()?.split(';').shift() ?? null;
-  return null;
 };
 
 // Fetch initial data on mount

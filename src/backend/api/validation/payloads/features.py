@@ -5,11 +5,23 @@ from typing import List, Optional
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from api.validation.payloads.base import BaseMetadataFields
+from geo_lib.validation.styling_validation import is_valid_hex_color
 
 
 class FeatureUpdateProperties(BaseMetadataFields):
     """Pydantic model for updatable feature properties (import_item endpoint)."""
     geojson_hash: Optional[str] = Field(default=None, description="GeoJSON hash (used for matching, not updated)")
+    fill: Optional[str] = Field(default=None, description="Fill color (hex)")
+    fill_opacity: Optional[float] = Field(default=None, alias='fill-opacity', description="Fill opacity")
+
+    @field_validator('fill')
+    @classmethod
+    def validate_fill(cls, v):
+        if v is None:
+            return None
+        if not is_valid_hex_color(v):
+            raise ValueError('Color must be a valid hex color')
+        return v
 
 
 class FeatureUpdate(BaseModel):

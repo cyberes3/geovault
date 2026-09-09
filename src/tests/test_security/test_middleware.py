@@ -8,6 +8,8 @@ from urllib.parse import urlparse
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
+
+from geo_lib.perf.shared_cache import get_shared_cache
 from django.http import HttpResponse
 from django.test import TestCase, override_settings
 
@@ -419,7 +421,7 @@ class TestActivityTrackingCacheBounding(TestCase):
             username='activityuser',
         )
         self.client.force_login(self.user)
-        cache.clear()
+        get_shared_cache().clear()
 
     def _cache_key(self, user):
         return f"user_activity_tracking:{user.id}"
@@ -435,8 +437,10 @@ class TestActivityTrackingCacheBounding(TestCase):
     def test_activity_cache_key_is_added_with_bounded_timeout(self):
         """The throttle key is set via cache.add() with an explicit expiring timeout, not
         stored forever in an unbounded structure."""
-        with patch('website.middleware.activity.cache.add', wraps=cache.add) as mock_add:
-            self.client.get('/api/config/')
+        shared = get_shared_cache()
+        with patch('website.middleware.activity.get_shared_cache', return_value=shared):
+            with patch.object(shared, 'add', wraps=shared.add) as mock_add:
+                self.client.get('/api/config/')
         mock_add.assert_called_once_with(
             self._cache_key(self.user), True, timeout=ACTIVITY_TRACKING_THROTTLE_SECONDS,
         )
@@ -454,7 +458,7 @@ class TestActivityTrackingCacheBounding(TestCase):
             self.client.get('/api/config/')
             self.assertEqual(mock_update.call_count, 1)
 
-            cache.delete(self._cache_key(self.user))
+            get_shared_cache().delete(self._cache_key(self.user))
 
             self.client.get('/api/config/')
             self.assertEqual(mock_update.call_count, 2)

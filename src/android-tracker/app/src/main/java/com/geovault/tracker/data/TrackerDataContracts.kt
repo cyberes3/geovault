@@ -6,10 +6,9 @@ import com.geovault.tracker.MapVisibilityRequest
 import com.geovault.tracker.MapVisibilityResponse
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.TrackerCheckRequest
-import com.geovault.tracker.TrackerCoordinatesResponse
 import com.geovault.tracker.TrackerCreateRequest
 import com.geovault.tracker.TrackerSettingsRequest
-import com.geovault.tracker.UsersResponse
+import com.geovault.tracker.UserItem
 
 interface TrackerListRepository {
     suspend fun loadTrackers(forceRefresh: Boolean): List<Tracker>
@@ -20,7 +19,6 @@ interface TrackerManagementRepository {
     suspend fun loadAvailableToAdd(forceRefresh: Boolean = false): AvailableToAddResponse
     suspend fun loadTracker(trackerId: String): Tracker
     suspend fun loadTrackerGeometry(trackerId: String): Tracker
-    suspend fun loadTrackerCoordinates(trackerId: String): TrackerCoordinatesResponse
     suspend fun loadTrackersGeometry(trackerIds: List<String>): List<Tracker>
     suspend fun createTracker(request: TrackerCreateRequest): Tracker
     suspend fun updateTrackerSettings(
@@ -36,7 +34,7 @@ interface TrackerManagementRepository {
     fun getTrackerFromCache(trackerId: String): Tracker?
     fun clearSelectedTrackerCaches()
     suspend fun fetchTrackerKml(trackerId: String): ByteArray
-    suspend fun loadUsers(): UsersResponse
+    suspend fun loadUsers(): List<UserItem>
     suspend fun loadMapVisibility(forceRefresh: Boolean = false): MapVisibilityResponse
     suspend fun patchMapVisibility(request: MapVisibilityRequest): MapVisibilityResponse
     suspend fun clearHiddenItems(targetTypes: List<String>? = null)

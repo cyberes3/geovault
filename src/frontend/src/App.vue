@@ -116,7 +116,7 @@
 
               <router-link
                   v-for="link in extensionRegistryState.navLinks"
-                  :key="link.path"
+                  :key="link.fullPath"
                   :class="[
                     $route.path.startsWith(link.fullPath ?? '')
                       ? 'text-blue-600 border-blue-500 bg-blue-50 md:bg-transparent' 
@@ -253,7 +253,7 @@
     <main
         :class="isMapRoute ? 'w-full flex-1 min-h-0 overflow-hidden flex flex-col' : 'max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8'">
       <!-- Show error state if loading failed -->
-      <div v-if="loadingError" class="flex items-center justify-center min-h-[400px]">
+      <div v-if="loadingError && !isPublicShareRoute" class="flex items-center justify-center min-h-[400px]">
         <div class="bg-red-50 border border-red-200 rounded-lg shadow-md p-8 max-w-md w-full mx-4">
           <div class="flex flex-col items-center text-center">
             <div class="flex-shrink-0 mb-4">
@@ -284,8 +284,8 @@
       <!-- Render router-view only after auth check completes (or immediately for public routes) and no error occurred -->
       <div v-else-if="!userInfoLoading || isPublicShareRoute" :class="isMapRoute ? 'flex-1 min-h-0 flex flex-col overflow-hidden' : ''">
         <router-view v-slot="{ Component }">
-          <keep-alive>
-            <component :is="Component"/>
+          <keep-alive :include="keepAliveInclude">
+            <component :is="Component" :key="$route.fullPath"/>
           </keep-alive>
         </router-view>
       </div>
@@ -305,9 +305,12 @@ import Loader from "@/components/parts/Loader.vue";
 import ToastContainer from "@/components/parts/ToastContainer.vue";
 import { ChevronDownIcon, Bars3Icon, XMarkIcon } from '@heroicons/vue/24/outline';
 import { extensionRegistry, type ExtensionTool } from "@/utils/extensionRegistry.js";
+import { extensionRouteTable } from "@/extensions/routeTable";
 import type { UserInfo } from "@/assets/js/types/store-types";
 import type { UserStatus } from "@/assets/js/auth";
 import type { RouteLocationNormalized } from 'vue-router';
+import { parseMapSocialPath, parseTrackSocialPath, PUBLIC_SHARE_PREFIXES } from '@/utils/sharing/shareUrl';
+import { buildKeepAliveInclude } from '@/utils/runtime/KeepAlivePolicy';
 
 export default defineComponent({
   name: 'App',
@@ -354,7 +357,10 @@ export default defineComponent({
       return prefixes.some(prefix => path.startsWith(prefix));
     },
     isPublicShareRoute(): boolean {
-      return this.isPublicSharePath(this.$route.path) || !!this.getPathnameMapShareId();
+      return this.isPublicSharePath(this.$route.path) || !!this.getPathnameShareId();
+    },
+    keepAliveInclude(): string[] {
+      return buildKeepAliveInclude(extensionRouteTable.keepAliveNames());
     }
   },
   watch: {
@@ -368,7 +374,7 @@ export default defineComponent({
           // Redirect to login if not on a public share route
           const hash = window.location.hash || '';
           const pathFromHash = hash.replace(/^#/, '').split('?')[0];
-          const isPathnameShare = !!this.getPathnameMapShareId();
+          const isPathnameShare = !!this.getPathnameShareId();
           if (!this.isPublicSharePath(pathFromHash) && !isPathnameShare) {
             const loginUrl = window.location.origin + '/accounts/login/';
             window.location.replace(loginUrl);
@@ -426,17 +432,9 @@ export default defineComponent({
     }
   },
   methods: {
-    getPathnameMapShareId(): string | null {
+    getPathnameShareId(): string | null {
       if (typeof window === 'undefined') return null;
-      const match = /^\/share\/map\/([0-9a-fA-F-]{36})\/?$/.exec(window.location.pathname);
-      return match ? match[1] : null;
-    },
-    ensurePathnameShareRedirectToHash() {
-      const shareId = this.getPathnameMapShareId();
-      if (!shareId) return;
-      const hash = window.location.hash || '';
-      if (hash.startsWith('#/mapshare')) return;
-      window.location.replace(`/#/mapshare?id=${encodeURIComponent(shareId)}`);
+      return parseMapSocialPath(window.location.pathname) ?? parseTrackSocialPath(window.location.pathname);
     },
     setMobileMenuGlobalState(isOpen: boolean) {
       if (typeof document === 'undefined') return;
@@ -453,18 +451,18 @@ export default defineComponent({
     },
     isPublicSharePath(path: string): boolean {
       if (!path) return false;
-      if (path === '/mapshare') return true;
+      if (PUBLIC_SHARE_PREFIXES.some(prefix => path === prefix || path.startsWith(prefix))) {
+        return true;
+      }
       const prefixes = ((this.$store.getters as Record<string, unknown>)['extensionsRuntime/publicShareRoutePrefixes'] as string[] | undefined) ?? [];
       return prefixes.some(prefix => path.startsWith(prefix));
     },
     async checkAuth() {
-      this.ensurePathnameShareRedirectToHash();
-
       // Check if we're on a public share route using window.location.hash
       // since $route might not be ready yet
       const hash = window.location.hash || '';
       const pathFromHash = hash.replace(/^#/, '').split('?')[0];
-      const isPublicShare = this.isPublicSharePath(pathFromHash) || !!this.getPathnameMapShareId();
+      const isPublicShare = this.isPublicSharePath(pathFromHash) || !!this.getPathnameShareId();
 
       this.userInfoLoading = true;
       
@@ -483,6 +481,7 @@ export default defineComponent({
         return;
       }
 
+      const settingsPromise = this.$store.dispatch('userSettings/fetchUserSettings');
       this.userInfoLoading = false;
       const userInfo = (this.$store.getters as Record<string, unknown>)['auth/userInfo'] as UserInfo | null;
 
@@ -491,18 +490,15 @@ export default defineComponent({
         await this.$router.push('/');
       }
 
-      // Parallelize loading user settings and config cache (for faster map initialization)
-      // Config is needed by tagUtils and maptiler integration
       const { fetchConfig } = await import('@/utils/configService')
       
       try {
         await Promise.all([
-          this.$store.dispatch('userSettings/fetchUserSettings'),
-          fetchConfig() // Pre-cache config for map components
+          settingsPromise,
+          fetchConfig()
         ]);
       } catch (error) {
         console.error('Error loading initialization data:', error);
-        // Continue even if settings fail to load
       }
 
       // Always setup WebSocket connection if user is authorized (not just for non-public routes)
@@ -634,6 +630,14 @@ export default defineComponent({
       // Race between checkAuth and timeout
       await Promise.race([this.checkAuth(), timeoutPromise]);
     } catch (error) {
+      const hash = window.location.hash || '';
+      const pathFromHash = hash.replace(/^#/, '').split('?')[0];
+      const isPublicShare = this.isPublicSharePath(pathFromHash) || !!this.getPathnameShareId();
+      if (isPublicShare) {
+        this.loadingError = false;
+        this.userInfoLoading = false;
+        return;
+      }
       console.error('Error during initial load:', error);
       this.loadingError = true;
       this.userInfoLoading = false;

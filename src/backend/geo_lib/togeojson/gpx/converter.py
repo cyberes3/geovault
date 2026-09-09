@@ -66,6 +66,8 @@ def _get_route(ns: NS, node) -> dict | None:
     properties: dict = {"_gpxType": "rte"}
     properties.update(extract_properties(ns, node))
     properties.update(get_line_style(get_one(node, "extensions")))
+    if line.times:
+        properties["coordinateProperties"] = {"times": line.times}
 
     return {
         "type": "Feature",

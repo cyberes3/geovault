@@ -15,6 +15,7 @@ from geo_lib.processing.job_recovery import (
     get_interrupted_jobs_count,
     _redispatch_job,
 )
+from tests.test_utils.import_queue import queue_with_drafts
 
 
 @pytest.mark.django_db
@@ -32,12 +33,11 @@ class TestJobRecovery:
 
     def test_identify_interrupted_job(self, user):
         """Test that interrupted jobs are correctly identified."""
-        # Create an interrupted job (has raw_file but no geofeatures)
         ImportQueue.objects.create(
             user=user,
             original_filename='test.gpx',
             raw_file='<gpx>test content</gpx>',
-            geofeatures=[],
+            queue_status=ImportQueue.STATUS_PROCESSING,
             imported=False,
             unparsable=False
         )
@@ -47,12 +47,12 @@ class TestJobRecovery:
 
     def test_ignore_completed_jobs(self, user):
         """Test that completed jobs are not identified as interrupted."""
-        # Create a completed job (has geofeatures)
-        ImportQueue.objects.create(
+        # Ready rows with drafts are not interrupted
+        queue_with_drafts(
             user=user,
             original_filename='completed.gpx',
             raw_file='<gpx>test content</gpx>',
-            geofeatures=[{'type': 'Feature', 'properties': {}, 'geometry': {}}],
+            features=[{'type': 'Feature', 'properties': {}, 'geometry': {}}],
             imported=False,
             unparsable=False
         )
@@ -67,7 +67,6 @@ class TestJobRecovery:
             user=user,
             original_filename='unparsable.gpx',
             raw_file='<gpx>test content</gpx>',
-            geofeatures=[],
             imported=False,
             unparsable=True
         )
@@ -82,7 +81,6 @@ class TestJobRecovery:
             user=user,
             original_filename='imported.gpx',
             raw_file='<gpx>test content</gpx>',
-            geofeatures=[],
             imported=True,
             unparsable=False
         )
@@ -97,7 +95,6 @@ class TestJobRecovery:
             user=user,
             original_filename='empty.gpx',
             raw_file='',
-            geofeatures=[],
             imported=False,
             unparsable=False
         )
@@ -105,14 +102,15 @@ class TestJobRecovery:
         count = get_interrupted_jobs_count()
         assert count == 0
 
+    @patch('geo_lib.processing.job_recovery.try_acquire_lock', return_value=object())
     @patch('geo_lib.processing.job_recovery.dispatch_import_job')
-    def test_recover_single_job(self, mock_dispatch, user):
+    def test_recover_single_job(self, mock_dispatch, _mock_lock, user):
         """Test recovering a single interrupted job."""
         job = ImportQueue.objects.create(
             user=user,
             original_filename='test.gpx',
             raw_file='<gpx>test content</gpx>',
-            geofeatures=[],
+            queue_status=ImportQueue.STATUS_PROCESSING,
             imported=False,
             unparsable=False
         )
@@ -137,8 +135,9 @@ class TestJobRecovery:
         assert job_data['replacement_feature_id'] is None
         assert job_data['job_ceiling_seconds'] > 0
 
+    @patch('geo_lib.processing.job_recovery.try_acquire_lock', return_value=object())
     @patch('geo_lib.processing.job_recovery.dispatch_import_job')
-    def test_recover_multiple_jobs(self, mock_dispatch, user, django_user_model):
+    def test_recover_multiple_jobs(self, mock_dispatch, _mock_lock, user, django_user_model):
         """Test recovering multiple interrupted jobs for different users."""
         another_user = django_user_model.objects.create_user(
             username='testuser2',
@@ -150,7 +149,7 @@ class TestJobRecovery:
             user=user,
             original_filename='test1.gpx',
             raw_file='<gpx>test content 1</gpx>',
-            geofeatures=[],
+            queue_status=ImportQueue.STATUS_PROCESSING,
             imported=False,
             unparsable=False
         )
@@ -159,7 +158,7 @@ class TestJobRecovery:
             user=another_user,
             original_filename='test2.gpx',
             raw_file='<gpx>test content 2</gpx>',
-            geofeatures=[],
+            queue_status=ImportQueue.STATUS_PROCESSING,
             imported=False,
             unparsable=False
         )
@@ -176,14 +175,15 @@ class TestJobRecovery:
         assert all('file_data' not in job_data for job_data in dispatched_job_data)
         assert all(job_data.get('import_queue_id') for job_data in dispatched_job_data)
 
+    @patch('geo_lib.processing.job_recovery.try_acquire_lock', return_value=object())
     @patch('geo_lib.processing.job_recovery.dispatch_import_job')
-    def test_recover_with_replacement(self, mock_dispatch, user, feature_store):
+    def test_recover_with_replacement(self, mock_dispatch, _mock_lock, user, feature_store):
         """Test recovering a job that was a replacement upload."""
         job = ImportQueue.objects.create(
             user=user,
             original_filename='replacement.gpx',
             raw_file='<gpx>test content</gpx>',
-            geofeatures=[],
+            queue_status=ImportQueue.STATUS_PROCESSING,
             imported=False,
             unparsable=False,
             replacement=feature_store.id
@@ -208,7 +208,7 @@ class TestJobRecovery:
             user=user,
             original_filename='test.gpx',
             raw_file='<gpx>test content</gpx>',
-            geofeatures=[],
+            queue_status=ImportQueue.STATUS_PROCESSING,
             imported=False,
             unparsable=False
         )

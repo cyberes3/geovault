@@ -2,7 +2,7 @@
  * Fetches /api/extensions/live-track/ingress-body-template/ once per site load
  * and caches the response so multiple components can use it without re-calling.
  */
-import type { ExtensionApi } from './types/extension-api';
+import type { ExtensionApi } from '@geovault/extension-sdk';
 
 export interface IngressBodyTemplate {
   body_template: string;

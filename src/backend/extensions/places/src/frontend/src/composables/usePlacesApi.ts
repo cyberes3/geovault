@@ -1,5 +1,5 @@
 import { inject } from 'vue';
-import type { ExtensionApi } from '@/types/extension-api';
+import type { ExtensionApi } from '@geovault/extension-sdk';
 import type { PlaceFeature } from '@/types/places';
 
 export interface UsePlacesApiReturn {

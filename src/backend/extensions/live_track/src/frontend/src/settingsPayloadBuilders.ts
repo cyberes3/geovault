@@ -41,7 +41,7 @@ export function buildTrackerSettingsPayloadFromSnapshot(snapshot: TrackerSetting
   const payload: Record<string, unknown> = {
     name: String(snapshot?.name ?? '').trim(),
     color: snapshot?.color,
-    recent_data_window: snapshot?.recentDataWindow ?? null,
+    recent_data_window: snapshot?.recentDataWindow === '' ? 'all' : (snapshot?.recentDataWindow ?? 'all'),
     visibility: snapshot?.visibility ?? 'private',
     share_params_with_recipients: snapshot?.shareParamsWithRecipients === true,
     share_params_with_world: snapshot?.shareParamsWithWorld === true,
@@ -75,7 +75,7 @@ export function buildTrackerPreservingSettingsPayload(tracker: LiveTrack | null 
 
   putBaselineValue(payload, 'name', tracker?.name);
   putBaselineValue(payload, 'color', tracker?.color);
-  putBaselineValue(payload, 'recent_data_window', settings.recent_data_window);
+  putBaselineValue(payload, 'recent_data_window', settings.recent_data_window === '' ? 'all' : settings.recent_data_window);
   putBaselineValue(payload, 'visibility', tracker?.visibility);
   putBaselineValue(payload, 'share_params_with_recipients', tracker?.share_params_with_recipients);
   putBaselineValue(payload, 'share_params_with_world', tracker?.share_params_with_world);

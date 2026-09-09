@@ -127,15 +127,6 @@
 
 <script lang="ts">
 import { defineComponent } from 'vue';
-import 'ol/ol.css';
-import { Map, View } from 'ol';
-import type MapBrowserEvent from 'ol/MapBrowserEvent';
-import { Vector as VectorSource } from 'ol/source';
-import { Vector as VectorLayer } from 'ol/layer';
-import { fromLonLat, toLonLat } from 'ol/proj.js';
-import Feature from 'ol/Feature.js';
-import Point from 'ol/geom/Point.js';
-import { Circle as CircleStyle, Fill, Stroke, Style } from 'ol/style.js';
 import piexif, { type ExifObject, type Rational } from 'piexifjs';
 import {
   CloudArrowUpIcon,
@@ -144,8 +135,8 @@ import {
   ArrowDownTrayIcon,
   InformationCircleIcon
 } from '@heroicons/vue/24/outline';
-import type { ExtensionApi } from './types/extension-api';
-import type { GeocodingResult } from './types/gv-core';
+import type { ExtensionApi } from '@geovault/extension-sdk';
+import type { GeocodingResult } from '@geovault/extension-sdk';
 
 export default defineComponent({
     name: 'Geotagger',
@@ -162,9 +153,7 @@ export default defineComponent({
             imageFile: null as File | null,
             previewUrl: null as string | null,
             isDragging: false,
-            // Map
-            map: null as Map | null,
-            markerSource: null as VectorSource | null,
+            preview: null as { flyTo: (lng: number, lat: number, zoom?: number) => void; setMarker: (lng: number, lat: number) => void; destroy: () => void } | null,
             // Coords
             lat: null as number | null,
             lon: null as number | null,
@@ -184,57 +173,19 @@ export default defineComponent({
             console.error('Error initializing EXIF geotagger map:', error);
         });
     },
-    watch: {
-        imageFile(newVal: File | null) {
-            this.toggleMapInteractions(!!newVal);
-        }
+    beforeUnmount() {
+        this.preview?.destroy();
+        this.preview = null;
     },
     methods: {
         triggerFileInput(): void {
             (this.$refs.fileInput as HTMLInputElement | undefined)?.click();
         },
         async initMap(): Promise<void> {
-            const markerSource = new VectorSource();
-            this.markerSource = markerSource;
-            const markerLayer = new VectorLayer({
-                source: markerSource,
-                style: new Style({
-                    image: new CircleStyle({
-                        radius: 7,
-                        fill: new Fill({color: '#3b82f6'}),
-                        stroke: new Stroke({color: 'white', width: 2})
-                    })
-                })
-            });
-
-            const basemapLayer = await window.gv_core.openLayersBasemap.createTileLayer();
-
-            this.map = new Map({
-                target: this.$refs.mapContainer as HTMLElement,
-                layers: [
-                    basemapLayer,
-                    markerLayer
-                ],
-                controls: [],
-                view: new View({
-                    center: fromLonLat([0, 0]),
-                    zoom: 2
-                })
-            });
-
-            this.map.on('click', (e: MapBrowserEvent) => {
+            const container = this.$refs.mapContainer as HTMLElement;
+            this.preview = await window.gv_core.map.createPointPickerMap(container, (lng: number, lat: number) => {
                 if (!this.imageFile) return;
-                const coords = toLonLat(e.coordinate);
-                this.updateCoords(coords[1], coords[0]);
-            });
-
-            // Set initial interaction state
-            this.toggleMapInteractions(!!this.imageFile);
-        },
-        toggleMapInteractions(enabled: boolean): void {
-            if (!this.map) return;
-            this.map.getInteractions().forEach(interaction => {
-                interaction.setActive(enabled);
+                this.updateCoords(lat, lng);
             });
         },
         updateCoords(lat: number, lon: number): void {
@@ -242,11 +193,7 @@ export default defineComponent({
             this.lon = parseFloat(Number(lon).toFixed(6));
             this.coordinatesInput = `${this.lat}, ${this.lon}`;
             this.coordinateError = '';
-            this.markerSource?.clear();
-            const feature = new Feature({
-                geometry: new Point(fromLonLat([this.lon, this.lat]))
-            });
-            this.markerSource?.addFeature(feature);
+            this.preview?.setMarker(this.lon, this.lat);
         },
         validateCoordinates(): void {
             this.coordinateError = '';
@@ -254,7 +201,6 @@ export default defineComponent({
             this.lon = null;
             const input = this.coordinatesInput.trim();
             if (!input) {
-                this.markerSource?.clear();
                 return;
             }
             const parseCoordinates = window.gv_core.GeoVault.utils.parseCoordinates;
@@ -262,11 +208,7 @@ export default defineComponent({
             if (coordinates) {
                 this.lat = coordinates.lat;
                 this.lon = coordinates.lng;
-                this.markerSource?.clear();
-                const feature = new Feature({
-                    geometry: new Point(fromLonLat([this.lon, this.lat]))
-                });
-                this.markerSource?.addFeature(feature);
+                this.preview?.setMarker(this.lon, this.lat);
             } else {
                 this.coordinateError = 'Invalid coordinate format';
             }
@@ -299,8 +241,6 @@ export default defineComponent({
             this.coordinateError = '';
             this.searchQuery = '';
             this.searchResults = [];
-            this.markerSource?.clear();
-
             this.imageFile = file;
             this.previewUrl = URL.createObjectURL(file);
             this.extractExifData(file);
@@ -314,7 +254,6 @@ export default defineComponent({
             this.coordinateError = '';
             this.searchQuery = '';
             this.searchResults = [];
-            this.markerSource?.clear();
             const fileInput = this.$refs.fileInput as HTMLInputElement | undefined;
             if (fileInput) fileInput.value = '';
         },
@@ -374,11 +313,7 @@ export default defineComponent({
             const coords = getGeocodingResultCoordinates(result);
             if (coords) {
                 this.updateCoords(coords.lat, coords.lon);
-                this.map?.getView().animate({
-                    center: fromLonLat([coords.lon, coords.lat]),
-                    zoom: 12,
-                    duration: 500
-                });
+                this.preview?.flyTo(coords.lon, coords.lat, 12);
             }
         },
         degToDms(deg: number): Rational[] {
@@ -429,11 +364,7 @@ export default defineComponent({
                             if (lat === 0 && lon === 0) return;
 
                             this.updateCoords(lat, lon);
-                            this.map?.getView().animate({
-                                center: fromLonLat([lon, lat]),
-                                zoom: 16,
-                                duration: 1000
-                            });
+                            this.preview?.flyTo(lon, lat, 16);
                         }
                     }
                 } catch (err) {

@@ -222,7 +222,7 @@ import Loader from 'platform/components/parts/Loader.vue';
 import TrackListChevronIcon from './TrackListChevronIcon.vue';
 import { filterByQuery, isSharedOrPublicTracker } from './sharingSelectors';
 import type { LiveTrack, LiveTrackGroup } from './types/track';
-import type { ExtensionApi } from './types/extension-api';
+import type { ExtensionApi } from '@geovault/extension-sdk';
 
 export default defineComponent({
   name: 'SharedWithMeSidebarContent',

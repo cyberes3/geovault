@@ -39,7 +39,7 @@
 <script setup lang="ts">
 import { onMounted, onBeforeUnmount, inject, reactive, ref, computed, watch } from 'vue';
 import type { PlatformStateBridge } from './types/platform-state';
-import type { TileSource } from './types/gv-core';
+import type { TileSource } from '@geovault/extension-sdk';
 
 interface SelectOption {
   value: string;

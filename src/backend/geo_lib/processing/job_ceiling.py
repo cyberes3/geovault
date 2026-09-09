@@ -1,9 +1,8 @@
 """
 Size-scaled timeout calculations shared by the processing pipeline.
 
-Kept as pure functions (no processor instance required) so both `BaseProcessor` (which knows
-the timeout only after it has the file in memory) and the job dispatch code in `ProcessJob`/
-`job_recovery` (which only knows the raw byte size at enqueue time, before a processor exists)
+Kept as pure functions so FormatReaders (which know the timeout after the file is in memory)
+and job dispatch in `ProcessJob`/`job_recovery` (which only know the raw byte size at enqueue)
 compute identical numbers from the same formula.
 """
 

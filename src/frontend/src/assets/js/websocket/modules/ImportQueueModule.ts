@@ -5,13 +5,22 @@
 
 import { BaseModule } from './BaseModule';
 import type { ImportTableItem } from '../../types/import-types';
+import { buildStatusUpdateFields, type JobStatus } from './jobStatusHelpers';
+
+export interface ImportQueueStatusCounts {
+    feature_count: number;
+}
+
+export interface ImportQueueStatusDelta {
+    item_id: number;
+    status?: JobStatus | null;
+    counts?: ImportQueueStatusCounts;
+}
 
 export class ImportQueueModule extends BaseModule {
     readonly moduleName = 'import_queue';
 
-    initialize(): void {
-        super.initialize();
-
+    protected onInitialize(): void {
         this.subscribe('initial_state', (data: ImportTableItem[]) => {
             void this.store.dispatch('importQueue/setImportTable', data);
         });
@@ -37,10 +46,17 @@ export class ImportQueueModule extends BaseModule {
             });
         });
 
-        // Note: the backend's `import_queue` module never sends a `status_updated` message to
-        // the client -- its server-side handler always responds with a fresh `initial_state`
-        // instead (see `ImportQueueModule.status_updated` in `geo_lib/websocket/modules`), since
-        // a status change can affect other queued items' duplicate status too. `ProcessJobModule`
-        // handles the single-item `status_updated` message that the process-job channel sends.
+        this.subscribe('status_updated', (data: ImportQueueStatusDelta) => {
+            const updates: Partial<ImportTableItem> = data.status
+                ? buildStatusUpdateFields(data.status)
+                : {};
+            if (data.counts?.feature_count != null) {
+                updates.feature_count = data.counts.feature_count;
+            }
+            void this.store.dispatch('importQueue/updateImportTableItem', {
+                id: data.item_id,
+                updates,
+            });
+        });
     }
 }

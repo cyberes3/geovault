@@ -1,7 +1,9 @@
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from django.contrib.auth import get_user_model
-from api.models import ImportQueue, FeatureStore, DatabaseLogging, TagShare, CollectionShare, Collection
+from api.models import ImportQueue, FeatureStore, DatabaseLogging, Collection
+from api.sharing.models import ShareLink
+from geo_lib.sharing.constants import KIND_COLLECTION, KIND_TAG
 
 
 class Command(BaseCommand):
@@ -97,8 +99,11 @@ class Command(BaseCommand):
         import_queue_qs = ImportQueue.objects.filter(user=user_obj) if user_obj else ImportQueue.objects.all()
         feature_store_qs = FeatureStore.objects.filter(user=user_obj) if user_obj else FeatureStore.objects.all()
         logs_qs = DatabaseLogging.objects.filter(user=user_obj) if user_obj else DatabaseLogging.objects.all()
-        tag_shares_qs = TagShare.objects.filter(user=user_obj) if user_obj else TagShare.objects.all()
-        collection_shares_qs = CollectionShare.objects.filter(user=user_obj) if user_obj else CollectionShare.objects.all()
+        tag_shares_qs = ShareLink.objects.filter(subject_kind=KIND_TAG)
+        collection_shares_qs = ShareLink.objects.filter(subject_kind=KIND_COLLECTION)
+        if user_obj:
+            tag_shares_qs = tag_shares_qs.filter(owner=user_obj)
+            collection_shares_qs = collection_shares_qs.filter(owner=user_obj)
         collections_qs = Collection.objects.filter(user=user_obj) if user_obj else Collection.objects.all()
 
         import_queue_count = import_queue_qs.count() if clear_import_queue else 0
@@ -148,7 +153,7 @@ class Command(BaseCommand):
                 return
 
         # Perform the deletion
-        # Note: CollectionShare must be deleted before Collection due to FK constraint
+        # Collection rows have no FK from ShareLink; token rows are deleted by owner/kind first.
         # Logs are deleted first since they're just metadata about the other data
         with transaction.atomic():
             deleted_counts = {}

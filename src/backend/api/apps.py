@@ -20,3 +20,5 @@ class ApiConfig(AppConfig):
         here rather than in that module.
         """
         celery_app.autodiscover_tasks(force=True)
+        from api.sharing.signals import register_tracker_share_signals
+        register_tracker_share_signals()

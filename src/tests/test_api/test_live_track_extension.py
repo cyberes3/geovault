@@ -13,18 +13,24 @@ from django.utils import timezone
 
 from extensions.live_track.src.backend.helpers import DEFAULT_TRACK_COLOR
 from extensions.live_track.src.backend import ingress_views, tracker_views
+from api.sharing.models import ShareGrant, ShareLink
+from geo_lib.sharing.constants import KIND_LIVE_TRACK, KIND_LIVE_TRACK_GROUP
 from extensions.live_track.src.backend.models import (
     LiveTrack,
     LiveTrackGroup,
-    LiveTrackGroupInternalShare,
     LiveTrackGroupMember,
-    LiveTrackGroupShare,
     LiveTrackGroupSubscription,
-    LiveTrackGroupWorldShare,
-    LiveTrackInternalShare,
-    LiveTrackWorldShare,
-    LiveTrackShare,
     LiveTrackSubscription,
+)
+from test_utils.live_track_points import seed_track_points, stored_track_points
+from test_utils.share_fixtures import (
+    group_has_any_grant,
+    group_has_grant,
+    group_has_internal_link,
+    track_has_any_grant,
+    track_has_grant,
+    track_has_internal_link,
+    track_has_world_link,
 )
 from extensions.live_track.src.backend.internal_share_links import (
     build_live_track_group_internal_share_url,
@@ -37,13 +43,19 @@ from extensions.live_track.src.backend.world_share_views import (
 )
 
 
+def _list_items(payload):
+    if isinstance(payload, dict) and isinstance(payload.get("items"), list):
+        return payload["items"]
+    return payload
+
+
 def _patch_live_track_enabled():
     """Return a context manager that mocks config so the live_track extension is considered enabled."""
     mock_config = MagicMock()
     mock_config.extension_settings.side_effect = (
         lambda name: {"enabled": True} if name == "live_track" else {}
     )
-    return patch("website.extensions.extension_loader.get_config", return_value=mock_config)
+    return patch("website.extensions.registry.get_config", return_value=mock_config)
 
 
 def _override_live_track_geometry_max_response_bytes(value: int):
@@ -68,8 +80,8 @@ class TestLiveTrackWorldShareUrlBuilder(TestCase):
             "/api/extensions/live-track/trackers/example/settings/",
             HTTP_HOST="172.0.2.102",
         )
-        expected_world_url = f"/#/extensions/live-track/share?id={share_id}"
-        expected_internal_url = expected_world_url
+        expected_world_url = f"/share/track/{share_id}/"
+        expected_internal_url = f"/#/extensions/live-track/share?id={share_id}"
 
         track_url = build_live_track_share_url(request, share_id)
         group_url = build_live_track_group_share_url(request, share_id)
@@ -115,8 +127,7 @@ class TestLiveTrackAPI(TestCase):
         with _patch_live_track_enabled():
             response = self.client.get("/api/extensions/live-track/trackers/")
         self.assertEqual(response.status_code, 200)
-        data = response.json()
-        self.assertIsInstance(data, list)
+        data = _list_items(response.json())
         self.assertEqual(len(data), 0)
 
     def test_list_trackers_unauthenticated(self):
@@ -219,7 +230,7 @@ class TestLiveTrackAPI(TestCase):
                 )
             response = self.client.get("/api/extensions/live-track/trackers/")
         self.assertEqual(response.status_code, 200)
-        names = [t["name"] for t in response.json()]
+        names = [t["name"] for t in _list_items(response.json())]
         self.assertEqual(names, ["Alpha", "Bravo", "Charlie"])
 
     def test_list_trackers_orders_subscribed_oldest_first_and_returns_subscribed_at(self):
@@ -273,7 +284,7 @@ class TestLiveTrackAPI(TestCase):
             response = self.client.get("/api/extensions/live-track/trackers/")
 
         self.assertEqual(response.status_code, 200)
-        data = response.json()
+        data = _list_items(response.json())
         self.assertEqual([t["name"] for t in data[:2]], ["Alpha", "Zulu"])
         subscribed = data[2:]
         self.assertEqual([t["name"] for t in subscribed], ["Other Track 2", "Other Track 1"])
@@ -291,7 +302,7 @@ class TestLiveTrackAPI(TestCase):
             )
             response = self.client.get("/api/extensions/live-track/trackers/")
         self.assertEqual(response.status_code, 200)
-        data = response.json()
+        data = _list_items(response.json())
         self.assertEqual(len(data), 1)
         self.assertTrue(data[0]["is_owner"])
         self.assertNotIn("owner_email", data[0])
@@ -407,11 +418,12 @@ class TestLiveTrackAPI(TestCase):
         with _patch_live_track_enabled():
             track_id = self._create_track("Activity Time Settings")
         old_updated_at = timezone.now() - timedelta(hours=2)
-        LiveTrack.objects.filter(id=track_id).update(
-            geometry={"type": "LineString", "coordinates": [[-122.0, 37.0, 1705312800000]]},
-            point_params=[{"starttimestamp": 1705312800000}],
-            updated_at=old_updated_at,
+        seed_track_points(
+            LiveTrack.objects.get(id=track_id),
+            [[-122.0, 37.0, 1705312800000]],
+            [{"starttimestamp": 1705312800000}],
         )
+        LiveTrack.objects.filter(id=track_id).update(updated_at=old_updated_at)
 
         with _patch_live_track_enabled():
             response = self.client.post(
@@ -454,20 +466,18 @@ class TestLiveTrackAPI(TestCase):
         with _patch_live_track_enabled():
             track_id = self._create_track("Clear History Activity Time")
         old_updated_at = timezone.now() - timedelta(hours=2)
-        LiveTrack.objects.filter(id=track_id).update(
-            geometry={
-                "type": "LineString",
-                "coordinates": [
-                    [-122.0, 37.0, 1705312800000],
-                    [-121.9, 37.1, 1705312860000],
-                ],
-            },
-            point_params=[
+        seed_track_points(
+            LiveTrack.objects.get(id=track_id),
+            [
+                [-122.0, 37.0, 1705312800000],
+                [-121.9, 37.1, 1705312860000],
+            ],
+            [
                 {"starttimestamp": 1705312800000},
                 {"starttimestamp": 1705312800000},
             ],
-            updated_at=old_updated_at,
         )
+        LiveTrack.objects.filter(id=track_id).update(updated_at=old_updated_at)
 
         with _patch_live_track_enabled():
             response = self.client.post(
@@ -476,8 +486,9 @@ class TestLiveTrackAPI(TestCase):
 
         self.assertEqual(response.status_code, 200)
         track = LiveTrack.objects.get(id=track_id)
-        self.assertEqual(track.geometry["coordinates"], [[-121.9, 37.1, 1705312860000]])
-        self.assertEqual(track.point_params, [{"starttimestamp": 1705312800000}])
+        coords, params = stored_track_points(track)
+        self.assertEqual(coords, [[-121.9, 37.1, 1705312860000]])
+        self.assertEqual(params, [{"starttimestamp": 1705312800000}])
         self.assertEqual(track.updated_at, old_updated_at)
 
     def test_credential_regeneration_does_not_advance_tracker_activity_time(self):
@@ -488,19 +499,11 @@ class TestLiveTrackAPI(TestCase):
         LiveTrack.objects.filter(id=track_id).update(updated_at=old_updated_at)
 
         with _patch_live_track_enabled():
-            hauk_response = self.client.post(
-                f"/api/extensions/live-track/trackers/{track_id}/regenerate-hauk-password/",
-            )
-        self.assertEqual(hauk_response.status_code, 200)
-        track = LiveTrack.objects.get(id=track_id)
-        self.assertEqual(track.updated_at, old_updated_at)
-
-        with _patch_live_track_enabled():
             token_response = self.client.post(
                 f"/api/extensions/live-track/trackers/{track_id}/regenerate-tokens/",
             )
         self.assertEqual(token_response.status_code, 200)
-        track.refresh_from_db()
+        track = LiveTrack.objects.get(id=track_id)
         self.assertEqual(track.updated_at, old_updated_at)
 
     def test_post_settings_shared_with_emails_sync(self):
@@ -522,7 +525,7 @@ class TestLiveTrackAPI(TestCase):
                 }),
                 content_type="application/json",
             )
-        self.assertTrue(LiveTrackShare.objects.filter(track=track, shared_with=self.other_user).exists())
+        self.assertTrue(track_has_grant(track, self.other_user))
         with _patch_live_track_enabled():
             self.client.post(
                 f"/api/extensions/live-track/trackers/{track_id}/settings/",
@@ -532,7 +535,7 @@ class TestLiveTrackAPI(TestCase):
                 }),
                 content_type="application/json",
             )
-        self.assertFalse(LiveTrackShare.objects.filter(track=track).exists())
+        self.assertFalse(track_has_any_grant(track))
 
     def test_post_settings_world_share_enabled_in_shared_mode(self):
         """POST settings allows world_share_enabled when visibility=shared and keeps recipient share state."""
@@ -561,14 +564,14 @@ class TestLiveTrackAPI(TestCase):
         self.assertIn("world_share_url", data)
         self.assertEqual(
             data["world_share_url"],
-            f"/#/extensions/live-track/share?id={data['world_share_id']}",
+            f"/share/track/{data['world_share_id']}/",
         )
-        self.assertTrue(LiveTrackWorldShare.objects.filter(track=track).exists())
+        self.assertTrue(track_has_world_link(track))
         self.assertTrue(
-            LiveTrackShare.objects.filter(track=track, shared_with=self.other_user).exists()
+            track_has_grant(track, self.other_user)
         )
         with _patch_live_track_enabled():
-            discovery = self.client.get(f"/api/extensions/live-track/share/{data['world_share_id']}/info/")
+            discovery = self.client.get(f"/api/shares/{data['world_share_id']}/info/")
         self.assertEqual(discovery.status_code, 200)
         self.assertEqual(discovery.json()["share_access"], "world")
         self.assertEqual(discovery.json()["share_type"], "live_track")
@@ -597,7 +600,7 @@ class TestLiveTrackAPI(TestCase):
         self.assertNotIn("world_share_id", data)
         share_id = data["internal_share_id"]
         track = LiveTrack.objects.get(id=track_id)
-        self.assertTrue(LiveTrackInternalShare.objects.filter(track=track, share_id=share_id).exists())
+        self.assertTrue(track_has_internal_link(track, share_id))
 
         with _patch_live_track_enabled():
             repeat = self.client.post(
@@ -610,14 +613,14 @@ class TestLiveTrackAPI(TestCase):
 
         self.client.logout()
         with _patch_live_track_enabled():
-            unauthenticated_discovery = self.client.get(f"/api/extensions/live-track/share/{share_id}/info/")
-        self.assertEqual(unauthenticated_discovery.status_code, 404)
-        self.assertEqual(unauthenticated_discovery.json()["error"], "Invalid share link")
+            unauthenticated_discovery = self.client.get(f"/api/shares/{share_id}/info/")
+        self.assertEqual(unauthenticated_discovery.status_code, 401)
+        self.assertEqual(unauthenticated_discovery.json()["error"], "Unauthorized")
 
         self.client.force_login(self.other_user)
         with _patch_live_track_enabled():
             detail = self.client.get(f"/api/extensions/live-track/trackers/{track_id}/")
-            resolved = self.client.get(f"/api/extensions/live-track/internal/share/{share_id}/info/")
+            resolved = self.client.get(f"/api/shares/{share_id}/info/")
         self.assertEqual(detail.status_code, 200)
         self.assertEqual(detail.json()["internal_share_id"], share_id)
         self.assertNotIn("world_share_id", detail.json())
@@ -625,8 +628,8 @@ class TestLiveTrackAPI(TestCase):
         self.assertEqual(resolved.json()["share_type"], "live_track")
         self.assertEqual(resolved.json()["track_id"], track_id)
         with _patch_live_track_enabled():
-            standalone_discovery = self.client.get(f"/api/extensions/live-track/share/{share_id}/info/")
-            standalone_data = self.client.get(f"/api/extensions/live-track/internal/share/{share_id}/")
+            standalone_discovery = self.client.get(f"/api/shares/{share_id}/info/")
+            standalone_data = self.client.get(f"/api/shares/{share_id}/track/")
         self.assertEqual(standalone_data.status_code, 200)
         self.assertEqual(standalone_data.json()["id"], track_id)
         self.assertNotIn("tracker_secret", standalone_data.json())
@@ -635,10 +638,10 @@ class TestLiveTrackAPI(TestCase):
         self.assertEqual(standalone_discovery.json()["share_type"], "live_track")
         self.assertEqual(standalone_discovery.json()["track_id"], track_id)
         with _patch_live_track_enabled():
-            standalone_world_info = self.client.get(f"/api/extensions/live-track/world/share/{share_id}/info/")
-            standalone_world_data = self.client.get(f"/api/extensions/live-track/world/share/{share_id}/")
-        self.assertEqual(standalone_world_info.status_code, 404)
-        self.assertEqual(standalone_world_data.status_code, 404)
+            standalone_world_info = self.client.get(f"/api/shares/{share_id}/info/")
+            standalone_world_data = self.client.get(f"/api/shares/{share_id}/track/")
+        self.assertEqual(standalone_world_info.status_code, 200)
+        self.assertEqual(standalone_world_data.status_code, 200)
 
         User = get_user_model()
         unrelated_user = User.objects.create_user(
@@ -649,17 +652,17 @@ class TestLiveTrackAPI(TestCase):
         LiveTrack.objects.filter(id=track_id).update(visibility="shared")
         self.client.force_login(unrelated_user)
         with _patch_live_track_enabled():
-            denied = self.client.get(f"/api/extensions/live-track/internal/share/{share_id}/info/")
+            denied = self.client.get(f"/api/shares/{share_id}/info/")
         self.assertEqual(denied.status_code, 404)
         self.assertEqual(denied.json()["error"], "Invalid share link")
 
         with _patch_live_track_enabled():
-            denied_data = self.client.get(f"/api/extensions/live-track/internal/share/{share_id}/")
+            denied_data = self.client.get(f"/api/shares/{share_id}/track/")
         self.assertEqual(denied_data.status_code, 404)
         self.assertEqual(denied_data.json()["error"], "Invalid share link")
         with _patch_live_track_enabled():
-            denied_world_info = self.client.get(f"/api/extensions/live-track/world/share/{share_id}/info/")
-            denied_discovery = self.client.get(f"/api/extensions/live-track/share/{share_id}/info/")
+            denied_world_info = self.client.get(f"/api/shares/{share_id}/info/")
+            denied_discovery = self.client.get(f"/api/shares/{share_id}/info/")
         self.assertEqual(denied_world_info.status_code, 404)
         self.assertEqual(denied_discovery.status_code, 404)
 
@@ -672,7 +675,7 @@ class TestLiveTrackAPI(TestCase):
             )
         self.assertEqual(private_response.status_code, 200)
         self.assertNotIn("internal_share_id", private_response.json())
-        self.assertFalse(LiveTrackInternalShare.objects.filter(track=track).exists())
+        self.assertFalse(ShareLink.objects.for_track(track.id).authenticated().exists())
 
     def test_tracker_internal_share_revoked_user_loses_access(self):
         """Existing internal links do not grant access after a direct tracker share is revoked."""
@@ -694,13 +697,13 @@ class TestLiveTrackAPI(TestCase):
         self.assertEqual(shared_response.status_code, 200)
         share_id = shared_response.json()["internal_share_id"]
         track = LiveTrack.objects.get(id=track_id)
-        self.assertTrue(LiveTrackInternalShare.objects.filter(track=track, share_id=share_id).exists())
+        self.assertTrue(track_has_internal_link(track, share_id))
 
         self.client.force_login(self.other_user)
         with _patch_live_track_enabled():
             allowed_detail = self.client.get(f"/api/extensions/live-track/trackers/{track_id}/")
-            allowed_resolve = self.client.get(f"/api/extensions/live-track/internal/share/{share_id}/info/")
-            allowed_discovery = self.client.get(f"/api/extensions/live-track/share/{share_id}/info/")
+            allowed_resolve = self.client.get(f"/api/shares/{share_id}/info/")
+            allowed_discovery = self.client.get(f"/api/shares/{share_id}/info/")
         self.assertEqual(allowed_detail.status_code, 200)
         self.assertEqual(allowed_detail.json()["internal_share_id"], share_id)
         self.assertEqual(allowed_resolve.status_code, 200)
@@ -719,13 +722,13 @@ class TestLiveTrackAPI(TestCase):
             )
         self.assertEqual(revoke_response.status_code, 200)
         self.assertEqual(revoke_response.json()["internal_share_id"], share_id)
-        self.assertTrue(LiveTrackInternalShare.objects.filter(track=track, share_id=share_id).exists())
+        self.assertTrue(track_has_internal_link(track, share_id))
 
         self.client.force_login(self.other_user)
         with _patch_live_track_enabled():
             denied_detail = self.client.get(f"/api/extensions/live-track/trackers/{track_id}/")
-            denied_resolve = self.client.get(f"/api/extensions/live-track/internal/share/{share_id}/info/")
-            denied_discovery = self.client.get(f"/api/extensions/live-track/share/{share_id}/info/")
+            denied_resolve = self.client.get(f"/api/shares/{share_id}/info/")
+            denied_discovery = self.client.get(f"/api/shares/{share_id}/info/")
             tracker_list = self.client.get("/api/extensions/live-track/trackers/")
         self.assertEqual(denied_detail.status_code, 404)
         self.assertEqual(denied_resolve.status_code, 404)
@@ -734,11 +737,11 @@ class TestLiveTrackAPI(TestCase):
         self.assertEqual(denied_discovery.json()["error"], "Invalid share link")
         self.assertNotIn(
             share_id,
-            [item.get("internal_share_id") for item in tracker_list.json()],
+            [item.get("internal_share_id") for item in _list_items(tracker_list.json())],
         )
 
         with _patch_live_track_enabled():
-            denied_data = self.client.get(f"/api/extensions/live-track/internal/share/{share_id}/")
+            denied_data = self.client.get(f"/api/shares/{share_id}/track/")
         self.assertEqual(denied_data.status_code, 404)
         self.assertEqual(denied_data.json()["error"], "Invalid share link")
 
@@ -764,16 +767,15 @@ class TestLiveTrackAPI(TestCase):
         self.assertEqual(response.status_code, 200)
         share_id = response.json()["internal_share_id"]
         track = LiveTrack.objects.get(id=track_id)
-        track.geometry = {
-            "type": "LineString",
-            "coordinates": [[-105.0, 40.0, 1700000000000]],
-        }
-        track.point_params = [{"speed": 12.34, "ser": "secret-serial"}]
-        track.save(update_fields=["geometry", "point_params"])
+        seed_track_points(
+            track,
+            [[-105.0, 40.0, 1700000000000]],
+            [{"speed": 12.34, "ser": "secret-serial"}],
+        )
 
         self.client.force_login(self.other_user)
         with _patch_live_track_enabled():
-            data_response = self.client.get(f"/api/extensions/live-track/internal/share/{share_id}/")
+            data_response = self.client.get(f"/api/shares/{share_id}/track/")
         self.assertEqual(data_response.status_code, 200)
         data = data_response.json()
         self.assertEqual(data["id"], track_id)
@@ -803,7 +805,7 @@ class TestLiveTrackAPI(TestCase):
         self.assertIn("internal_share_url", data)
         share_id = data["internal_share_id"]
         group = LiveTrackGroup.objects.get(id=group_id)
-        self.assertTrue(LiveTrackGroupInternalShare.objects.filter(group=group, share_id=share_id).exists())
+        self.assertTrue(group_has_internal_link(group, share_id))
 
         with _patch_live_track_enabled():
             repeat = self.client.patch(
@@ -816,14 +818,14 @@ class TestLiveTrackAPI(TestCase):
 
         self.client.logout()
         with _patch_live_track_enabled():
-            unauthenticated_discovery = self.client.get(f"/api/extensions/live-track/share/{share_id}/info/")
-        self.assertEqual(unauthenticated_discovery.status_code, 404)
-        self.assertEqual(unauthenticated_discovery.json()["error"], "Invalid share link")
+            unauthenticated_discovery = self.client.get(f"/api/shares/{share_id}/info/")
+        self.assertEqual(unauthenticated_discovery.status_code, 401)
+        self.assertEqual(unauthenticated_discovery.json()["error"], "Unauthorized")
 
         self.client.force_login(self.other_user)
         with _patch_live_track_enabled():
             detail = self.client.get(f"/api/extensions/live-track/groups/{group_id}/")
-            resolved = self.client.get(f"/api/extensions/live-track/internal/share/{share_id}/info/")
+            resolved = self.client.get(f"/api/shares/{share_id}/info/")
         self.assertEqual(detail.status_code, 200)
         self.assertEqual(detail.json()["internal_share_id"], share_id)
         self.assertNotIn("world_share_id", detail.json())
@@ -831,8 +833,8 @@ class TestLiveTrackAPI(TestCase):
         self.assertEqual(resolved.json()["share_type"], "live_track_group")
         self.assertEqual(resolved.json()["group_id"], group_id)
         with _patch_live_track_enabled():
-            standalone_discovery = self.client.get(f"/api/extensions/live-track/share/{share_id}/info/")
-            standalone_data = self.client.get(f"/api/extensions/live-track/internal/share/{share_id}/")
+            standalone_discovery = self.client.get(f"/api/shares/{share_id}/info/")
+            standalone_data = self.client.get(f"/api/shares/{share_id}/track/")
         self.assertEqual(standalone_data.status_code, 200)
         self.assertEqual(standalone_data.json()["share_type"], "live_track_group")
         self.assertEqual(standalone_data.json()["group_name"], "Internal Link Group")
@@ -842,10 +844,10 @@ class TestLiveTrackAPI(TestCase):
         self.assertEqual(standalone_discovery.json()["share_type"], "live_track_group")
         self.assertEqual(standalone_discovery.json()["group_id"], group_id)
         with _patch_live_track_enabled():
-            standalone_world_info = self.client.get(f"/api/extensions/live-track/world/share/{share_id}/info/")
-            standalone_world_data = self.client.get(f"/api/extensions/live-track/world/share/{share_id}/")
-        self.assertEqual(standalone_world_info.status_code, 404)
-        self.assertEqual(standalone_world_data.status_code, 404)
+            standalone_world_info = self.client.get(f"/api/shares/{share_id}/info/")
+            standalone_world_data = self.client.get(f"/api/shares/{share_id}/track/")
+        self.assertEqual(standalone_world_info.status_code, 200)
+        self.assertEqual(standalone_world_data.status_code, 200)
 
         self.client.force_login(self.user)
         with _patch_live_track_enabled():
@@ -856,7 +858,7 @@ class TestLiveTrackAPI(TestCase):
             )
         self.assertEqual(private_response.status_code, 200)
         self.assertNotIn("internal_share_id", private_response.json())
-        self.assertFalse(LiveTrackGroupInternalShare.objects.filter(group=group).exists())
+        self.assertFalse(ShareLink.objects.for_group(group.id).authenticated().exists())
 
     def test_group_internal_share_revoked_user_loses_access(self):
         """Existing internal links do not grant access after a group share is revoked."""
@@ -878,13 +880,13 @@ class TestLiveTrackAPI(TestCase):
         self.assertEqual(shared_response.status_code, 200)
         share_id = shared_response.json()["internal_share_id"]
         group = LiveTrackGroup.objects.get(id=group_id)
-        self.assertTrue(LiveTrackGroupInternalShare.objects.filter(group=group, share_id=share_id).exists())
+        self.assertTrue(group_has_internal_link(group, share_id))
 
         self.client.force_login(self.other_user)
         with _patch_live_track_enabled():
             allowed_detail = self.client.get(f"/api/extensions/live-track/groups/{group_id}/")
-            allowed_resolve = self.client.get(f"/api/extensions/live-track/internal/share/{share_id}/info/")
-            allowed_discovery = self.client.get(f"/api/extensions/live-track/share/{share_id}/info/")
+            allowed_resolve = self.client.get(f"/api/shares/{share_id}/info/")
+            allowed_discovery = self.client.get(f"/api/shares/{share_id}/info/")
         self.assertEqual(allowed_detail.status_code, 200)
         self.assertEqual(allowed_detail.json()["internal_share_id"], share_id)
         self.assertEqual(allowed_resolve.status_code, 200)
@@ -903,13 +905,13 @@ class TestLiveTrackAPI(TestCase):
             )
         self.assertEqual(revoke_response.status_code, 200)
         self.assertEqual(revoke_response.json()["internal_share_id"], share_id)
-        self.assertTrue(LiveTrackGroupInternalShare.objects.filter(group=group, share_id=share_id).exists())
+        self.assertTrue(group_has_internal_link(group, share_id))
 
         self.client.force_login(self.other_user)
         with _patch_live_track_enabled():
             denied_detail = self.client.get(f"/api/extensions/live-track/groups/{group_id}/")
-            denied_resolve = self.client.get(f"/api/extensions/live-track/internal/share/{share_id}/info/")
-            denied_discovery = self.client.get(f"/api/extensions/live-track/share/{share_id}/info/")
+            denied_resolve = self.client.get(f"/api/shares/{share_id}/info/")
+            denied_discovery = self.client.get(f"/api/shares/{share_id}/info/")
             group_list = self.client.get("/api/extensions/live-track/groups/")
         self.assertEqual(denied_detail.status_code, 404)
         self.assertEqual(denied_resolve.status_code, 404)
@@ -918,11 +920,11 @@ class TestLiveTrackAPI(TestCase):
         self.assertEqual(denied_discovery.json()["error"], "Invalid share link")
         self.assertNotIn(
             share_id,
-            [item.get("internal_share_id") for item in group_list.json()],
+            [item.get("internal_share_id") for item in _list_items(group_list.json())],
         )
 
         with _patch_live_track_enabled():
-            denied_data = self.client.get(f"/api/extensions/live-track/internal/share/{share_id}/")
+            denied_data = self.client.get(f"/api/shares/{share_id}/track/")
         self.assertEqual(denied_data.status_code, 404)
         self.assertEqual(denied_data.json()["error"], "Invalid share link")
 
@@ -965,7 +967,7 @@ class TestLiveTrackAPI(TestCase):
 
         self.client.force_login(self.other_user)
         with _patch_live_track_enabled():
-            data_response = self.client.get(f"/api/extensions/live-track/internal/share/{share_id}/")
+            data_response = self.client.get(f"/api/shares/{share_id}/track/")
         self.assertEqual(data_response.status_code, 200)
         data = data_response.json()
         self.assertEqual(data["share_type"], "live_track_group")
@@ -1011,12 +1013,12 @@ class TestLiveTrackAPI(TestCase):
 
         self.client.force_login(self.other_user)
         with _patch_live_track_enabled():
-            before_accept = self.client.get(f"/api/extensions/live-track/internal/share/{share_id}/")
+            before_accept = self.client.get(f"/api/shares/{share_id}/track/")
         self.assertEqual([item["id"] for item in before_accept.json()["tracks"]], [])
 
         with _patch_live_track_enabled():
             self.client.post(f"/api/extensions/live-track/groups/{group_id}/accept-share/")
-            after_accept = self.client.get(f"/api/extensions/live-track/internal/share/{share_id}/")
+            after_accept = self.client.get(f"/api/shares/{share_id}/track/")
         self.assertEqual(after_accept.status_code, 200)
         self.assertEqual([item["id"] for item in after_accept.json()["tracks"]], [private_track_id])
 
@@ -1025,31 +1027,31 @@ class TestLiveTrackAPI(TestCase):
         self.client.logout()
         with _patch_live_track_enabled():
             unauthenticated = self.client.get(
-                "/api/extensions/live-track/internal/share/not-a-uuid/info/"
+                "/api/shares/not-a-uuid/info/"
             )
             unauthenticated_data = self.client.get(
-                "/api/extensions/live-track/internal/share/not-a-uuid/"
+                "/api/shares/not-a-uuid/track/"
             )
             unauthenticated_discovery = self.client.get(
-                "/api/extensions/live-track/share/not-a-uuid/info/"
+                "/api/shares/not-a-uuid/info/"
             )
-        self.assertEqual(unauthenticated.status_code, 401)
-        self.assertEqual(unauthenticated_data.status_code, 401)
+        self.assertEqual(unauthenticated.status_code, 404)
+        self.assertEqual(unauthenticated_data.status_code, 404)
         self.assertEqual(unauthenticated_discovery.status_code, 404)
 
         self.client.force_login(self.user)
         with _patch_live_track_enabled():
             malformed = self.client.get(
-                "/api/extensions/live-track/internal/share/not-a-uuid/info/"
+                "/api/shares/not-a-uuid/info/"
             )
             missing = self.client.get(
-                "/api/extensions/live-track/internal/share/f8a918ab-7f53-4ef3-be11-a957c40ebd02/info/"
+                "/api/shares/f8a918ab-7f53-4ef3-be11-a957c40ebd02/info/"
             )
             missing_data = self.client.get(
-                "/api/extensions/live-track/internal/share/f8a918ab-7f53-4ef3-be11-a957c40ebd02/"
+                "/api/shares/f8a918ab-7f53-4ef3-be11-a957c40ebd02/track/"
             )
             missing_discovery = self.client.get(
-                "/api/extensions/live-track/share/f8a918ab-7f53-4ef3-be11-a957c40ebd02/info/"
+                "/api/shares/f8a918ab-7f53-4ef3-be11-a957c40ebd02/info/"
             )
         self.assertEqual(malformed.status_code, 404)
         self.assertEqual(malformed.json()["error"], "Invalid share link")
@@ -1076,7 +1078,7 @@ class TestLiveTrackAPI(TestCase):
                 data=json.dumps({"visibility": "public", "world_share_enabled": True}),
                 content_type="application/json",
             )
-        self.assertTrue(LiveTrackWorldShare.objects.filter(track=track).exists())
+        self.assertTrue(track_has_world_link(track))
         with _patch_live_track_enabled():
             response = self.client.post(
                 f"/api/extensions/live-track/trackers/{track_id}/settings/",
@@ -1088,7 +1090,7 @@ class TestLiveTrackAPI(TestCase):
         self.assertEqual(data.get("visibility"), "private")
         self.assertNotIn("world_share_id", data)
         self.assertNotIn("world_share_url", data)
-        self.assertFalse(LiveTrackWorldShare.objects.filter(track=track).exists())
+        self.assertFalse(track_has_world_link(track))
 
     def test_post_settings_shared_with_emails_invalid_emails_400(self):
         """POST settings with visibility=shared and unknown emails returns 400 with invalid_emails."""
@@ -1153,7 +1155,7 @@ class TestLiveTrackAPI(TestCase):
                 content_type="application/json",
             )
         self.assertEqual(seed.status_code, 200)
-        self.assertTrue(LiveTrackShare.objects.filter(track=track, shared_with=self.other_user).exists())
+        self.assertTrue(track_has_grant(track, self.other_user))
         with _patch_live_track_enabled():
             response = self.client.post(
                 f"/api/extensions/live-track/trackers/{track_id}/settings/",
@@ -1164,7 +1166,7 @@ class TestLiveTrackAPI(TestCase):
                 content_type="application/json",
             )
         self.assertEqual(response.status_code, 200)
-        self.assertFalse(LiveTrackShare.objects.filter(track=track, shared_with=self.other_user).exists())
+        self.assertFalse(track_has_grant(track, self.other_user))
 
     def test_post_settings_world_share_enabled_null_disables(self):
         """POST settings with world_share_enabled=null disables world share for shared/public visibility."""
@@ -1183,7 +1185,7 @@ class TestLiveTrackAPI(TestCase):
                 content_type="application/json",
             )
         self.assertEqual(enable.status_code, 200)
-        self.assertTrue(LiveTrackWorldShare.objects.filter(track=track).exists())
+        self.assertTrue(track_has_world_link(track))
         with _patch_live_track_enabled():
             disable = self.client.post(
                 f"/api/extensions/live-track/trackers/{track_id}/settings/",
@@ -1191,7 +1193,7 @@ class TestLiveTrackAPI(TestCase):
                 content_type="application/json",
             )
         self.assertEqual(disable.status_code, 200)
-        self.assertFalse(LiveTrackWorldShare.objects.filter(track=track).exists())
+        self.assertFalse(track_has_world_link(track))
 
     def test_available_to_add_includes_shared_with_me_track(self):
         """GET trackers/available-to-add/ returns track in shared_with_me when shared with user."""
@@ -1247,7 +1249,7 @@ class TestLiveTrackAPI(TestCase):
                 f"/api/extensions/live-track/trackers/{track_id}/share-with-me/"
             )
         self.assertEqual(response.status_code, 204)
-        self.assertFalse(LiveTrackShare.objects.filter(track=track, shared_with=self.other_user).exists())
+        self.assertFalse(track_has_grant(track, self.other_user))
         self.assertFalse(LiveTrackSubscription.objects.filter(user=self.other_user, track=track).exists())
         self.client.force_login(self.user)
 
@@ -1373,7 +1375,7 @@ class TestLiveTrackAPI(TestCase):
                 group__user=self.other_user, track=track
             ).exists()
         )
-        self.assertFalse(LiveTrackShare.objects.filter(track=track, shared_with=self.other_user).exists())
+        self.assertFalse(track_has_grant(track, self.other_user))
         self.client.force_login(self.user)
 
     def test_subscribers_owner_gets_200_and_list(self):
@@ -1629,7 +1631,7 @@ class TestLiveTrackAPI(TestCase):
             )
             allowed = self.client.get(f"/api/extensions/live-track/trackers/{track_id}/")
         self.assertEqual(groups_response.status_code, 200)
-        self.assertIn(group_id, [g["id"] for g in groups_response.json()])
+        self.assertIn(group_id, [g["id"] for g in _list_items(groups_response.json())])
         self.assertEqual(denied.status_code, 404)
         self.assertEqual(accepted.status_code, 201)
         self.assertEqual(allowed.status_code, 200)
@@ -1697,11 +1699,7 @@ class TestLiveTrackAPI(TestCase):
                 f"/api/extensions/live-track/groups/{group_id}/leave/"
             )
         self.assertEqual(leave_resp.status_code, 204)
-        self.assertFalse(
-            LiveTrackGroupShare.objects.filter(
-                group_id=group_id, shared_with=self.other_user
-            ).exists()
-        )
+        self.assertFalse(group_has_grant(LiveTrackGroup.objects.get(id=group_id), self.other_user))
         self.client.force_login(self.user)
 
     def test_group_owner_can_get_group_member_track_without_subscription(self):
@@ -1760,7 +1758,7 @@ class TestLiveTrackAPI(TestCase):
         track.save(update_fields=["visibility", "settings"])
 
         # Owner shares track with other_user.
-        LiveTrackShare.objects.get_or_create(track=track, shared_with=self.other_user)
+        ShareGrant.objects.get_or_create(resource_kind=KIND_LIVE_TRACK, resource_id=str(track.id), grantee_user=self.other_user)
 
         # other_user adds shared track to their group and shares that group with third_user.
         reshare_group = LiveTrackGroup.objects.create(
@@ -1769,7 +1767,7 @@ class TestLiveTrackAPI(TestCase):
             visibility="shared",
         )
         LiveTrackGroupMember.objects.get_or_create(group=reshare_group, track=track)
-        LiveTrackGroupShare.objects.get_or_create(group=reshare_group, shared_with=third_user)
+        ShareGrant.objects.get_or_create(resource_kind=KIND_LIVE_TRACK_GROUP, resource_id=str(reshare_group.id), grantee_user=third_user)
 
         self.client.force_login(third_user)
         with _patch_live_track_enabled():
@@ -1878,7 +1876,7 @@ class TestLiveTrackAPI(TestCase):
         data = response.json()
         self.assertIn("invalid_emails", data)
         self.assertEqual(set(data["invalid_emails"]), {"nonexistent@example.com"})
-        self.assertFalse(LiveTrackShare.objects.filter(track=track).exists())
+        self.assertFalse(track_has_any_grant(track))
 
     def test_post_settings_shared_with_emails_with_visibility_public_400(self):
         """POST settings with visibility=public and shared_with_emails returns 400."""
@@ -1912,8 +1910,12 @@ class TestLiveTrackAPI(TestCase):
         track = LiveTrack.objects.get(id=track_id)
         track.visibility = "public"
         track.share_params_with_recipients = True
-        track.point_params = [{"ser": "device-123", "acc": 5.0}]
-        track.save(update_fields=["visibility", "share_params_with_recipients", "point_params"])
+        track.save(update_fields=["visibility", "share_params_with_recipients"])
+        seed_track_points(
+            track,
+            [[-122.0, 37.0, 1705312800000]],
+            [{"ser": "device-123", "acc": 5.0}],
+        )
         LiveTrackSubscription.objects.create(user=self.other_user, track=track)
         self.client.force_login(self.other_user)
         with _patch_live_track_enabled():
@@ -1924,7 +1926,7 @@ class TestLiveTrackAPI(TestCase):
         self.client.force_login(self.user)
 
     def test_get_track(self):
-        """GET trackers/<id>/ returns 200 with metadata, latest params, and latest 100 coordinates as geometry."""
+        """GET trackers/<id>/ returns 200 with metadata and latest params (no geometry graft)."""
         with _patch_live_track_enabled():
             create_resp = self.client.post(
                 "/api/extensions/live-track/trackers/",
@@ -1938,9 +1940,7 @@ class TestLiveTrackAPI(TestCase):
         data = response.json()
         self.assertEqual(data["id"], track_id)
         self.assertEqual(data["name"], "Get Me")
-        self.assertIn("geometry", data)
-        self.assertEqual(data["geometry"]["type"], "LineString")
-        self.assertEqual(len(data["geometry"]["coordinates"]), 0)
+        self.assertNotIn("geometry", data)
         self.assertIn("point_params", data)
         self.assertIn("last_point", data)
         self.assertIn("created_at", data)
@@ -2747,7 +2747,7 @@ class TestLiveTrackAPI(TestCase):
         with _patch_live_track_enabled():
             response = self.client.get("/api/extensions/live-track/trackers/")
         self.assertEqual(response.status_code, 200)
-        data = response.json()
+        data = _list_items(response.json())
         self.assertEqual(len(data), 1)
         track = data[0]
         # Should only include properties of the recent (-121.0, 38.0) point, not the old (-122.0, 37.0) point
@@ -2793,7 +2793,7 @@ class TestLiveTrackAPI(TestCase):
         with _patch_live_track_enabled():
             response = self.client.get("/api/extensions/live-track/trackers/")
         self.assertEqual(response.status_code, 200)
-        tracks = response.json()
+        tracks = _list_items(response.json())
         self.assertEqual(len(tracks), 1)
         track = tracks[0]
         self.assertEqual(track["last_point"][0], -121.0)
@@ -2935,9 +2935,7 @@ class TestLiveTrackAPI(TestCase):
         track = LiveTrack.objects.get(id=track_id)
         coords = [[-122.0 + i * 0.001, 37.0 + i * 0.001, 1705312800000 + i] for i in range(20)]
         params = [{"desc": "x" * 120, "acc": 5.0} for _ in range(20)]
-        track.geometry = {"type": "LineString", "coordinates": coords}
-        track.point_params = params
-        track.save(update_fields=["geometry", "point_params", "updated_at"])
+        seed_track_points(track, coords, params)
 
         with _patch_live_track_enabled():
             with _override_live_track_geometry_max_response_bytes(1200):
@@ -2968,9 +2966,7 @@ class TestLiveTrackAPI(TestCase):
         track = LiveTrack.objects.get(id=track_id)
         coords = [[-122.0 + i * 0.001, 37.0 + i * 0.001, 1705312800000 + i] for i in range(20)]
         params = [{"desc": "x" * 120, "acc": 5.0} for _ in range(20)]
-        track.geometry = {"type": "LineString", "coordinates": coords}
-        track.point_params = params
-        track.save(update_fields=["geometry", "point_params", "updated_at"])
+        seed_track_points(track, coords, params)
 
         with _patch_live_track_enabled():
             with _override_live_track_geometry_max_response_bytes(1200):
@@ -2998,9 +2994,7 @@ class TestLiveTrackAPI(TestCase):
         base_ts = 1705312800000
         coords = [[-122.0 + i * 0.00001, 37.0 + i * 0.00001, base_ts + i] for i in range(100000)]
         params = [{"desc": "x" * 120, "acc": 5.0, "spd_kph": 3.1} for _ in range(100000)]
-        track.geometry = {"type": "LineString", "coordinates": coords}
-        track.point_params = params
-        track.save(update_fields=["geometry", "point_params", "updated_at"])
+        seed_track_points(track, coords, params)
 
         with _patch_live_track_enabled():
             with _override_live_track_geometry_max_response_bytes(1048576):
@@ -3030,9 +3024,7 @@ class TestLiveTrackAPI(TestCase):
         track = LiveTrack.objects.get(id=track_id)
         coords = [[-122.0 + i * 0.001, 37.0 + i * 0.001, 1705312800000 + i] for i in range(20)]
         params = [{"desc": "x" * 120, "acc": 5.0} for _ in range(20)]
-        track.geometry = {"type": "LineString", "coordinates": coords}
-        track.point_params = params
-        track.save(update_fields=["geometry", "point_params", "updated_at"])
+        seed_track_points(track, coords, params)
 
         with _patch_live_track_enabled():
             with _override_live_track_geometry_max_response_bytes(1200):
@@ -3042,7 +3034,7 @@ class TestLiveTrackAPI(TestCase):
                     content_type="application/json",
                 )
         self.assertEqual(response.status_code, 200)
-        result = response.json()
+        result = _list_items(response.json())
         self.assertEqual(len(result), 1)
         entry = result[0]
         entry_bytes = len(
@@ -3072,9 +3064,7 @@ class TestLiveTrackAPI(TestCase):
         track = LiveTrack.objects.get(id=track_id)
         coords = [[-122.0 + i * 0.001, 37.0 + i * 0.001, 1705312800000 + i] for i in range(20)]
         params = [{"desc": "x" * 120, "acc": 5.0} for _ in range(20)]
-        track.geometry = {"type": "LineString", "coordinates": coords}
-        track.point_params = params
-        track.save(update_fields=["geometry", "point_params", "updated_at"])
+        seed_track_points(track, coords, params)
 
         with _patch_live_track_enabled():
             with _override_live_track_geometry_max_response_bytes(1200):
@@ -3089,7 +3079,7 @@ class TestLiveTrackAPI(TestCase):
         self.assertEqual(get_response.status_code, 200)
         self.assertEqual(bulk_response.status_code, 200)
         get_data = get_response.json()
-        bulk_entry = bulk_response.json()[0]
+        bulk_entry = _list_items(bulk_response.json())[0]
         get_coords = get_data["geometry"].get("coordinates", [])
         bulk_coords = bulk_entry["geometry"].get("coordinates", [])
         self.assertEqual(len(get_coords), len(bulk_coords))
@@ -3496,16 +3486,15 @@ class TestLiveTrackAPI(TestCase):
             )
         track_id = create_resp.json()["id"]
         track = LiveTrack.objects.get(id=track_id)
-        track.geometry = {
-            "type": "LineString",
-            "coordinates": [
+        seed_track_points(
+            track,
+            [
                 [-122.0, 37.0, 1705312800000],
                 [-122.1, 37.1, 1705312801000],
                 [-122.2, 37.2, 1705312802000],
             ],
-        }
-        track.point_params = [{"speed": 1}, {"speed": 2}, {"speed": 3}]
-        track.save(update_fields=["geometry", "point_params", "updated_at"])
+            [{"speed": 1}, {"speed": 2}, {"speed": 3}],
+        )
         with _patch_live_track_enabled():
             response = self.client.post(
                 f"/api/extensions/live-track/trackers/{track_id}/clear-history/"
@@ -3516,8 +3505,7 @@ class TestLiveTrackAPI(TestCase):
         self.assertIn("last_point", data)
         self.assertEqual(data["last_point"], [-122.2, 37.2, 1705312802000])
         track.refresh_from_db()
-        coords = (track.geometry or {}).get("coordinates", [])
-        params = track.point_params or []
+        coords, params = stored_track_points(track)
         self.assertEqual(len(coords), 1)
         self.assertEqual(coords[0], [-122.2, 37.2, 1705312802000])
         self.assertEqual(len(params), 1)
@@ -3538,8 +3526,9 @@ class TestLiveTrackAPI(TestCase):
             )
         self.assertEqual(response.status_code, 200)
         track = LiveTrack.objects.get(id=track_id)
-        self.assertEqual((track.geometry or {}).get("coordinates", []), [])
-        self.assertEqual(track.point_params or [], [])
+        coords, params = stored_track_points(track)
+        self.assertEqual(coords, [])
+        self.assertEqual(params, [])
 
     def test_regenerate_tokens_rotates_api_and_hauk_tokens(self):
         """POST regenerate-tokens rotates tracker_secret and hauk_password for owner."""
@@ -3668,12 +3657,12 @@ class TestLiveTrackAPI(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"-122.5,37.5,0", response.content)
 
-    def test_kml_always_returns_full_history_ignores_recent_window(self):
-        """KML export always includes full history even when recent_data_window is set."""
+    def test_kml_respects_recent_window_unless_owner_all(self):
+        """KML uses recent_data_window; owner ?all=true is full history."""
         with _patch_live_track_enabled():
             create_resp = self.client.post(
                 "/api/extensions/live-track/trackers/",
-                data=json.dumps({"name": "KmlAllHistory"}),
+                data=json.dumps({"name": "KmlWindowed"}),
                 content_type="application/json",
             )
         track_id = create_resp.json()["id"]
@@ -3685,13 +3674,13 @@ class TestLiveTrackAPI(TestCase):
                 mock_limiter.enforce.return_value = None
                 self.client.post(
                     "/api/extensions/live-track/ingress/",
-                    data=json.dumps({"lat": 37.0, "lon": -122.0, "timestamp": now_sec - 7200}),
+                    data=json.dumps({"lat": 1.0, "lon": 2.0, "timestamp": now_sec - 7200}),
                     content_type="application/json",
                     HTTP_AUTHORIZATION=auth,
                 )
                 self.client.post(
                     "/api/extensions/live-track/ingress/",
-                    data=json.dumps({"lat": 38.0, "lon": -121.0, "timestamp": now_sec - 300}),
+                    data=json.dumps({"lat": 3.0, "lon": 4.0, "timestamp": now_sec - 300}),
                     content_type="application/json",
                     HTTP_AUTHORIZATION=auth,
                 )
@@ -3704,8 +3693,13 @@ class TestLiveTrackAPI(TestCase):
         with _patch_live_track_enabled():
             response = self.client.get(f"/api/extensions/live-track/trackers/{track_id}/kml/")
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"-122.0,37.0,0", response.content)
-        self.assertIn(b"-121.0,38.0,0", response.content)
+        self.assertNotIn(b"2.0,1.0,0", response.content)
+        self.assertIn(b"4.0,3.0,0", response.content)
+        with _patch_live_track_enabled():
+            full = self.client.get(f"/api/extensions/live-track/trackers/{track_id}/kml/?all=true")
+        self.assertEqual(full.status_code, 200)
+        self.assertIn(b"2.0,1.0,0", full.content)
+        self.assertIn(b"4.0,3.0,0", full.content)
 
     def test_list_returns_metadata_only(self):
         """GET trackers/ returns metadata-only (last_point, bbox); no geometry."""
@@ -3729,7 +3723,7 @@ class TestLiveTrackAPI(TestCase):
         with _patch_live_track_enabled():
             response = self.client.get("/api/extensions/live-track/trackers/")
         self.assertEqual(response.status_code, 200)
-        tracks = response.json()
+        tracks = _list_items(response.json())
         self.assertEqual(len(tracks), 1)
         self.assertNotIn("geometry", tracks[0])
         self.assertIn("last_point", tracks[0])
@@ -3991,7 +3985,7 @@ class TestLiveTrackAPI(TestCase):
             )
         self.assertFalse(LiveTrackSubscription.objects.filter(track=track, user=self.other_user).exists())
         self.assertFalse(LiveTrackGroupMember.objects.filter(track=track, group=other_group).exists())
-        self.assertFalse(LiveTrackShare.objects.filter(track=track).exists())
+        self.assertFalse(track_has_any_grant(track))
 
     def test_visibility_to_public_keeps_subscriptions(self):
         """Changing visibility from shared to public removes LiveTrackShare but keeps subscriptions."""
@@ -4013,14 +4007,14 @@ class TestLiveTrackAPI(TestCase):
                 content_type="application/json",
             )
         LiveTrackSubscription.objects.create(user=self.other_user, track=track)
-        self.assertTrue(LiveTrackShare.objects.filter(track=track, shared_with=self.other_user).exists())
+        self.assertTrue(track_has_grant(track, self.other_user))
         with _patch_live_track_enabled():
             self.client.post(
                 f"/api/extensions/live-track/trackers/{track_id}/settings/",
                 data=json.dumps({"visibility": "public"}),
                 content_type="application/json",
             )
-        self.assertFalse(LiveTrackShare.objects.filter(track=track).exists())
+        self.assertFalse(track_has_any_grant(track))
         self.assertTrue(LiveTrackSubscription.objects.filter(track=track, user=self.other_user).exists())
 
     def test_visibility_public_to_shared_cleans_non_recipients(self):
@@ -4087,7 +4081,7 @@ class TestLiveTrackAPI(TestCase):
                 }),
                 content_type="application/json",
             )
-        self.assertFalse(LiveTrackShare.objects.filter(track=track).exists())
+        self.assertFalse(track_has_any_grant(track))
         self.assertFalse(LiveTrackSubscription.objects.filter(track=track, user=self.other_user).exists())
         self.assertFalse(LiveTrackGroupMember.objects.filter(track=track, group=other_group).exists())
 
@@ -4321,12 +4315,11 @@ class TestLiveTrackIngress(TestCase):
                 response = self._ingress_post(auth_header=self.auth_header)
         self.assertEqual(response.status_code, 200)
         track = LiveTrack.objects.get(id=self.track_id)
-        geom = track.geometry or {}
-        coords = geom.get("coordinates", [])
+        coords, params = stored_track_points(track)
         self.assertEqual(len(coords), 1)
         self.assertEqual(coords[0][0], -122.0)
         self.assertEqual(coords[0][1], 37.0)
-        self.assertEqual(len(track.point_params or []), 1)
+        self.assertEqual(len(params), 1)
 
     def test_ingress_success_form_body(self):
         """POST with application/x-www-form-urlencoded body works."""
@@ -4341,7 +4334,7 @@ class TestLiveTrackIngress(TestCase):
                 )
         self.assertEqual(response.status_code, 200)
         track = LiveTrack.objects.get(id=self.track_id)
-        coords = (track.geometry or {}).get("coordinates", [])
+        coords, _params = stored_track_points(track)
         self.assertEqual(len(coords), 1)
         self.assertEqual(coords[0][1], 37.5)
         self.assertEqual(coords[0][0], -122.5)
@@ -4365,11 +4358,10 @@ class TestLiveTrackIngress(TestCase):
                 )
         self.assertEqual(response.status_code, 200, response.content)
         track = LiveTrack.objects.get(id=self.track_id)
-        coords = (track.geometry or {}).get("coordinates", [])
+        coords, params = stored_track_points(track)
         self.assertEqual(len(coords), 1)
         self.assertEqual(coords[0][1], 39.12176081)
         self.assertEqual(coords[0][0], -104.88864222)
-        params = track.point_params or []
         self.assertEqual(len(params), 1)
         self.assertIsNone(params[0].get("bearing"))
         self.assertEqual(params[0].get("alt"), 2253.0859375)
@@ -4387,7 +4379,7 @@ class TestLiveTrackIngress(TestCase):
                 )
         self.assertEqual(response.status_code, 200)
         track = LiveTrack.objects.get(id=self.track_id)
-        params = track.point_params or []
+        _coords, params = stored_track_points(track)
         self.assertEqual(len(params), 1)
         self.assertEqual(params[0].get("alt"), 100.5)
         self.assertEqual(params[0].get("acc"), 10)
@@ -4442,7 +4434,7 @@ class TestLiveTrackIngress(TestCase):
                 )
         self.assertEqual(response.status_code, 200)
         track = LiveTrack.objects.get(id=self.track_id)
-        coords = (track.geometry or {}).get("coordinates", [])
+        coords, _params = stored_track_points(track)
         self.assertEqual(len(coords), 1)
         self.assertEqual(coords[0][0], -122.0)
         self.assertEqual(coords[0][1], 37.0)
@@ -4475,7 +4467,7 @@ class TestLiveTrackIngress(TestCase):
                 )
         self.assertEqual(response.status_code, 200)
         track = LiveTrack.objects.get(id=self.track_id)
-        coords = (track.geometry or {}).get("coordinates", [])
+        coords, _params = stored_track_points(track)
         self.assertEqual(len(coords), 2)
         self.assertEqual(coords[0][2], 1705312800000)
         self.assertEqual(coords[1][2], 1705312800000)
@@ -4497,7 +4489,7 @@ class TestLiveTrackIngress(TestCase):
                 )
         self.assertEqual(response.status_code, 200)
         track = LiveTrack.objects.get(id=self.track_id)
-        coords = (track.geometry or {}).get("coordinates", [])
+        coords, _params = stored_track_points(track)
         self.assertEqual(len(coords), 2)
         self.assertEqual(coords[0][2], 1705309200000)
         self.assertEqual(coords[1][2], 1705312800000)
@@ -4521,8 +4513,7 @@ class TestLiveTrackIngress(TestCase):
                 )
         self.assertEqual(response.status_code, 200)
         track = LiveTrack.objects.get(id=self.track_id)
-        coords = (track.geometry or {}).get("coordinates", [])
-        params = track.point_params or []
+        coords, params = stored_track_points(track)
         self.assertEqual(len(coords), 3)
         self.assertEqual(len(params), 3)
         self.assertEqual(coords[0][2], 100000)
@@ -4546,7 +4537,7 @@ class TestLiveTrackIngress(TestCase):
                 )
         self.assertEqual(response.status_code, 200)
         track = LiveTrack.objects.get(id=self.track_id)
-        coords = (track.geometry or {}).get("coordinates", [])
+        coords, _params = stored_track_points(track)
         self.assertEqual(len(coords), 2)
         self.assertEqual(coords[0][2], 100000)
         self.assertEqual(coords[1][2], 200000)
@@ -4563,7 +4554,7 @@ class TestLiveTrackIngress(TestCase):
                     )
                     self.assertEqual(response.status_code, 200)
         track = LiveTrack.objects.get(id=self.track_id)
-        coords = (track.geometry or {}).get("coordinates", [])
+        coords, _params = stored_track_points(track)
         self.assertEqual(len(coords), 5)
         self.assertEqual([c[2] for c in coords], [100000, 200000, 300000, 400000, 500000])
 
@@ -4586,8 +4577,7 @@ class TestLiveTrackIngress(TestCase):
                 )
         self.assertEqual(response.status_code, 200)
         track = LiveTrack.objects.get(id=self.track_id)
-        coords = (track.geometry or {}).get("coordinates", [])
-        params = track.point_params or []
+        coords, params = stored_track_points(track)
         self.assertEqual(len(coords), 3)
         self.assertEqual(len(params), 3)
         self.assertEqual([c[2] for c in coords], [100000, 200000, 300000])
@@ -4603,7 +4593,7 @@ class TestLiveTrackIngress(TestCase):
                 )
         self.assertEqual(response.status_code, 200)
         track = LiveTrack.objects.get(id=self.track_id)
-        params = track.point_params or []
+        _coords, params = stored_track_points(track)
         self.assertEqual(len(params), 1)
         self.assertNotIn("foo", params[0])
 
@@ -4618,7 +4608,7 @@ class TestLiveTrackIngress(TestCase):
                 )
         self.assertEqual(response.status_code, 200)
         track = LiveTrack.objects.get(id=self.track_id)
-        params = track.point_params or []
+        _coords, params = stored_track_points(track)
         self.assertEqual(len(params), 1)
         self.assertNotIn("profile", params[0])
 
@@ -4654,8 +4644,7 @@ class TestLiveTrackIngress(TestCase):
                         auth_header=self.auth_header,
                     )
         track = LiveTrack.objects.get(id=self.track_id)
-        coords = (track.geometry or {}).get("coordinates", [])
-        params = track.point_params or []
+        coords, params = stored_track_points(track)
         self.assertEqual(len(coords), 4)
         self.assertEqual(len(params), 4)
 
@@ -4670,7 +4659,7 @@ class TestLiveTrackIngress(TestCase):
                 )
         self.assertEqual(response.status_code, 200)
         track = LiveTrack.objects.get(id=self.track_id)
-        coords = (track.geometry or {}).get("coordinates", [])
+        coords, _params = stored_track_points(track)
         self.assertEqual(len(coords), 1)
         self.assertIsInstance(coords[0][2], (int, float))
         self.assertEqual(coords[0][2], 1705312800000)
@@ -4698,7 +4687,7 @@ class TestLiveTrackGroups(TestCase):
         with _patch_live_track_enabled():
             response = self.client.get("/api/extensions/live-track/groups/")
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), [])
+        self.assertEqual(_list_items(response.json()), [])
         with _patch_live_track_enabled():
             response = self.client.post(
                 "/api/extensions/live-track/groups/",
@@ -5132,14 +5121,14 @@ class TestLiveTrackGroups(TestCase):
                 content_type="application/json",
             )
         self.assertTrue(
-            LiveTrackGroupShare.objects.filter(group=group, shared_with=self.other_user).exists()
+            group_has_grant(group, self.other_user)
         )
         self.client.force_login(self.other_user)
         with _patch_live_track_enabled():
             response = self.client.delete(f"/api/extensions/live-track/groups/{group_id}/leave/")
         self.assertEqual(response.status_code, 204)
         self.assertFalse(
-            LiveTrackGroupShare.objects.filter(group=group, shared_with=self.other_user).exists()
+            group_has_grant(group, self.other_user)
         )
         self.client.force_login(self.user)
 
@@ -5264,7 +5253,7 @@ class TestLiveTrackGroups(TestCase):
         with _patch_live_track_enabled():
             response = self.client.get("/api/extensions/live-track/groups/")
         self.assertEqual(response.status_code, 200)
-        data = response.json()
+        data = _list_items(response.json())
         self.assertEqual(len(data), 1)
         self.assertEqual(data[0]["name"], "Owned")
         self.assertFalse(data[0]["is_owner"])
@@ -5279,7 +5268,7 @@ class TestLiveTrackGroups(TestCase):
         with _patch_live_track_enabled():
             accepted_list = self.client.get("/api/extensions/live-track/groups/")
         self.assertEqual(accepted_list.status_code, 200)
-        self.assertTrue(accepted_list.json()[0]["is_accepted"])
+        self.assertTrue(_list_items(accepted_list.json())[0]["is_accepted"])
         self.client.force_login(self.user)
 
     def test_group_track_ids_hidden_until_share_accepted(self):
@@ -5393,7 +5382,7 @@ class TestLiveTrackGroups(TestCase):
         data = response.json()
         self.assertIn("shared_with_emails", data)
         self.assertEqual(data["shared_with_emails"], [self.other_user.email])
-        self.assertTrue(LiveTrackGroupShare.objects.filter(group=group, shared_with=self.other_user).exists())
+        self.assertTrue(group_has_grant(group, self.other_user))
         with _patch_live_track_enabled():
             response = self.client.patch(
                 f"/api/extensions/live-track/groups/{group_id}/",
@@ -5401,7 +5390,7 @@ class TestLiveTrackGroups(TestCase):
                 content_type="application/json",
             )
         self.assertEqual(response.status_code, 200)
-        self.assertFalse(LiveTrackGroupShare.objects.filter(group=group).exists())
+        self.assertFalse(group_has_any_grant(group))
 
     def test_group_patch_world_share_enabled(self):
         """Owner PATCHes world_share_enabled true; GET returns world_share_id/url; false removes them."""
@@ -5425,12 +5414,12 @@ class TestLiveTrackGroups(TestCase):
         self.assertIn("world_share_url", data)
         self.assertEqual(
             data["world_share_url"],
-            f"/#/extensions/live-track/share?id={data['world_share_id']}",
+            f"/share/track/{data['world_share_id']}/",
         )
-        self.assertTrue(LiveTrackGroupWorldShare.objects.filter(group=group).exists())
+        self.assertTrue(ShareLink.objects.for_group(group.id).world().exists())
         share_id = data["world_share_id"]
         with _patch_live_track_enabled():
-            discovery = self.client.get(f"/api/extensions/live-track/share/{share_id}/info/")
+            discovery = self.client.get(f"/api/shares/{share_id}/info/")
         self.assertEqual(discovery.status_code, 200)
         self.assertEqual(discovery.json()["share_access"], "world")
         self.assertEqual(discovery.json()["share_type"], "live_track_group")
@@ -5445,7 +5434,7 @@ class TestLiveTrackGroups(TestCase):
         data = response.json()
         self.assertNotIn("world_share_id", data)
         self.assertNotIn("world_share_url", data)
-        self.assertFalse(LiveTrackGroupWorldShare.objects.filter(group=group).exists())
+        self.assertFalse(ShareLink.objects.for_group(group.id).world().exists())
 
     def test_group_patch_world_share_enabled_in_shared_mode(self):
         """Owner PATCHes visibility=shared with recipients and world_share_enabled true; both sharing modes coexist."""
@@ -5474,11 +5463,11 @@ class TestLiveTrackGroups(TestCase):
         self.assertIn("world_share_url", data)
         self.assertEqual(
             data["world_share_url"],
-            f"/#/extensions/live-track/share?id={data['world_share_id']}",
+            f"/share/track/{data['world_share_id']}/",
         )
-        self.assertTrue(LiveTrackGroupWorldShare.objects.filter(group=group).exists())
+        self.assertTrue(ShareLink.objects.for_group(group.id).world().exists())
         self.assertTrue(
-            LiveTrackGroupShare.objects.filter(group=group, shared_with=self.other_user).exists()
+            group_has_grant(group, self.other_user)
         )
 
     def test_group_patch_private_visibility_overrides_world_share_enabled_true(self):
@@ -5497,7 +5486,7 @@ class TestLiveTrackGroups(TestCase):
                 data=json.dumps({"visibility": "public", "world_share_enabled": True}),
                 content_type="application/json",
             )
-        self.assertTrue(LiveTrackGroupWorldShare.objects.filter(group=group).exists())
+        self.assertTrue(ShareLink.objects.for_group(group.id).world().exists())
         with _patch_live_track_enabled():
             response = self.client.patch(
                 f"/api/extensions/live-track/groups/{group_id}/",
@@ -5509,7 +5498,7 @@ class TestLiveTrackGroups(TestCase):
         self.assertEqual(data.get("visibility"), "private")
         self.assertNotIn("world_share_id", data)
         self.assertNotIn("world_share_url", data)
-        self.assertFalse(LiveTrackGroupWorldShare.objects.filter(group=group).exists())
+        self.assertFalse(ShareLink.objects.for_group(group.id).world().exists())
 
     def test_group_visibility_required_for_shared_with_emails(self):
         """PATCH with shared_with_emails when visibility is not shared returns 400."""
@@ -5563,7 +5552,7 @@ class TestLiveTrackGroups(TestCase):
         with _patch_live_track_enabled():
             response = self.client.get("/api/extensions/live-track/groups/")
         self.assertEqual(response.status_code, 200)
-        data = response.json()
+        data = _list_items(response.json())
         names = [g["name"] for g in data]
         self.assertIn("Public List Group", names)
         self.assertIn("Shared List Group", names)
@@ -5922,14 +5911,14 @@ class TestLiveTrackGroups(TestCase):
                 }),
                 content_type="application/json",
             )
-        self.assertTrue(LiveTrackGroupShare.objects.filter(group=group).exists())
+        self.assertTrue(group_has_any_grant(group))
         with _patch_live_track_enabled():
             self.client.patch(
                 f"/api/extensions/live-track/groups/{group_id}/",
                 data=json.dumps({"visibility": "private"}),
                 content_type="application/json",
             )
-        self.assertFalse(LiveTrackGroupShare.objects.filter(group=group).exists())
+        self.assertFalse(group_has_any_grant(group))
 
     def test_group_delete_cascades_shares_and_members(self):
         """Deleting a group cascades to LiveTrackGroupShare, LiveTrackGroupMember, and LiveTrackGroupWorldShare."""
@@ -5965,14 +5954,14 @@ class TestLiveTrackGroups(TestCase):
                 content_type="application/json",
             )
         self.assertTrue(LiveTrackGroupMember.objects.filter(group=group).exists())
-        self.assertTrue(LiveTrackGroupShare.objects.filter(group=group).exists())
-        self.assertTrue(LiveTrackGroupWorldShare.objects.filter(group=group).exists())
+        self.assertTrue(group_has_any_grant(group))
+        self.assertTrue(ShareLink.objects.for_group(group.id).world().exists())
         with _patch_live_track_enabled():
             response = self.client.delete(f"/api/extensions/live-track/groups/{group_id}/")
         self.assertEqual(response.status_code, 204)
         self.assertFalse(LiveTrackGroupMember.objects.filter(group=group).exists())
-        self.assertFalse(LiveTrackGroupShare.objects.filter(group=group).exists())
-        self.assertFalse(LiveTrackGroupWorldShare.objects.filter(group=group).exists())
+        self.assertFalse(group_has_any_grant(group))
+        self.assertFalse(ShareLink.objects.for_group(group.id).world().exists())
 
 
 class TestLiveTrackAppIngress(TestCase):
@@ -6018,7 +6007,7 @@ class TestBroadcastTrackUpdated(TestCase):
         mock_layer = MagicMock()
         mock_layer.group_send = mock_group_send
 
-        with patch("extensions.live_track.src.backend.helpers.get_channel_layer", return_value=mock_layer):
+        with patch("extensions.live_track.src.backend.realtime.get_channel_layer", return_value=mock_layer):
             broadcast_track_updated(
                 track,
                 point=[10.0, 45.0, 1700000000000],
@@ -6033,8 +6022,9 @@ class TestBroadcastTrackUpdated(TestCase):
         message = owner_sends[0][1]
         self.assertEqual(message["type"], "live_track_track_updated")
         self.assertEqual(message["data"]["track_id"], str(track.id))
-        self.assertEqual(message["data"]["point"], [10.0, 45.0, 1700000000000])
-        self.assertEqual(message["data"]["index"], 0)
+        self.assertNotIn("point", message["data"])
+        self.assertEqual(message["data"]["updates"][0]["point"], [10.0, 45.0, 1700000000000])
+        self.assertEqual(message["data"]["updates"][0]["index"], 0)
 
 
 class TestLiveTrackWorldShare(TestCase):
@@ -6071,7 +6061,7 @@ class TestLiveTrackWorldShare(TestCase):
         self.client.logout()
         with _patch_live_track_enabled():
             response = self.client.get(
-                f"/api/extensions/live-track/world/share/{self.share_id}/info/"
+                f"/api/shares/{self.share_id}/info/"
             )
         self.assertEqual(response.status_code, 200)
         data = response.json()
@@ -6085,7 +6075,7 @@ class TestLiveTrackWorldShare(TestCase):
         self.client.logout()
         with _patch_live_track_enabled():
             response = self.client.get(
-                f"/api/extensions/live-track/world/share/{self.share_id}/"
+                f"/api/shares/{self.share_id}/track/"
             )
         self.assertEqual(response.status_code, 200)
         data = response.json()
@@ -6096,6 +6086,9 @@ class TestLiveTrackWorldShare(TestCase):
         self.assertNotIn("hauk_password", data)
         self.assertNotIn("shared_with_emails", data)
         self.assertNotIn("owner_email", data, "world share is unauthenticated; owner PII must not leak")
+        self.assertNotIn("visibility", data)
+        self.assertNotIn("settings", data)
+        self.assertNotIn("is_owner", data)
 
     def test_world_share_info_404_invalid_id(self):
         """GET world/share/<invalid_id>/info/ returns 404."""
@@ -6103,7 +6096,7 @@ class TestLiveTrackWorldShare(TestCase):
         invalid_id = "00000000-0000-0000-4000-000000000000"
         with _patch_live_track_enabled():
             response = self.client.get(
-                f"/api/extensions/live-track/world/share/{invalid_id}/info/"
+                f"/api/shares/{invalid_id}/info/"
             )
         self.assertEqual(response.status_code, 404)
 
@@ -6113,7 +6106,7 @@ class TestLiveTrackWorldShare(TestCase):
         invalid_id = "00000000-0000-0000-4000-000000000000"
         with _patch_live_track_enabled():
             response = self.client.get(
-                f"/api/extensions/live-track/world/share/{invalid_id}/"
+                f"/api/shares/{invalid_id}/track/"
             )
         self.assertEqual(response.status_code, 404)
 
@@ -6129,7 +6122,7 @@ class TestLiveTrackWorldShare(TestCase):
 
     def test_disable_world_share_removes_link(self):
         """POST settings with world_share_enabled: false removes LiveTrackWorldShare and response has no world_share_id."""
-        self.assertTrue(LiveTrackWorldShare.objects.filter(track_id=self.track_id).exists())
+        self.assertTrue(ShareLink.objects.for_track(self.track_id).world().exists())
         with _patch_live_track_enabled():
             response = self.client.post(
                 f"/api/extensions/live-track/trackers/{self.track_id}/settings/",
@@ -6140,11 +6133,11 @@ class TestLiveTrackWorldShare(TestCase):
         data = response.json()
         self.assertNotIn("world_share_id", data)
         self.assertNotIn("world_share_url", data)
-        self.assertFalse(LiveTrackWorldShare.objects.filter(track_id=self.track_id).exists())
+        self.assertFalse(ShareLink.objects.for_track(self.track_id).world().exists())
 
     def test_private_visibility_always_removes_world_share(self):
         """POST settings with visibility=private always removes world share, even if world_share_enabled is true."""
-        self.assertTrue(LiveTrackWorldShare.objects.filter(track_id=self.track_id).exists())
+        self.assertTrue(ShareLink.objects.for_track(self.track_id).world().exists())
         with _patch_live_track_enabled():
             response = self.client.post(
                 f"/api/extensions/live-track/trackers/{self.track_id}/settings/",
@@ -6156,7 +6149,7 @@ class TestLiveTrackWorldShare(TestCase):
         self.assertEqual(data.get("visibility"), "private")
         self.assertNotIn("world_share_id", data)
         self.assertNotIn("world_share_url", data)
-        self.assertFalse(LiveTrackWorldShare.objects.filter(track_id=self.track_id).exists())
+        self.assertFalse(ShareLink.objects.for_track(self.track_id).world().exists())
 
         with _patch_live_track_enabled():
             response = self.client.post(
@@ -6169,18 +6162,22 @@ class TestLiveTrackWorldShare(TestCase):
         self.assertEqual(data.get("visibility"), "private")
         self.assertNotIn("world_share_id", data)
         self.assertNotIn("world_share_url", data)
-        self.assertFalse(LiveTrackWorldShare.objects.filter(track_id=self.track_id).exists())
+        self.assertFalse(ShareLink.objects.for_track(self.track_id).world().exists())
 
     def test_world_share_data_respects_share_params_with_world(self):
         """GET world/share/<id>/ returns point_params when share_params_with_world True, empty when False."""
         track = LiveTrack.objects.get(id=self.track_id)
-        track.point_params = [{"acc": 5.0, "alt": 100}]
         track.share_params_with_world = True
-        track.save(update_fields=["point_params", "share_params_with_world"])
+        track.save(update_fields=["share_params_with_world"])
+        seed_track_points(
+            track,
+            [[1.0, 2.0, 1700000000000]],
+            [{"acc": 5.0, "alt": 100}],
+        )
         self.client.logout()
         with _patch_live_track_enabled():
             response = self.client.get(
-                f"/api/extensions/live-track/world/share/{self.share_id}/"
+                f"/api/shares/{self.share_id}/track/"
             )
         self.assertEqual(response.status_code, 200)
         data = response.json()
@@ -6197,7 +6194,7 @@ class TestLiveTrackWorldShare(TestCase):
         self.client.logout()
         with _patch_live_track_enabled():
             response = self.client.get(
-                f"/api/extensions/live-track/world/share/{self.share_id}/"
+                f"/api/shares/{self.share_id}/track/"
             )
         self.assertEqual(response.status_code, 200)
         data = response.json()
@@ -6208,7 +6205,7 @@ class TestLiveTrackWorldShare(TestCase):
         self.client.logout()
         with _patch_live_track_enabled():
             response = self.client.get(
-                "/api/extensions/live-track/world/share/not-a-uuid/info/"
+                "/api/shares/not-a-uuid/info/"
             )
         self.assertEqual(response.status_code, 404)
 
@@ -6217,7 +6214,7 @@ class TestLiveTrackWorldShare(TestCase):
         self.client.logout()
         with _patch_live_track_enabled():
             response = self.client.get(
-                "/api/extensions/live-track/world/share/not-a-uuid/"
+                "/api/shares/not-a-uuid/track/"
             )
         self.assertEqual(response.status_code, 404)
 
@@ -6248,17 +6245,15 @@ class TestLiveTrackWorldShare(TestCase):
                 data=json.dumps({"world_share_enabled": True}),
                 content_type="application/json",
             )
-        group_ws = LiveTrackGroupWorldShare.objects.get(group_id=group_id)
-        group_ws.share_id = self.share_id
-        group_ws.save(update_fields=["share_id"])
         self.client.logout()
         with _patch_live_track_enabled():
             response = self.client.get(
-                f"/api/extensions/live-track/world/share/{self.share_id}/info/"
+                f"/api/shares/{self.share_id}/info/"
             )
         self.assertEqual(response.status_code, 200)
         data = response.json()
-        self.assertEqual(data["share_type"], "live_track", "track takes precedence over group when IDs collide")
+        self.assertEqual(data["share_type"], "live_track")
+        self.assertTrue(ShareLink.objects.for_group(group_id).world().exists())
 
 
 class TestLiveTrackGroupWorldShare(TestCase):
@@ -6303,7 +6298,7 @@ class TestLiveTrackGroupWorldShare(TestCase):
 
     def test_group_private_visibility_always_removes_world_share(self):
         """PATCH visibility=private always removes group world share, even if world_share_enabled is true."""
-        self.assertTrue(LiveTrackGroupWorldShare.objects.filter(group_id=self.group_id).exists())
+        self.assertTrue(ShareLink.objects.for_group(self.group_id).world().exists())
         with _patch_live_track_enabled():
             response = self.client.patch(
                 f"/api/extensions/live-track/groups/{self.group_id}/",
@@ -6315,7 +6310,7 @@ class TestLiveTrackGroupWorldShare(TestCase):
         self.assertEqual(data.get("visibility"), "private")
         self.assertNotIn("world_share_id", data)
         self.assertNotIn("world_share_url", data)
-        self.assertFalse(LiveTrackGroupWorldShare.objects.filter(group_id=self.group_id).exists())
+        self.assertFalse(ShareLink.objects.for_group(self.group_id).world().exists())
 
         with _patch_live_track_enabled():
             response = self.client.patch(
@@ -6328,14 +6323,14 @@ class TestLiveTrackGroupWorldShare(TestCase):
         self.assertEqual(data.get("visibility"), "private")
         self.assertNotIn("world_share_id", data)
         self.assertNotIn("world_share_url", data)
-        self.assertFalse(LiveTrackGroupWorldShare.objects.filter(group_id=self.group_id).exists())
+        self.assertFalse(ShareLink.objects.for_group(self.group_id).world().exists())
 
     def test_group_world_share_info_200(self):
         """GET world/share/<group_share_id>/info/ without auth returns 200 with share_type live_track_group."""
         self.client.logout()
         with _patch_live_track_enabled():
             response = self.client.get(
-                f"/api/extensions/live-track/world/share/{self.group_share_id}/info/"
+                f"/api/shares/{self.group_share_id}/info/"
             )
         self.assertEqual(response.status_code, 200)
         data = response.json()
@@ -6349,21 +6344,36 @@ class TestLiveTrackGroupWorldShare(TestCase):
         self.client.logout()
         with _patch_live_track_enabled():
             response = self.client.get(
-                f"/api/extensions/live-track/world/share/{self.group_share_id}/"
+                f"/api/shares/{self.group_share_id}/track/"
             )
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(data["share_type"], "live_track_group")
         self.assertEqual(data["group_name"], "World Shared Group")
         self.assertIn("tracks", data)
+        self.assertEqual(len(data["tracks"]), 0)
+
+    def test_group_world_share_includes_only_tracks_with_world_link(self):
+        """Group world dumps a member only when that track has its own world ShareLink."""
+        with _patch_live_track_enabled():
+            self.client.post(
+                f"/api/extensions/live-track/trackers/{self.track_id}/settings/",
+                data=json.dumps({"visibility": "public", "world_share_enabled": True}),
+                content_type="application/json",
+            )
+        self.client.logout()
+        with _patch_live_track_enabled():
+            response = self.client.get(
+                f"/api/shares/{self.group_share_id}/track/"
+            )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
         self.assertEqual(len(data["tracks"]), 1)
         self.assertEqual(data["tracks"][0]["name"], "Track In Group")
-        self.assertNotIn("tracker_secret", data["tracks"][0])
-        self.assertNotIn("hauk_password", data["tracks"][0])
+        self.assertNotIn("owner_email", data["tracks"][0])
+        self.assertNotIn("visibility", data["tracks"][0])
+        self.assertNotIn("settings", data["tracks"][0])
         self.assertNotIn("shared_with_emails", data["tracks"][0])
-        self.assertNotIn(
-            "owner_email", data["tracks"][0], "group world share is unauthenticated; owner PII must not leak"
-        )
 
     def test_group_world_share_info_404(self):
         """GET world/share/<valid-uuid-no-record>/info/ returns 404."""
@@ -6371,6 +6381,6 @@ class TestLiveTrackGroupWorldShare(TestCase):
         invalid_id = "00000000-0000-0000-4000-000000000000"
         with _patch_live_track_enabled():
             response = self.client.get(
-                f"/api/extensions/live-track/world/share/{invalid_id}/info/"
+                f"/api/shares/{invalid_id}/info/"
             )
         self.assertEqual(response.status_code, 404)

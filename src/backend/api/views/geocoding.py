@@ -4,11 +4,11 @@ Provides place search functionality with server-side caching.
 """
 import traceback
 import requests
-from django.core.cache import cache
 from django.views.decorators.http import require_http_methods
 
 from api.utils.responses import error_response, success_response
 from geo_lib.logging.console import get_tagged_logger
+from geo_lib.perf.shared_cache import get_shared_cache
 from geo_lib.search_geocoding.backends import get_geocoding_not_available_message, get_search_backend
 from geo_lib.search_geocoding.common import (
     GEOCODING_CACHE_TTL,
@@ -47,10 +47,11 @@ def geocoding_search(request):
         return error_response(not_available, code=503)
 
     cache_key = get_geocoding_cache_key(query)
-    cached_result = cache.get(cache_key)
+    shared_cache = get_shared_cache()
+    cached_result = shared_cache.get(cache_key)
     if cached_result is not None:
         response = success_response(data={'data': cached_result})
-        response['Cache-Control'] = f'public, max-age={GEOCODING_CACHE_TTL}'
+        response['Cache-Control'] = f'private, max-age={GEOCODING_CACHE_TTL}'
         return response
 
     backend = get_search_backend()
@@ -63,7 +64,7 @@ def geocoding_search(request):
         _logger.error("geocoding_search: GeocodingBackendError (code=400):\n%s", traceback.format_exc())
         return error_response("Geocoding request failed", code=400)
 
-    cache.set(cache_key, result, GEOCODING_CACHE_TTL)
+    shared_cache.set(cache_key, result, GEOCODING_CACHE_TTL)
     response = success_response(data={'data': result})
-    response['Cache-Control'] = f'public, max-age={GEOCODING_CACHE_TTL}'
+    response['Cache-Control'] = f'private, max-age={GEOCODING_CACHE_TTL}'
     return response

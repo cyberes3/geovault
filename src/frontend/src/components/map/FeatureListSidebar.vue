@@ -133,7 +133,6 @@ const emit = defineEmits<{
   'feature-hover': [feature: GeoJsonFeature | null];
   'tag-filter-change': [payload: { tags: string[]; matchMode: 'AND' | 'OR' }];
   'tag-filter-loading-change': [loading: boolean];
-  'tag-filter-start': [];
   'reverse_geocoding-result-click': [result: unknown];
   'reverse_geocoding-clear': [];
   close: [];
@@ -170,7 +169,7 @@ const sidebarRootClass = computed(() => {
       'overflow-hidden',
       'fixed',
       'inset-0',
-      'z-50',
+      'z-[310]',
       'w-full',
       'h-full',
       'lg:hidden',

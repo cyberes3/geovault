@@ -12,11 +12,11 @@ from django.contrib.gis.geos import Point
 
 from api.models import ImportQueue, FeatureStore
 from geo_lib.feature_id import generate_geojson_hash
-from geo_lib.processing.duplicate_detection.models import DuplicateMatchType, DuplicateSource
 from geo_lib.processing.jobs.bulk_import_job import BulkImportJob
 from geo_lib.processing.jobs.import_job import ImportJob
 from geo_lib.processing.jobs.helpers.status_tracker import ProcessingStatus, status_tracker
 
+from tests.test_utils.import_queue import queue_with_drafts, draft_geojson
 User = get_user_model()
 
 
@@ -62,13 +62,12 @@ class TestImportEdgeCases(TransactionTestCase):
             features.append(feature)
         
         # Create import item with all features
-        import_item = ImportQueue.objects.create(
+        import_item = queue_with_drafts(
             user=self.user,
             original_filename='large_batch.kml',
             raw_file='<kml></kml>',
-            geofeatures=features,
-            duplicate_features=[],
-            skipped_feature_ids=[],
+            features=features,
+            skipped=[],
             imported=False
         )
         
@@ -131,13 +130,12 @@ class TestImportEdgeCases(TransactionTestCase):
         valid_feature2['properties']['geojson_hash'] = valid_hash2
         
         # Create import item with mix of valid and geometry-less features
-        import_item = ImportQueue.objects.create(
+        import_item = queue_with_drafts(
             user=self.user,
             original_filename='mixed_geometry.kml',
             raw_file='<kml></kml>',
-            geofeatures=[valid_feature, missing_geometry_feature, empty_geometry_feature, valid_feature2],
-            duplicate_features=[],
-            skipped_feature_ids=[],
+            features=[valid_feature, missing_geometry_feature, empty_geometry_feature, valid_feature2],
+            skipped=[],
             imported=False
         )
         
@@ -200,18 +198,18 @@ class TestImportEdgeCases(TransactionTestCase):
         # - feature1: hash duplicate (already exists)
         # - feature2: geometry duplicate (marked in duplicate_features)
         # - feature3: manually skipped
-        import_item = ImportQueue.objects.create(
+        import_item = queue_with_drafts(
             user=self.user,
             original_filename='all_skip_types.kml',
             raw_file='<kml></kml>',
-            geofeatures=[feature1, feature2, feature3],
+            features=[feature1, feature2, feature3],
             duplicate_features=[{
-                'source': DuplicateSource.FEATURE_STORE,
-                'match_type': DuplicateMatchType.GEOMETRY,
+                'source': 'feature_store',
+                'match_type': 'geometry',
                 'feature': feature2,
                 'existing_features': []
             }],
-            skipped_feature_ids=[hash3],  # Manual skip
+            skipped=[hash3],  # Manual skip
             imported=False
         )
         
@@ -252,13 +250,12 @@ class TestImportEdgeCases(TransactionTestCase):
             features.append(feature)
         
         # Create import item
-        import_item = ImportQueue.objects.create(
+        import_item = queue_with_drafts(
             user=self.user,
             original_filename='bulk_ops.kml',
             raw_file='<kml></kml>',
-            geofeatures=features,
-            duplicate_features=[],
-            skipped_feature_ids=[],
+            features=features,
+            skipped=[],
             imported=False
         )
         
@@ -304,23 +301,21 @@ class TestImportEdgeCases(TransactionTestCase):
         feature['properties']['geojson_hash'] = hash_val
         
         # Create import items for both users
-        import_item1 = ImportQueue.objects.create(
+        import_item1 = queue_with_drafts(
             user=self.user,
             original_filename='concurrent.kml',
             raw_file='<kml></kml>',
-            geofeatures=[feature],
-            duplicate_features=[],
-            skipped_feature_ids=[],
+            features=[feature],
+            skipped=[],
             imported=False
         )
         
-        import_item2 = ImportQueue.objects.create(
+        import_item2 = queue_with_drafts(
             user=user2,
             original_filename='concurrent.kml',
             raw_file='<kml></kml>',
-            geofeatures=[feature],
-            duplicate_features=[],
-            skipped_feature_ids=[],
+            features=[feature],
+            skipped=[],
             imported=False
         )
         
@@ -396,13 +391,12 @@ class TestBulkImportEdgeCases(TransactionTestCase):
             hash_val = generate_geojson_hash(feature)
             feature['properties']['geojson_hash'] = hash_val
             
-            item = ImportQueue.objects.create(
+            item = queue_with_drafts(
                 user=self.user,
                 original_filename=f'bulk_item_{i}.kml',
                 raw_file='<kml></kml>',
-                geofeatures=[feature],
-                duplicate_features=[],
-                skipped_feature_ids=[],
+                features=[feature],
+                skipped=[],
                 imported=False
             )
             items.append(item)

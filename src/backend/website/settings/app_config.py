@@ -3,27 +3,22 @@ Core Django app wiring (INSTALLED_APPS, MIDDLEWARE, templates, WSGI/ASGI) plus e
 domain-specific setting that doesn't belong in one of the other settings/ submodules
 (tile sources, geocoding, icons, reverse geocoding, elevation, import processing, MaxMind).
 """
-import os
 from pathlib import Path
 
+from geo_lib.perf.query_budget import QueryBudget
 from website.config.loader import get_config
 from website.settings.paths import BASE_DIR, EXTENSIONS_DIR
 
 _config = get_config()
 
 # Raw per-extension config sections, keyed by extension name (e.g. EXTENSIONS_CONFIG['live_track']),
-# for extension code that needs settings beyond the enabled/disabled flag (which extension_loader
-# reads directly from the config loader before Django settings exist; see extension_loader.py).
+# for extension code that needs settings beyond the enabled/disabled flag (which the
+# extension registry reads directly from the config loader before Django settings exist).
 # Extensions define their own arbitrary settings shape, so unlike the core config sections above
 # this isn't validated by a dedicated Pydantic model per extension.
 EXTENSIONS_CONFIG: dict = {name: dict(section) for name, section in (_config.extensions.model_extra or {}).items()}
 
-# pwa_mint.pwa_builder_url is the one extension-specific setting with an env var override
-# (PWA_BUILDER_URL, for pointing at a locally-run pwabuilder-google-play container in dev).
-if 'PWA_BUILDER_URL' in os.environ:
-    EXTENSIONS_CONFIG.setdefault('pwa_mint', {})['pwa_builder_url'] = os.environ['PWA_BUILDER_URL']
-
-from website.extensions.extension_loader import discover_extensions
+from website.extensions.registry import discover_extensions
 _extension_apps = discover_extensions(EXTENSIONS_DIR)
 
 INSTALLED_APPS = [
@@ -44,7 +39,9 @@ INSTALLED_APPS = [
     'allauth.account',
     'allauth.socialaccount',
     'oauth2_provider',
-] + _extension_apps
+] + _extension_apps + [
+    'website.apps.WebsiteConfig',
+]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -107,11 +104,10 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 APPEND_SLASH = True
 
 # GeoJSON API Configuration
-# Maximum number of features to return in a single API request.
-# Set to -1 for no limit (default), or any positive integer to limit features.
+# Maximum number of features to return in a single API request. Must be a positive integer.
 # This is intentionally configured only in Django settings (not in config.yaml) to keep
 # request-limiting behavior centralized here.
-MAX_FEATURES_PER_REQUEST = -1
+MAX_FEATURES_PER_REQUEST = QueryBudget(5000).max_features
 
 # Tag validation is intentionally configured only in Django settings (not in config.yaml)
 # to keep tag validation logic centralized here.
@@ -158,12 +154,13 @@ ICON_FETCH_TIMEOUT = _config.icons.fetch_timeout
 
 # Reverse Geocoding Configuration
 REVERSE_GEOCODING_ENABLED = _config.reverse_geocoding.enabled
-CITY_PROXIMITY_MILES = _config.reverse_geocoding.city_proximity_miles
 LAKE_PROXIMITY_MILES = _config.reverse_geocoding.lake_proximity_miles
 AREAS_SERVER_URL = _config.reverse_geocoding.areas_server.api_url
 AREAS_SERVER_TIMEOUT = _config.reverse_geocoding.areas_server.request_timeout_seconds
 AREAS_SERVER_VERIFY_SSL = _config.reverse_geocoding.areas_server.verify_ssl
 AREAS_SERVER_CITY_RADIUS_MILES = _config.reverse_geocoding.areas_server.city_radius_miles
+AREAS_SERVER_OCEAN_RADIUS_MILES = _config.reverse_geocoding.areas_server.ocean_radius_miles
+AREAS_SERVER_WATERWAY_RADIUS_MILES = _config.reverse_geocoding.areas_server.waterway_radius_miles
 AREAS_SERVER_MAX_BATCH_SIZE = _config.reverse_geocoding.areas_server.max_batch_size
 # Number of points to sample along linestrings/multilinestrings, clamped to a sane range.
 REVERSE_GEOCODING_LINESTRING_GEOCODE_POINTS = max(1, min(100, _config.reverse_geocoding.linestring_geocode_points))

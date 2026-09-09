@@ -17,6 +17,9 @@ import { calculatePolygonCentroid, calculateLineCenter, calculatePolygonBottomCe
 import { checkLabelBorderIntersection, getResolutionFromZoom } from './labelMarkers.js';
 import type { GeoJsonFeature, GeoJsonFeatureCollection } from '@/types/geospatial';
 import type { MapFeature } from './mapFeatureTypes.js';
+import type { FeatureSource, HiddenIdSet } from '@/utils/map/common/FeatureSource';
+import type { RenderFeature } from '@/utils/map/common/types';
+import { canonicalFeatureId } from '@/utils/map/common/featureIdentity';
 
 // Web Mercator constant (matches OpenLayers)
 const WEB_MERCATOR_WORLD_SIZE = 156543.03392; // meters per pixel at zoom 0
@@ -71,27 +74,47 @@ function calculateLineScreenSize(geometry: GeoJsonFeature['geometry'], zoom: num
     }
 }
 
-function getGeoJsonSourceData(map: MapLibreMap): GeoJsonFeatureCollection {
-    const source: GeoJSONSource | undefined = map.getSource('geojson-data');
-    if (!source) {
-        return { type: 'FeatureCollection', features: [] };
+function persistRenderArtifacts(featureSource: FeatureSource, features: MapFeature[]): void {
+    for (const feature of features) {
+        if (feature.properties._isLabelPoint) {
+            const parent = feature.properties._originalFeatureId;
+            if (parent != null && parent !== '') {
+                featureSource.setSynthetic(`${parent}:label`, feature as RenderFeature);
+            }
+            continue;
+        }
+        if (feature.properties._isSmallFeatureReplacement) {
+            const parent = feature.properties._originalFeatureId;
+            if (parent != null && parent !== '') {
+                featureSource.setSynthetic(`${parent}:small`, feature as RenderFeature);
+            }
+            continue;
+        }
+        const id = canonicalFeatureId(feature);
+        if (!id) continue;
+        featureSource.setRuntime(id, {
+            iconId: typeof feature.properties['_icon-id'] === 'string' ? feature.properties['_icon-id'] : undefined,
+            tooSmall: feature.properties._isTooSmall === true,
+            detectedIconColor: typeof feature.properties['_detectedIconColor'] === 'string' ? feature.properties['_detectedIconColor'] : undefined,
+        });
     }
-    // Use serialize() method for MapLibre v5 compatibility
-    const data = source.serialize().data;
-    return typeof data === 'string' ? { type: 'FeatureCollection', features: [] } : (data as GeoJsonFeatureCollection);
 }
 
 /**
  * Update small feature flags for all features at the current zoom level.
  * Optimized to prioritize visible features for better performance.
  */
-export function updateSmallFeatureFlags(map: MapLibreMap, zoom: number | null): void {
+export function updateSmallFeatureFlags(
+    map: MapLibreMap,
+    zoom: number | null,
+    featureSource: FeatureSource,
+    hidden?: HiddenIdSet | null,
+): void {
     if (zoom === null) return;
     const source: GeoJSONSource | undefined = map.getSource('geojson-data');
     if (!source) return;
 
-    const currentData = getGeoJsonSourceData(map);
-    const features = currentData.features as MapFeature[];
+    const features = featureSource.buildRenderCollection(hidden).features as MapFeature[];
 
     if (features.length === 0) return;
 
@@ -234,12 +257,8 @@ export function updateSmallFeatureFlags(map: MapLibreMap, zoom: number | null): 
 
     // Only update if something changed
     if (needsUpdate || replacementPointsToAdd.length > 0) {
-        const allFeatures = [...featuresToKeep, ...replacementPointsToAdd];
-        const updatedCollection: GeoJsonFeatureCollection = {
-            type: 'FeatureCollection',
-            features: allFeatures.map((f) => markRaw(f)),
-        };
-        source.setData(markRaw(updatedCollection));
+        persistRenderArtifacts(featureSource, [...featuresToKeep, ...replacementPointsToAdd]);
+        featureSource.commit(hidden);
     }
 }
 
@@ -489,7 +508,7 @@ async function processFeaturesForIcons(
  * map), so this only calls the expensive `source.setData()` (and the icon/label reprocessing
  * that precedes it) when the merge actually changed something - a new feature, a new label
  * point, or a border-point filtering change. Returns the resulting merged FeatureCollection so
- * callers can update their own caches without a redundant follow-up `source.serialize()` call.
+ * callers can update their own caches without a redundant FeatureSource rebuild.
  */
 export async function addFeaturesToMap(
     map: MapLibreMap,
@@ -497,12 +516,13 @@ export async function addFeaturesToMap(
     showAllLabels = true,
     zoom: number | null = null,
     replaceIconsLowZoom = true,
+    options: { existingFeatures?: MapFeature[]; hiddenIds?: ReadonlySet<string>; featureSource?: FeatureSource; hidden?: HiddenIdSet | null } = {},
 ): Promise<GeoJsonFeatureCollection | null> {
     const source: GeoJSONSource | undefined = map.getSource('geojson-data');
     if (!source) return null;
 
-    const currentData = getGeoJsonSourceData(map);
-    const currentFeatures = currentData.features as MapFeature[];
+    const currentFeatures = (options.existingFeatures ?? []) as MapFeature[];
+    const hiddenIds = options.hiddenIds;
 
     const existingFeatures = new Map<string, MapFeature>();
     const existingLabelPoints = new Map<string, MapFeature>(); // Track existing label points
@@ -511,14 +531,16 @@ export async function addFeaturesToMap(
     currentFeatures.forEach((f) => {
         if (f.properties._isLabelPoint) {
             const originalId = f.properties._originalFeatureId;
-            if (originalId) {
+            if (originalId && !hiddenIds?.has(String(originalId))) {
                 existingLabelPoints.set(String(originalId), f);
             }
         } else if (f.properties._isSmallFeatureReplacement) {
             // Skip replacement points - they will be regenerated if needed
         } else {
             const id = f.properties.database_id;
-            existingFeatures.set(String(id), f);
+            const idStr = String(id);
+            if (hiddenIds?.has(idStr)) return;
+            existingFeatures.set(idStr, f);
         }
     });
 
@@ -532,10 +554,12 @@ export async function addFeaturesToMap(
 
         const id = f.properties.database_id;
         const idStr = String(id);
-        newFeatureIds.add(idStr);
-        if (!existingFeatures.has(idStr)) {
-            existingFeatures.set(idStr, f);
+        if (hiddenIds?.has(idStr)) {
+            existingFeatures.delete(idStr);
+            return;
         }
+        newFeatureIds.add(idStr);
+        existingFeatures.set(idStr, f);
     });
     const addedNewFeature = existingFeatures.size > existingFeatureCountBeforeMerge;
 
@@ -657,7 +681,12 @@ export async function addFeaturesToMap(
     const rawFeatures = processedFeatures.map((f) => markRaw(f));
     const mergedCollection: GeoJsonFeatureCollection = { type: 'FeatureCollection', features: rawFeatures };
 
-    source.setData(markRaw(mergedCollection));
+    if (options.featureSource) {
+        persistRenderArtifacts(options.featureSource, processedFeatures);
+        options.featureSource.commit(options.hidden);
+    } else {
+        source.setData(markRaw(mergedCollection));
+    }
 
     // Add layers if they don't exist
     ensureLayersExist(map, showAllLabels);

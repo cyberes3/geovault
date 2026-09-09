@@ -4,6 +4,7 @@ Uses racemap's elevation API to fetch elevation data for coordinates.
 """
 import time
 import traceback
+from collections.abc import Callable
 from typing import Dict, Any, List, Tuple, Optional
 
 import requests
@@ -17,6 +18,43 @@ _logger = get_tagged_logger()
 
 # Maximum points per API request (limited to 100 to prevent timeout issues)
 MAX_POINTS_PER_REQUEST = 100
+
+
+def _is_2d_vertex(coord) -> bool:
+    return isinstance(coord, (list, tuple)) and len(coord) == 2
+
+
+def _pad_vertex_to_3d(coord):
+    if _is_2d_vertex(coord):
+        return [coord[0], coord[1], 0.0]
+    return coord
+
+
+def _pad_geometry_leftover_2d(geometry: Dict[str, Any]) -> None:
+    """If any vertex is 3D, pad remaining 2D vertices with Z=0.0 so the geometry is not mixed."""
+    geom_type = (geometry.get('type') or '').lower()
+    coordinates = geometry.get('coordinates')
+    if not coordinates:
+        return
+    if geom_type == 'point':
+        if not _is_2d_vertex(coordinates) and len(coordinates) >= 3:
+            return
+        return
+    if geom_type == 'multipoint' or geom_type == 'linestring':
+        if any(isinstance(coord, (list, tuple)) and len(coord) >= 3 for coord in coordinates):
+            geometry['coordinates'] = [_pad_vertex_to_3d(coord) for coord in coordinates]
+        return
+    if geom_type == 'multilinestring':
+        padded = False
+        new_lines = []
+        for line in coordinates:
+            if isinstance(line, list) and any(isinstance(coord, (list, tuple)) and len(coord) >= 3 for coord in line):
+                new_lines.append([_pad_vertex_to_3d(coord) for coord in line])
+                padded = True
+            else:
+                new_lines.append(line)
+        if padded:
+            geometry['coordinates'] = new_lines
 
 
 def _fetch_elevation_batch_with_retry(
@@ -133,20 +171,16 @@ def _fetch_elevation_batch_with_retry(
     return None
 
 
-def fill_missing_elevations(geojson_data: Dict[str, Any], import_log: ImportLog) -> Dict[str, Any]:
+def fill_missing_elevations(
+    geojson_data: Dict[str, Any],
+    import_log: ImportLog,
+    is_canceled: Optional[Callable[[], bool]] = None,
+) -> Dict[str, Any]:
     """
     Fill missing elevation data for Point, MultiPoint, LineString and MultiLineString features.
-    
-    Identifies points with missing elevation (coordinates with only 2 elements: [lon, lat] or third element is 0.0)
-    and fetches elevation data from racemap's elevation API. Updates coordinates to include
-    elevation: [lon, lat, elevation].
-    
-    Args:
-        geojson_data: GeoJSON data dictionary with features
-        import_log: ImportLog instance for logging
-        
-    Returns:
-        Updated GeoJSON data dictionary with elevation data filled in
+
+    Only 2D vertices ([lon, lat]) are filled. Explicit Z=0.0 is kept. After a partial
+    fill, leftover 2D vertices in a mixed geometry are padded with Z=0.0.
     """
     # Check if elevation API is enabled
     if not get_required_setting('ELEVATION_API_ENABLED'):
@@ -185,8 +219,7 @@ def fill_missing_elevations(geojson_data: Dict[str, Any], import_log: ImportLog)
         if geom_type == 'point':
             # Point: coordinates is [lon, lat] or [lon, lat, elevation]
             total_points_checked += 1
-            # Missing elevation if: no third coordinate OR third coordinate is 0.0 (common placeholder)
-            if len(coordinates) == 2 or (len(coordinates) >= 3 and coordinates[2] == 0.0):
+            if _is_2d_vertex(coordinates):
                 # Store as (feature_idx, -2, 0) where -2 indicates Point
                 points_to_fetch.append((feature_idx, -2, 0))
                 total_points_missing += 1
@@ -195,9 +228,7 @@ def fill_missing_elevations(geojson_data: Dict[str, Any], import_log: ImportLog)
             # MultiPoint: coordinates is [[lon, lat], ...] or [[lon, lat, elevation], ...]
             for point_idx, coord in enumerate(coordinates):
                 total_points_checked += 1
-                # Missing elevation if: no third coordinate OR third coordinate is 0.0 (common placeholder)
-                if len(coord) == 2 or (len(coord) >= 3 and coord[2] == 0.0):
-                    # Store as (feature_idx, -3, point_idx) where -3 indicates MultiPoint
+                if _is_2d_vertex(coord):
                     points_to_fetch.append((feature_idx, -3, point_idx))
                     total_points_missing += 1
 
@@ -205,9 +236,7 @@ def fill_missing_elevations(geojson_data: Dict[str, Any], import_log: ImportLog)
             # LineString: coordinates is [[lon, lat], [lon, lat], ...] or [[lon, lat, ele], ...]
             for point_idx, coord in enumerate(coordinates):
                 total_points_checked += 1
-                # Missing elevation if: no third coordinate OR third coordinate is 0.0 (common placeholder)
-                if len(coord) == 2 or (len(coord) >= 3 and coord[2] == 0.0):
-                    # Store as (feature_idx, -1, point_idx) where -1 indicates LineString
+                if _is_2d_vertex(coord):
                     points_to_fetch.append((feature_idx, -1, point_idx))
                     total_points_missing += 1
 
@@ -218,8 +247,7 @@ def fill_missing_elevations(geojson_data: Dict[str, Any], import_log: ImportLog)
                     continue
                 for point_idx, coord in enumerate(line):
                     total_points_checked += 1
-                    # Missing elevation if: no third coordinate OR third coordinate is 0.0 (common placeholder)
-                    if len(coord) == 2 or (len(coord) >= 3 and coord[2] == 0.0):
+                    if _is_2d_vertex(coord):
                         points_to_fetch.append((feature_idx, line_idx, point_idx))
                         total_points_missing += 1
 
@@ -338,7 +366,12 @@ def fill_missing_elevations(geojson_data: Dict[str, Any], import_log: ImportLog)
     total_fetched = 0
 
     # Process in batches of MAX_POINTS_PER_REQUEST
+    canceled = False
     for batch_start in range(0, len(api_coords), MAX_POINTS_PER_REQUEST):
+        if is_canceled is not None and is_canceled():
+            canceled = True
+            import_log.add("Elevation fill canceled between batches", "Elevation Service", DatabaseLogLevel.WARNING)
+            break
         batch_end = min(batch_start + MAX_POINTS_PER_REQUEST, len(api_coords))
         batch_coords = api_coords[batch_start:batch_end]
         batch_num = batch_start // MAX_POINTS_PER_REQUEST + 1
@@ -366,6 +399,9 @@ def fill_missing_elevations(geojson_data: Dict[str, Any], import_log: ImportLog)
                 total_fetched += 1
 
     if total_fetched == 0:
+        if canceled:
+            import_log.add("Elevation fill canceled before any elevations were fetched", "Elevation Service", DatabaseLogLevel.WARNING)
+            return geojson_data
         import_log.add("No elevation data was successfully fetched from API", "Elevation Service", DatabaseLogLevel.WARNING)
         return geojson_data
 
@@ -405,6 +441,10 @@ def fill_missing_elevations(geojson_data: Dict[str, Any], import_log: ImportLog)
                 # Update coordinate from [lon, lat] to [lon, lat, elevation]
                 line[point_idx] = [line[point_idx][0], line[point_idx][1], elevation]
                 updated_count += 1
+        touched = {feature_idx for feature_idx, _, _ in point_mapping}
+        for feature_idx in touched:
+            geometry = features[feature_idx].get('geometry') or {}
+            _pad_geometry_leftover_2d(geometry)
     except Exception:
         import_log.add('Error updating coordinates with elevation data', "Elevation Service", DatabaseLogLevel.ERROR)
         _logger.error(f"Error updating coordinates with elevation data: {traceback.format_exc()}")

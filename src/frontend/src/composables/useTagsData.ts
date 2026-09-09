@@ -2,53 +2,52 @@ import { computed, nextTick, onActivated, onBeforeUnmount, onMounted, reactive, 
 import { useRouter } from 'vue-router';
 import {
     applyBulkOperationsToTag as applyBulkOperationsToTagApi,
-    bulkDeleteFeaturesByTag,
-    bulkUpdateFeatureMetadata,
-    getFeaturesByTag,
-    updateFeatureMetadata,
-    type FeatureMetadataUpdate,
+    deleteTag,
+    getFeature,
+    getTagCatalog,
+    getTagFeatures,
+    renameTag,
+    replaceFeatureTags,
 } from '@/api/services/featuresApi';
+import type { TagCatalogEntry, TagFeatureRef, TagKind } from '@/contracts/tag';
 import type { GeoJsonFeature } from '@/types/geospatial';
 import { cloneBulkOperations, createEmptyBulkOperations, type BulkOperations, type RawBulkOperations } from '@/utils/bulkOperations';
 import { buildRemoveTagMessage } from '@/utils/tags/tagMessages';
 import { scrollToTag } from '@/utils/tags/tagDom';
 import { getApiErrorMessage, toastApiError } from '@/utils/apiError';
 import { toast } from '@/utils/toast.js';
+import { downloadKmz } from '@/utils/sharing/downloadKmz';
 
 const SEARCH_DEBOUNCE_MS = 400;
 const TAG_NAME_MAX_LENGTH = 255;
-// Control characters other than tab/newline/carriage return.
 // eslint-disable-next-line no-control-regex -- deliberately rejecting raw control chars in tag names
 const CONTROL_CHAR_PATTERN = /[\x00-\x08\x0B\x0C\x0E-\x1F]/;
 
 type TagFeatureMap = Record<string, GeoJsonFeature[]>;
 
-interface TagsPaginationInfo {
-    total_tags: number;
-    total_pages: number;
-    has_next: boolean;
-    has_previous: boolean;
+function stubFromRef(ref: TagFeatureRef): GeoJsonFeature {
+    return {
+        type: 'Feature',
+        properties: {
+            database_id: ref.id,
+            name: ref.name,
+        },
+        geometry: {
+            type: (ref.geometry_type || 'Point') as GeoJsonFeature['geometry']['type'],
+            coordinates: [],
+        },
+    };
 }
 
-interface FeaturesByTagResponse {
-    user_tags?: TagFeatureMap;
-    system_tags?: TagFeatureMap;
-    pagination?: TagsPaginationInfo;
-}
-
-function featureTags(feature: GeoJsonFeature): string[] {
-    return Array.isArray(feature.properties.tags) ? (feature.properties.tags as string[]) : [];
-}
-
-function featureId(feature: GeoJsonFeature): number | string {
-    return feature.properties.database_id as number | string;
+function featureTagsFromGet(data: unknown): string[] {
+    const record = data as { feature?: { geojson?: { properties?: { tags?: unknown } } } };
+    const tags = record.feature?.geojson?.properties?.tags;
+    return Array.isArray(tags) ? tags.filter((tag): tag is string => typeof tag === 'string') : [];
 }
 
 /**
- * Owns all data/CRUD/navigation state for the tags page: fetching + pagination,
- * inline rename, delete flows, bulk styling by tag, and share/map navigation.
- * Per-tag feature search/pagination lives in `useTagFeaturePagination` since it
- * has its own memoization concerns.
+ * Owns catalog/CRUD/navigation state for the tags page.
+ * Mutations go through the tag kernel APIs only — never a slim metadata PUT.
  */
 export function useTagsData() {
     const router = useRouter();
@@ -57,9 +56,10 @@ export function useTagsData() {
     const tagEditInputEl = ref<HTMLInputElement | null>(null);
 
     const tagsData = ref<TagFeatureMap>({});
-    const userTagsData = ref<TagFeatureMap>({});
-    const systemTagsData = ref<TagFeatureMap>({});
-    const paginationInfo = ref<TagsPaginationInfo | null>(null);
+    const tagKinds = ref<Record<string, TagKind>>({});
+    const tagCounts = ref<Record<string, number>>({});
+    const totalTags = ref(0);
+    const totalPages = ref(1);
 
     const loading = ref(true);
     const refreshing = ref(false);
@@ -84,10 +84,8 @@ export function useTagsData() {
     const bulkOperationsByTag = reactive<Record<string, BulkOperations>>({});
     const bulkOperationsSaving = ref(false);
 
-    const totalTags = computed<number>(() => paginationInfo.value?.total_tags ?? Object.keys(tagsData.value).length);
-    const totalPages = computed<number>(() => paginationInfo.value?.total_pages ?? Math.ceil(totalTags.value / pageSize));
-    const hasNextPage = computed<boolean>(() => paginationInfo.value?.has_next ?? currentPage.value < totalPages.value);
-    const hasPreviousPage = computed<boolean>(() => paginationInfo.value?.has_previous ?? currentPage.value > 1);
+    const hasNextPage = computed<boolean>(() => currentPage.value < totalPages.value);
+    const hasPreviousPage = computed<boolean>(() => currentPage.value > 1);
     const isValidPageNumber = computed<boolean>(() => {
         const value = gotoPageInput.value;
         return value !== null && value >= 1 && value <= totalPages.value && value !== currentPage.value;
@@ -101,36 +99,57 @@ export function useTagsData() {
     });
 
     function isSystemTag(tag: string): boolean {
-        return tag in systemTagsData.value;
+        return tagKinds.value[tag] === 'system';
     }
 
-    async function fetchTagsData(showLoading = true, mergeMode = false): Promise<void> {
+    async function loadFeaturesForEntry(entry: TagCatalogEntry): Promise<GeoJsonFeature[]> {
+        const stubs: GeoJsonFeature[] = [];
+        let page = 1;
+        let totalPagesForTag = 1;
+        do {
+            const featurePage = await getTagFeatures(entry.name, {
+                page: String(page),
+                page_size: '100',
+            });
+            stubs.push(...featurePage.items.map(stubFromRef));
+            totalPagesForTag = featurePage.total_pages;
+            page += 1;
+        } while (page <= totalPagesForTag);
+        return stubs;
+    }
+
+    async function fetchTagsData(showLoading = true): Promise<void> {
         if (showLoading) {
             loading.value = true;
         }
         error.value = null;
 
         try {
-            const params: Record<string, string> = { page: String(currentPage.value) };
+            const params: Record<string, string> = {
+                page: String(currentPage.value),
+                page_size: String(pageSize),
+            };
             const trimmedSearch = searchQuery.value.trim();
             if (trimmedSearch) {
                 params.search = trimmedSearch;
             }
 
-            const data = (await getFeaturesByTag(params)) as FeaturesByTagResponse;
-            const newUserTags = data.user_tags ?? {};
-            const newSystemTags = data.system_tags ?? {};
+            const catalog = await getTagCatalog(params);
+            const nextData: TagFeatureMap = {};
+            const nextKinds: Record<string, TagKind> = {};
+            const nextCounts: Record<string, number> = {};
 
-            if (mergeMode) {
-                userTagsData.value = { ...userTagsData.value, ...newUserTags };
-                systemTagsData.value = { ...systemTagsData.value, ...newSystemTags };
-            } else {
-                userTagsData.value = newUserTags;
-                systemTagsData.value = newSystemTags;
-            }
+            await Promise.all(catalog.items.map(async (entry) => {
+                nextKinds[entry.name] = entry.kind;
+                nextCounts[entry.name] = entry.count;
+                nextData[entry.name] = await loadFeaturesForEntry(entry);
+            }));
 
-            tagsData.value = { ...userTagsData.value, ...systemTagsData.value };
-            paginationInfo.value = data.pagination ?? null;
+            tagsData.value = nextData;
+            tagKinds.value = nextKinds;
+            tagCounts.value = nextCounts;
+            totalTags.value = catalog.total_items;
+            totalPages.value = Math.max(1, catalog.total_pages);
         } catch (err) {
             console.error('Error fetching tags data:', err);
             error.value = getApiErrorMessage(err, 'Failed to load tags. Please try again.');
@@ -172,26 +191,6 @@ export function useTagsData() {
         editingTagValue.value = '';
     }
 
-    function renameTagInLocalState(oldTag: string, newTag: string): void {
-        const updatedTags = { ...tagsData.value };
-        updatedTags[newTag] = updatedTags[oldTag];
-        delete updatedTags[oldTag];
-        tagsData.value = updatedTags;
-
-        if (oldTag in userTagsData.value) {
-            const updatedUserTags = { ...userTagsData.value };
-            updatedUserTags[newTag] = updatedUserTags[oldTag];
-            delete updatedUserTags[oldTag];
-            userTagsData.value = updatedUserTags;
-        }
-        if (oldTag in systemTagsData.value) {
-            const updatedSystemTags = { ...systemTagsData.value };
-            updatedSystemTags[newTag] = updatedSystemTags[oldTag];
-            delete updatedSystemTags[oldTag];
-            systemTagsData.value = updatedSystemTags;
-        }
-    }
-
     async function saveTagEdit(oldTag: string): Promise<void> {
         if (isSystemTag(oldTag)) {
             toast.error('System tags cannot be edited');
@@ -223,26 +222,9 @@ export function useTagsData() {
         }
 
         try {
-            const features = tagsData.value[oldTag] ?? [];
-            const updates: FeatureMetadataUpdate[] = features.map((feature) => {
-                const currentTags = [...featureTags(feature)];
-                const tagIndex = currentTags.indexOf(oldTag);
-                if (tagIndex !== -1) {
-                    currentTags[tagIndex] = newTag;
-                } else {
-                    currentTags.push(newTag);
-                }
-                return { feature_id: featureId(feature), tags: currentTags };
-            });
-
-            if (updates.length > 0) {
-                await bulkUpdateFeatureMetadata(updates);
-            }
-
-            renameTagInLocalState(oldTag, newTag);
+            await renameTag(oldTag, newTag);
             cancelTagEdit();
-            await fetchTagsData(true, true);
-
+            await fetchTagsData(true);
             void nextTick(() => {
                 scrollToTag(rootEl.value, newTag);
             });
@@ -253,7 +235,7 @@ export function useTagsData() {
     }
 
     function getFeatureCountForTag(tag: string): number {
-        return (tagsData.value[tag] ?? []).length;
+        return tagCounts.value[tag] ?? (tagsData.value[tag] ?? []).length;
     }
 
     function openDeleteModal(tag: string): void {
@@ -266,43 +248,11 @@ export function useTagsData() {
         selectedTagForDelete.value = '';
     }
 
-    function removeTagEverywhere(tag: string): void {
-        const updatedTags = { ...tagsData.value };
-        delete updatedTags[tag];
-        tagsData.value = updatedTags;
-
-        if (tag in userTagsData.value) {
-            const updated = { ...userTagsData.value };
-            delete updated[tag];
-            userTagsData.value = updated;
-        }
-        if (tag in systemTagsData.value) {
-            const updated = { ...systemTagsData.value };
-            delete updated[tag];
-            systemTagsData.value = updated;
-        }
-    }
-
-    function removeUserTagFromLocalState(tag: string): void {
-        const updatedTags = { ...tagsData.value };
-        delete updatedTags[tag];
-        tagsData.value = updatedTags;
-
-        if (tag in userTagsData.value) {
-            const updated = { ...userTagsData.value };
-            delete updated[tag];
-            userTagsData.value = updated;
-        }
-    }
-
     async function handleDeleteAllFeatures(tag: string): Promise<void> {
         try {
-            const result = (await bulkDeleteFeaturesByTag(tag)) as { deleted_count?: number };
-            console.log(`Deleted ${result.deleted_count ?? 0} features with tag "${tag}"`);
-
-            removeTagEverywhere(tag);
+            await deleteTag(tag, true);
             closeDeleteModal();
-            await fetchTagsData(true, true);
+            await fetchTagsData(true);
         } catch (err) {
             console.error('Error deleting tag:', err);
             toastApiError(err, 'Failed to delete tag');
@@ -311,19 +261,9 @@ export function useTagsData() {
 
     async function handleRemoveTagOnly(tag: string): Promise<void> {
         try {
-            const features = tagsData.value[tag] ?? [];
-            const updates: FeatureMetadataUpdate[] = features.map((feature) => ({
-                feature_id: featureId(feature),
-                tags: featureTags(feature).filter((t) => t !== tag),
-            }));
-
-            if (updates.length > 0) {
-                await bulkUpdateFeatureMetadata(updates);
-            }
-
-            removeUserTagFromLocalState(tag);
+            await deleteTag(tag, false);
             closeDeleteModal();
-            await fetchTagsData(true, true);
+            await fetchTagsData(true);
         } catch (err) {
             console.error('Error removing tag:', err);
             toastApiError(err, 'Failed to remove tag');
@@ -341,20 +281,12 @@ export function useTagsData() {
             return;
         }
 
+        const featureId = feature.properties.database_id as number | string;
         try {
-            const filteredTags = featureTags(feature).filter((t) => t !== tag);
-            await updateFeatureMetadata(featureId(feature), { tags: filteredTags });
-
-            const updatedTags = { ...tagsData.value };
-            if (tag in updatedTags) {
-                const remaining = updatedTags[tag].filter((f) => f.properties.database_id !== feature.properties.database_id);
-                if (remaining.length === 0) {
-                    delete updatedTags[tag];
-                } else {
-                    updatedTags[tag] = remaining;
-                }
-            }
-            tagsData.value = updatedTags;
+            const current = await getFeature(featureId);
+            const nextTags = featureTagsFromGet(current).filter((item) => item !== tag);
+            await replaceFeatureTags(featureId, nextTags);
+            await fetchTagsData(false);
         } catch (err) {
             console.error('Error removing tag from feature:', err);
             toastApiError(err, 'Failed to remove tag from feature');
@@ -377,7 +309,7 @@ export function useTagsData() {
     async function applyBulkOperationsToTag(tag: string, bulkData: RawBulkOperations): Promise<void> {
         try {
             await applyBulkOperationsToTagApi(tag, bulkData);
-            await fetchTagsData(true, true);
+            await fetchTagsData(true);
         } catch (err) {
             console.error('Error applying bulk operations to tag:', err);
             toastApiError(err, 'Failed to apply bulk operations');
@@ -407,7 +339,9 @@ export function useTagsData() {
     }
 
     function downloadTagKmz(tag: string): void {
-        window.open(`/api/export-kmz?tag=${encodeURIComponent(tag)}`, '_blank');
+        void downloadKmz({ tag }).catch((error) => {
+            toastApiError(error, 'Failed to download KMZ.');
+        });
     }
 
     function viewTagOnMap(tag: string): void {
@@ -462,9 +396,6 @@ export function useTagsData() {
         void fetchTagsData();
     });
 
-    // Kept alive by the app's top-level <keep-alive>, so returning to /tags
-    // re-activates this instance instead of remounting it. Skipped on the very
-    // first activation (which fires right after mount) since there's no data yet.
     onActivated(() => {
         if (Object.keys(tagsData.value).length > 0 && !refreshing.value) {
             void refreshTagsData();

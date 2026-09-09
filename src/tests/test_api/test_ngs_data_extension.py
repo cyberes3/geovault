@@ -24,7 +24,7 @@ def _patch_ngs_data_enabled() -> object:
     mock_config.extension_settings.side_effect = (
         lambda name: {"enabled": True} if name == "ngs_data" else {}
     )
-    return patch("website.extensions.extension_loader.get_config", return_value=mock_config)
+    return patch("website.extensions.registry.get_config", return_value=mock_config)
 
 
 @patch.dict(os.environ, {}, clear=False)

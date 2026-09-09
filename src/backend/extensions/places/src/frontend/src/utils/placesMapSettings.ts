@@ -23,24 +23,7 @@ export function getDefaultMapSourceId(): string {
   return normalizeMapSourceId(raw);
 }
 
-interface EnsureUserSettingsLoadedOptions {
-  waitMs?: number;
-  pollMs?: number;
-}
-
-/** Wait for App.vue settings fetch (or fetch once) so the map starts on the user's basemap. */
-export async function ensureUserSettingsLoaded({ waitMs = 3000, pollMs = 50 }: EnsureUserSettingsLoadedOptions = {}): Promise<void> {
-  const platformState = window.gv_core.platformState;
-  const isLoaded = (): boolean => platformState.userSettings.value != null;
-  if (isLoaded()) {
-    return;
-  }
-  const deadline = Date.now() + waitMs;
-  while (!isLoaded() && Date.now() < deadline) {
-    await new Promise((resolve) => setTimeout(resolve, pollMs));
-  }
-  if (isLoaded()) {
-    return;
-  }
-  await platformState.fetchUserSettings();
+/** Wait for the shared SettingsReady promise so the map starts on the user's basemap. */
+export async function ensureUserSettingsLoaded(): Promise<void> {
+  await window.gv_core.settings.awaitUserSettings();
 }

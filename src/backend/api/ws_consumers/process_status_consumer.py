@@ -57,15 +57,14 @@ class ProcessStatusConsumer(AuthenticatedJsonConsumer):
             await self.close(code=4004)  # 4004 = 404 Not Found
             return
 
-        # Only accept the connection if the item exists and user owns it
+        # Join before accept so channel-layer events cannot land in the gap after the
+        # handshake is visible to the client but before this consumer is in the room.
+        self.room_group_name = f"process_status_{self.user.id}_{self.item_id}"
+        await self.join_group(self.room_group_name)
         await self.accept()
 
         user_identifier = get_user_identifier(self.scope)
         _logger.info(f"WebSocket connected: {path} - {user_identifier} - {client_ip} - Item: {self.item_id}")
-
-        # Create item-specific room group
-        self.room_group_name = f"process_status_{self.user.id}_{self.item_id}"
-        await self.join_group(self.room_group_name)
 
         # Load process status module and send initial state
         self.process_status_module = ProcessStatusModule(self, item)
@@ -86,11 +85,13 @@ class ProcessStatusConsumer(AuthenticatedJsonConsumer):
                     await self.process_status_module.send_initial_state()
                 elif message_type == 'request_logs':
                     after_id = message_data.get('after_id')
-                    await self.process_status_module.send_logs(after_id)
+                    before_id = message_data.get('before_id')
+                    await self.process_status_module.send_logs(after_id=after_id, before_id=before_id)
                 elif message_type == 'request_page':
                     page = message_data.get('page', 1)
                     page_size = message_data.get('page_size', 50)
-                    await self.process_status_module.send_page(page, page_size)
+                    hide_duplicates = bool(message_data.get('hide_duplicates'))
+                    await self.process_status_module.send_page(page, page_size, hide_duplicates)
                 else:
                     _logger.warning(f"Unknown message type for process status: {message_type}")
             except json.JSONDecodeError:
@@ -128,3 +129,7 @@ class ProcessStatusConsumer(AuthenticatedJsonConsumer):
     async def duplicates_updated(self, event):
         """Handle duplicates updated event."""
         await self.process_status_module.handle_duplicates_updated(event['data'])
+
+    async def page(self, event):
+        """Handle a recheck page payload without resetting the current page."""
+        await self.process_status_module.handle_page(event['data'])

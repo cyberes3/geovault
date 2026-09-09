@@ -8,9 +8,7 @@ import { BaseModule } from './BaseModule';
 export class BulkImportJobModule extends BaseModule {
     readonly moduleName = 'bulk_import_job';
 
-    initialize(): void {
-        super.initialize();
-
+    protected onInitialize(): void {
         this.subscribe('job_started', (data: { job_id: string }) => {
             void this.store.dispatch('importQueue/bulkImportJobStarted', data);
         });

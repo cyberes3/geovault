@@ -7,10 +7,12 @@ import uuid
 from django.contrib.auth import get_user_model
 from django.db.models import Q
 from django.http import Http404, HttpResponse, JsonResponse
-from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
-from api.utils.responses import error_response, handle_404
+from api.sharing.grants import ShareGrantService
+from api.sharing.service import ShareService
+from api.utils.responses import error_response, handle_404, list_response
+from geo_lib.sharing.constants import AUDIENCE_WORLD, KIND_LIVE_TRACK_GROUP
 from website.auth_decorators import api_or_login_required_401
 
 from .models import (
@@ -18,8 +20,6 @@ from .models import (
     LiveTrackGroup,
     LiveTrackGroupMember,
     LiveTrackGroupSubscription,
-    LiveTrackGroupShare,
-    LiveTrackGroupWorldShare,
     LiveTrackSubscription,
     VISIBILITY_PRIVATE,
     VISIBILITY_PUBLIC,
@@ -33,12 +33,8 @@ from .helpers import (
     visible_group_track_ids_for_user,
 )
 from .validation import GroupResponse
-from .internal_share_links import (
-    build_live_track_group_internal_share_url,
-    sync_group_internal_share,
-    visible_group_internal_share_for_user,
-)
-from .world_share_views import build_live_track_group_share_url
+from .internal_share_links import sync_group_internal_share
+from .world_share_views import attach_group_share_fields
 
 User = get_user_model()
 
@@ -50,7 +46,7 @@ def can_user_see_group(user, group):
     if group.visibility == VISIBILITY_PUBLIC:
         return True
     if group.visibility == VISIBILITY_SHARED:
-        return LiveTrackGroupShare.objects.filter(group=group, shared_with=user).exists()
+        return ShareGrantService.has_grant(KIND_LIVE_TRACK_GROUP, group.id, user)
     return False
 
 
@@ -92,22 +88,9 @@ def _group_payload(group, request_user, include_track_ids=True, accepted_group_i
     }
     if not is_owner and group.user_id:
         out["owner_email"] = (group.user.email or "") if group.user_id else ""
-    internal_share = visible_group_internal_share_for_user(group, request_user)
-    if internal_share:
-        out["internal_share_id"] = internal_share.share_id
-        if request:
-            out["internal_share_url"] = build_live_track_group_internal_share_url(request, internal_share.share_id)
+    attach_group_share_fields(out, group, request_user, request, include_world=is_owner)
     if is_owner:
-        emails = list(
-            LiveTrackGroupShare.objects.filter(group=group)
-            .values_list("shared_with__email", flat=True)
-        )
-        out["shared_with_emails"] = [e for e in emails if e]
-        world_share = LiveTrackGroupWorldShare.objects.filter(group=group).first()
-        if world_share:
-            out["world_share_id"] = world_share.share_id
-            if request:
-                out["world_share_url"] = build_live_track_group_share_url(request, world_share.share_id)
+        out["shared_with_emails"] = ShareGrantService.grantee_emails(KIND_LIVE_TRACK_GROUP, group.id)
     if include_track_ids:
         out["track_ids"] = visible_group_track_ids_for_user(
             group=group,
@@ -120,7 +103,6 @@ def _group_payload(group, request_user, include_track_ids=True, accepted_group_i
 
 @api_or_login_required_401()
 @require_http_methods(["GET", "POST"])
-@csrf_exempt
 def group_list_create(request):
     """GET: owned, public, and shared-with-me groups (shared groups include is_accepted; accept via POST groups/<id>/accept-share/). POST: create group."""
     if request.method == "GET":
@@ -141,10 +123,11 @@ def group_list_create(request):
         for g in public_groups:
             seen_ids.add(g.id)
             items.append(_group_payload(g, request.user, accepted_group_ids=accepted_group_ids, request=request))
+        granted_group_ids = ShareGrantService.resource_ids_for_user(KIND_LIVE_TRACK_GROUP, request.user)
         shared_with_me = (
             LiveTrackGroup.objects.filter(
                 visibility=VISIBILITY_SHARED,
-                share_entries__shared_with=request.user,
+                id__in=granted_group_ids,
             )
             .exclude(id__in=seen_ids)
             .select_related("user")
@@ -154,7 +137,7 @@ def group_list_create(request):
         for g in shared_with_me:
             items.append(_group_payload(g, request.user, accepted_group_ids=accepted_group_ids, request=request))
         items.sort(key=lambda x: (x.get("name") or "").lower())
-        return JsonResponse(items, safe=False)
+        return list_response(items, page=1, page_size=max(len(items), 1), total_items=len(items))
     if request.method == "POST":
         data, err = get_json_body(request)
         if err is not None:
@@ -172,7 +155,6 @@ def group_list_create(request):
 @api_or_login_required_401()
 @require_http_methods(["GET", "PATCH", "DELETE"])
 @handle_404
-@csrf_exempt
 def group_get_patch_delete(request, group_id):
     group = _get_group_for_user_or_404(request.user, group_id)
     if request.method == "GET":
@@ -207,14 +189,14 @@ def group_get_patch_delete(request, group_id):
             update_fields.append("visibility")
             if v == VISIBILITY_PRIVATE:
                 # No longer shared: clear group share entries so they don't become stale
-                LiveTrackGroupShare.objects.filter(group=group).delete()
+                ShareGrantService.clear(KIND_LIVE_TRACK_GROUP, group.id)
                 LiveTrackGroupSubscription.objects.filter(group=group).delete()
         if "shared_with_emails" in data:
             raw = data.get("shared_with_emails")
             if getattr(group, "visibility", "private") != VISIBILITY_SHARED:
                 # Allow null/empty when not shared as a safe clear/no-op to avoid brittle clients.
                 if raw is None or raw == []:
-                    LiveTrackGroupShare.objects.filter(group=group).delete()
+                    ShareGrantService.clear(KIND_LIVE_TRACK_GROUP, group.id)
                     LiveTrackGroupSubscription.objects.filter(group=group).delete()
                     raw = None
                 else:
@@ -235,24 +217,20 @@ def group_get_patch_delete(request, group_id):
             if invalid:
                 return JsonResponse({"error": "Invalid emails", "invalid_emails": invalid}, status=400)
             target_users = set(users_by_email[e] for e in emails)
-            current = set(LiveTrackGroupShare.objects.filter(group=group).values_list("shared_with_id", flat=True))
-            to_add = target_users - {u for u in target_users if u.id in current}
-            to_remove = current - {u.id for u in target_users}
-            for u in to_add:
-                LiveTrackGroupShare.objects.get_or_create(group=group, shared_with=u)
-            LiveTrackGroupShare.objects.filter(group=group, shared_with_id__in=to_remove).delete()
+            _to_add, to_remove = ShareGrantService.set_grantees(
+                KIND_LIVE_TRACK_GROUP, group.id, target_users
+            )
             LiveTrackGroupSubscription.objects.filter(group=group, user_id__in=to_remove).delete()
         # World share is allowed for shared/public groups, but never for private groups.
         if group.visibility == VISIBILITY_PRIVATE:
-            LiveTrackGroupWorldShare.objects.filter(group=group).delete()
+            ShareService.delete_tracker_links(KIND_LIVE_TRACK_GROUP, group.id, AUDIENCE_WORLD)
         elif "world_share_enabled" in data:
             if data["world_share_enabled"]:
-                LiveTrackGroupWorldShare.objects.get_or_create(
-                    group=group,
-                    defaults={"share_id": str(uuid.uuid4())},
+                ShareService.ensure_tracker_link(
+                    group.user, KIND_LIVE_TRACK_GROUP, group.id, AUDIENCE_WORLD
                 )
             else:
-                LiveTrackGroupWorldShare.objects.filter(group=group).delete()
+                ShareService.delete_tracker_links(KIND_LIVE_TRACK_GROUP, group.id, AUDIENCE_WORLD)
         if "add_track_ids" in data or "remove_track_ids" in data:
             raw_add_track_ids = data.get("add_track_ids", [])
             raw_remove_track_ids = data.get("remove_track_ids", [])
@@ -323,7 +301,6 @@ def group_get_patch_delete(request, group_id):
 @api_or_login_required_401()
 @require_http_methods(["POST"])
 @handle_404
-@csrf_exempt
 def group_add_track(request, group_id):
     """Add a track to the group. If track is public and user not subscribed to the track, subscribe to track first. Owner only."""
     group = _get_group_for_user_or_404(request.user, group_id)
@@ -362,7 +339,6 @@ def group_add_track(request, group_id):
 @api_or_login_required_401()
 @require_http_methods(["DELETE"])
 @handle_404
-@csrf_exempt
 def group_remove_track(request, group_id, track_id):
     group = _get_group_for_user_or_404(request.user, group_id)
     if not _group_can_edit(group, request.user):
@@ -378,26 +354,21 @@ def group_remove_track(request, group_id, track_id):
 @api_or_login_required_401()
 @require_http_methods(["DELETE"])
 @handle_404
-@csrf_exempt
 def group_leave(request, group_id):
     """Current user removes their own share (self-unshare). Owner cannot leave."""
     group = _get_group_for_user_or_404(request.user, group_id)
     if group.user_id == request.user.id:
         return error_response("Owner cannot leave; delete the group to remove it", 400)
-    share = LiveTrackGroupShare.objects.filter(
-        group=group, shared_with=request.user
-    ).first()
-    if not share:
+    if not ShareGrantService.has_grant(KIND_LIVE_TRACK_GROUP, group.id, request.user):
         return error_response("You are not shared with this group", 404)
     LiveTrackGroupSubscription.objects.filter(group=group, user=request.user).delete()
-    share.delete()
+    ShareGrantService.remove(KIND_LIVE_TRACK_GROUP, group.id, request.user)
     return HttpResponse(status=204)
 
 
 @api_or_login_required_401()
 @require_http_methods(["POST"])
 @handle_404
-@csrf_exempt
 def group_accept_share(request, group_id):
     """POST groups/<id>/accept-share/ — accept a shared group invitation."""
     group = _get_group_for_user_or_404(request.user, group_id)
@@ -405,11 +376,7 @@ def group_accept_share(request, group_id):
         return error_response("You already own this group", 400)
     if group.visibility != VISIBILITY_SHARED:
         return error_response("Only shared groups can be accepted", 400)
-    share = LiveTrackGroupShare.objects.filter(
-        group=group,
-        shared_with=request.user,
-    ).first()
-    if not share:
+    if not ShareGrantService.has_grant(KIND_LIVE_TRACK_GROUP, group.id, request.user):
         return error_response("This group is not shared with you", 404)
     LiveTrackGroupSubscription.objects.get_or_create(
         user=request.user,

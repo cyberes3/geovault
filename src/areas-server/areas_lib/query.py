@@ -2,122 +2,38 @@
 PostGIS query orchestration for is_in area server.
 Runs admin, protected_areas, and water lookups; exposes query_single, query_batch, check_health, get_stats.
 """
+import traceback
 from typing import Any, Dict, List, Optional, Tuple
 
 from config import SCHEMA
 from areas_lib import lookup_admin, lookup_common, lookup_water, lookup_protected_areas, lookup_ocean, lookup_places, lookup_ski_resort, lookup_waterway
 
-# Limits for single-point query (must match lookup module constants)
-_PROTECTED_LIMIT = 5
-_NEARBY_LAKES_LIMIT = 5
 _MILES_TO_M = 1609.34
 
 
-def _query_single_sql(include_place: bool, include_waterway: bool = True) -> Tuple[str, List[Any]]:
-    """Build one UNION ALL query for single point and return (sql, params). Params: lon, lat, lake_radius_m, ocean_radius_m (region), ocean_radius_m (main)[, city_radius_m]."""
-    pt_cte = f"WITH pt AS (SELECT public.ST_SetSRID(public.ST_MakePoint(%s, %s), 4326) AS geom)"
+def _query_single_sql(include_place: bool, include_waterway: bool = True) -> str:
+    """Build one UNION ALL query for a single point. Named params: lon, lat, lake_radius_m, ocean_radius_m[, waterway_radius_m][, city_radius_m]."""
+    pt_cte = "WITH pt AS (SELECT public.ST_SetSRID(public.ST_MakePoint(%(lon)s, %(lat)s), 4326) AS geom)"
     parts = [
-        f"""
-        (SELECT 'admin' AS layer, jsonb_build_object('osm_id', a.osm_id, 'admin_level', a.admin_level, 'name', a.name, 'tags', a.tags) AS payload
-        FROM {SCHEMA}.{lookup_admin.TABLE_NAME} a, pt
-        WHERE public.ST_Contains(a.geom, pt.geom)
-        ORDER BY a.admin_level,
-                 public.ST_Distance(public.ST_PointOnSurface(a.geom)::geography, public.geography(pt.geom)),
-                 a.osm_id)
-        """,
-        f"""
-        (SELECT 'protected' AS layer, jsonb_build_object('osm_id', p.osm_id, 'name', p.name, 'tags', p.tags) AS payload
-        FROM (
-            (SELECT p.osm_id, p.name, p.tags
-             FROM {SCHEMA}.{lookup_protected_areas.TABLE_NAME} p, pt
-             WHERE p.geom && pt.geom AND public.ST_Contains(p.geom, pt.geom)
-             LIMIT {_PROTECTED_LIMIT})
-            UNION
-            (SELECT a.osm_id, a.name, a.tags
-             FROM pt
-             JOIN {SCHEMA}.{lookup_water.TABLE_NAME} w
-                  ON w.geom && pt.geom AND public.ST_Contains(w.geom, pt.geom)
-             JOIN {SCHEMA}.{lookup_protected_areas.TABLE_NAME} a
-                  ON a.geom && w.geom AND public.ST_Touches(a.geom, w.geom)
-                  AND public.ST_Contains(public.ST_ConvexHull(a.geom), pt.geom)
-             LIMIT {_PROTECTED_LIMIT})
-        ) p
-        LIMIT {_PROTECTED_LIMIT})
-        """,
-        f"""
-        (SELECT 'water' AS layer, jsonb_build_object('name', w.name, 'water_type', w.water_type, 'distance_miles', 0, 'on_water', true) AS payload
-         FROM {SCHEMA}.{lookup_water.TABLE_NAME} w, pt
-         WHERE public.ST_Contains(w.geom, pt.geom)
-         LIMIT {_NEARBY_LAKES_LIMIT})
-        UNION ALL
-        (SELECT 'water' AS layer, jsonb_build_object('name', w.name, 'water_type', w.water_type,
-                 'distance_miles', (public.ST_Distance(public.geography(w.geom), public.geography(pt.geom)) / {_MILES_TO_M})::double precision,
-                 'on_water', false) AS payload
-         FROM {SCHEMA}.{lookup_water.TABLE_NAME} w, pt
-         WHERE NOT public.ST_Contains(w.geom, pt.geom)
-           AND public.ST_DWithin(public.geography(w.geom), public.geography(pt.geom), %s)
-         ORDER BY public.ST_Distance(public.geography(w.geom), public.geography(pt.geom))
-         LIMIT {_NEARBY_LAKES_LIMIT})
-        """,
-        f"""
-        (SELECT 'ocean_region' AS layer, jsonb_build_object('name', sub.name) AS payload
-        FROM (
-            SELECT o.name FROM {SCHEMA}.{lookup_ocean.TABLE_OCEAN_REGIONS} o, pt
-            WHERE public.ST_Contains(o.geom, pt.geom)
-               OR public.ST_DWithin(o.geom, pt.geom, %s / 111320.0)
-            ORDER BY public.ST_Contains(o.geom, pt.geom) DESC NULLS LAST,
-                     public.ST_Distance(o.geom, pt.geom)
-            LIMIT 1
-        ) sub)
-        """,
-        f"""
-        (SELECT 'ocean_main' AS layer, jsonb_build_object('name', sub.name) AS payload
-        FROM (
-            SELECT o.name FROM {SCHEMA}.{lookup_ocean.TABLE_OCEANS} o, pt
-            WHERE public.ST_Contains(o.geom, pt.geom)
-               OR public.ST_DWithin(o.geom, pt.geom, %s / 111320.0)
-            ORDER BY public.ST_Contains(o.geom, pt.geom) DESC NULLS LAST,
-                     public.ST_Distance(o.geom, pt.geom)
-            LIMIT 1
-        ) sub)
-        """,
-        f"""
-        (SELECT 'ski' AS layer, jsonb_build_object('name', s.name) AS payload
-        FROM {SCHEMA}.{lookup_ski_resort.TABLE_NAME} s, pt
-        WHERE public.ST_Contains(s.geom, pt.geom)
-        LIMIT 1)
-        """,
+        lookup_admin.sql_fragment(batch=False),
+        lookup_protected_areas.sql_fragment(batch=False),
+        lookup_water.sql_fragment(batch=False),
+        lookup_ocean.sql_fragment(batch=False, table_name=lookup_ocean.TABLE_OCEAN_REGIONS, layer="ocean_region"),
+        lookup_ocean.sql_fragment(batch=False, table_name=lookup_ocean.TABLE_OCEANS, layer="ocean_main"),
+        lookup_ski_resort.sql_fragment(batch=False),
     ]
     if include_waterway:
-        parts.append(
-            f"""
-        (SELECT 'waterway' AS layer, jsonb_build_object('name', w.tag_group_value,
-                 'distance_m', (public.ST_Distance(public.geography(w.geom), public.geography(pt.geom)))::int)
-         FROM {lookup_waterway.WATERWAYS_SCHEMA}.{lookup_waterway.TABLE_NAME} w, pt
-         WHERE public.ST_DWithin(public.geography(w.geom), public.geography(pt.geom), %s)
-         ORDER BY public.ST_Distance(public.geography(w.geom), public.geography(pt.geom))
-         LIMIT 1)
-        """
-        )
+        parts.append(lookup_waterway.sql_fragment(batch=False))
     if include_place:
-        parts.append(
-            f"""
-            (SELECT 'place' AS layer, jsonb_build_object('name', n.name) AS payload
-            FROM {SCHEMA}.{lookup_places.TABLE_NAME} n, pt
-            WHERE public.ST_DWithin(public.geography(n.geom), public.geography(pt.geom), %s)
-            ORDER BY public.ST_Distance(public.geography(n.geom), public.geography(pt.geom))
-            LIMIT 1)
-            """
-        )
-    sql = pt_cte + "\n" + "\nUNION ALL\n".join(parts)
-    return sql, []
+        parts.append(lookup_places.sql_fragment(batch=False))
+    return pt_cte + "\n" + "\nUNION ALL\n".join(parts)
 
 
 def _query_batch_sql(include_place: bool, include_waterway: bool = True) -> str:
-    """Build one UNION ALL query for batch (all points, all layers). Params: indices, lons, lats, lake_radius_m, ocean_radius_m[, city_radius_m]."""
-    cte = f"""
+    """Build one UNION ALL query for a batch. Named params: indices, lons, lats, lake_radius_m, ocean_radius_m[, waterway_radius_m][, city_radius_m]."""
+    cte = """
     WITH p AS (
-        SELECT * FROM unnest(%s::bigint[], %s::double precision[], %s::double precision[])
+        SELECT * FROM unnest(%(indices)s::bigint[], %(lons)s::double precision[], %(lats)s::double precision[])
         AS t(point_idx, lon, lat)
     ),
     pt AS (
@@ -126,124 +42,17 @@ def _query_batch_sql(include_place: bool, include_waterway: bool = True) -> str:
         FROM p
     )"""
     parts = [
-        f"""
-        (SELECT pt.point_idx, 'admin' AS layer, jsonb_build_object('osm_id', a.osm_id, 'admin_level', a.admin_level, 'name', a.name, 'tags', a.tags) AS payload
-        FROM pt
-        JOIN {SCHEMA}.{lookup_admin.TABLE_NAME} a ON public.ST_Contains(a.geom, pt.geom)
-        ORDER BY pt.point_idx, a.admin_level,
-                 public.ST_Distance(public.ST_PointOnSurface(a.geom)::geography, public.geography(pt.geom)),
-                 a.osm_id)
-        """,
-        f"""
-        SELECT point_idx, 'protected' AS layer, payload FROM (
-            SELECT pt.point_idx, jsonb_build_object('osm_id', a.osm_id, 'name', a.name, 'tags', a.tags) AS payload,
-                   ROW_NUMBER() OVER (PARTITION BY pt.point_idx ORDER BY a.osm_id) AS rn
-            FROM pt
-            CROSS JOIN LATERAL (
-                (SELECT a.osm_id, a.name, a.tags
-                 FROM {SCHEMA}.{lookup_protected_areas.TABLE_NAME} a
-                 WHERE a.geom && pt.geom AND public.ST_Contains(a.geom, pt.geom)
-                 LIMIT {_PROTECTED_LIMIT})
-                UNION
-                (SELECT a.osm_id, a.name, a.tags
-                 FROM {SCHEMA}.{lookup_water.TABLE_NAME} w
-                 JOIN {SCHEMA}.{lookup_protected_areas.TABLE_NAME} a
-                      ON a.geom && w.geom AND public.ST_Touches(a.geom, w.geom)
-                      AND public.ST_Contains(public.ST_ConvexHull(a.geom), pt.geom)
-                 WHERE w.geom && pt.geom AND public.ST_Contains(w.geom, pt.geom)
-                 LIMIT {_PROTECTED_LIMIT})
-            ) a
-        ) sub WHERE rn <= {_PROTECTED_LIMIT}
-        """,
-        f"""
-        SELECT point_idx, 'water' AS layer, payload FROM (
-            SELECT pt.point_idx,
-                   jsonb_build_object('name', w.name, 'water_type', w.water_type,
-                       'distance_miles', (CASE WHEN public.ST_Contains(w.geom, pt.geom) THEN 0.0
-                             ELSE public.ST_Distance(public.geography(w.geom), public.geography(pt.geom)) / {_MILES_TO_M} END)::double precision,
-                       'on_water', public.ST_Contains(w.geom, pt.geom)) AS payload,
-                   ROW_NUMBER() OVER (PARTITION BY pt.point_idx
-                        ORDER BY public.ST_Contains(w.geom, pt.geom) DESC NULLS LAST,
-                                 (CASE WHEN public.ST_Contains(w.geom, pt.geom) THEN 0.0
-                                       ELSE public.ST_Distance(w.geom, pt.geom) * 69.17 END)::double precision) AS rn
-            FROM pt
-            JOIN {SCHEMA}.{lookup_water.TABLE_NAME} w
-                 ON public.ST_Contains(w.geom, pt.geom)
-                 OR (NOT public.ST_Contains(w.geom, pt.geom)
-                     AND public.ST_DWithin(public.geography(w.geom), public.geography(pt.geom), %s))
-        ) sub WHERE rn <= {_NEARBY_LAKES_LIMIT}
-        """,
-        f"""
-        SELECT pt.point_idx, 'ocean_region' AS layer, sub.payload
-        FROM pt
-        LEFT JOIN LATERAL (
-            SELECT jsonb_build_object('name', o.name) AS payload
-            FROM {SCHEMA}.{lookup_ocean.TABLE_OCEAN_REGIONS} o
-            WHERE public.ST_Contains(o.geom, pt.geom)
-               OR public.ST_DWithin(o.geom, pt.geom, %s / 111320.0)
-            ORDER BY public.ST_Contains(o.geom, pt.geom) DESC NULLS LAST,
-                     public.ST_Distance(o.geom, pt.geom)
-            LIMIT 1
-        ) sub ON true
-        WHERE sub.payload IS NOT NULL
-        """,
-        f"""
-        SELECT pt.point_idx, 'ocean_main' AS layer, sub.payload
-        FROM pt
-        LEFT JOIN LATERAL (
-            SELECT jsonb_build_object('name', o.name) AS payload
-            FROM {SCHEMA}.{lookup_ocean.TABLE_OCEANS} o
-            WHERE public.ST_Contains(o.geom, pt.geom)
-               OR public.ST_DWithin(o.geom, pt.geom, %s / 111320.0)
-            ORDER BY public.ST_Contains(o.geom, pt.geom) DESC NULLS LAST,
-                     public.ST_Distance(o.geom, pt.geom)
-            LIMIT 1
-        ) sub ON true
-        WHERE sub.payload IS NOT NULL
-        """,
-        f"""
-        SELECT pt.point_idx, 'ski' AS layer, sub.payload
-        FROM pt
-        LEFT JOIN LATERAL (
-            SELECT jsonb_build_object('name', s.name) AS payload
-            FROM {SCHEMA}.{lookup_ski_resort.TABLE_NAME} s
-            WHERE public.ST_Contains(s.geom, pt.geom)
-            LIMIT 1
-        ) sub ON true
-        WHERE sub.payload IS NOT NULL
-        """,
+        lookup_admin.sql_fragment(batch=True),
+        lookup_protected_areas.sql_fragment(batch=True),
+        lookup_water.sql_fragment(batch=True),
+        lookup_ocean.sql_fragment(batch=True, table_name=lookup_ocean.TABLE_OCEAN_REGIONS, layer="ocean_region"),
+        lookup_ocean.sql_fragment(batch=True, table_name=lookup_ocean.TABLE_OCEANS, layer="ocean_main"),
+        lookup_ski_resort.sql_fragment(batch=True),
     ]
     if include_waterway:
-        parts.append(
-            f"""
-        SELECT pt.point_idx, 'waterway' AS layer, sub.payload
-        FROM pt
-        LEFT JOIN LATERAL (
-            SELECT jsonb_build_object('name', w.tag_group_value,
-                     'distance_m', (public.ST_Distance(public.geography(w.geom), public.geography(pt.geom)))::int) AS payload
-            FROM {lookup_waterway.WATERWAYS_SCHEMA}.{lookup_waterway.TABLE_NAME} w
-            WHERE public.ST_DWithin(public.geography(w.geom), public.geography(pt.geom), %s)
-            ORDER BY public.ST_Distance(public.geography(w.geom), public.geography(pt.geom))
-            LIMIT 1
-        ) sub ON true
-        WHERE sub.payload IS NOT NULL
-        """
-        )
+        parts.append(lookup_waterway.sql_fragment(batch=True))
     if include_place:
-        parts.append(
-            f"""
-            SELECT pt.point_idx, 'place' AS layer, sub.payload
-            FROM pt
-            LEFT JOIN LATERAL (
-                SELECT jsonb_build_object('name', n.name) AS payload
-                FROM {SCHEMA}.{lookup_places.TABLE_NAME} n
-                WHERE public.ST_DWithin(public.geography(n.geom), public.geography(pt.geom), %s)
-                ORDER BY public.ST_Distance(public.geography(n.geom), public.geography(pt.geom))
-                LIMIT 1
-            ) sub ON true
-            WHERE sub.payload IS NOT NULL
-            """
-        )
+        parts.append(lookup_places.sql_fragment(batch=True))
     return cte + "\n" + "\nUNION ALL\n".join(parts)
 
 
@@ -392,6 +201,26 @@ def _parse_single_rows(
     )
 
 
+def _query_params(
+    *,
+    lake_radius_miles: float,
+    ocean_radius_miles: float,
+    city_radius_miles: float,
+    waterway_radius_miles: Optional[float],
+) -> Tuple[Dict[str, Any], bool, float]:
+    """Shared radius conversion for single and batch queries."""
+    if waterway_radius_miles is None:
+        waterway_radius_miles = lookup_waterway.DEFAULT_WATERWAY_RADIUS_MILES
+    include_place = city_radius_miles > 0
+    params: Dict[str, Any] = {
+        "lake_radius_m": lake_radius_miles * _MILES_TO_M,
+        "ocean_radius_m": ocean_radius_miles * _MILES_TO_M,
+        "city_radius_m": city_radius_miles * _MILES_TO_M,
+        "waterway_radius_m": waterway_radius_miles * _MILES_TO_M,
+    }
+    return params, include_place, waterway_radius_miles
+
+
 def query_single(
     pool: Any,
     lat: float,
@@ -402,22 +231,18 @@ def query_single(
     waterway_radius_miles: Optional[float] = None,
 ) -> Tuple[Dict[str, Optional[str]], List[Dict[str, str]], List[Dict[str, Any]], List[str], Optional[str], Optional[Dict[str, Any]]]:
     """Run admin + protected + water + ocean + ski_resort + waterway (+ optional place). One SQL query. Fails hard if any required table is missing."""
-    lake_radius_m = lake_radius_miles * _MILES_TO_M
-    ocean_radius_m = ocean_radius_miles * _MILES_TO_M
-    city_radius_m = city_radius_miles * _MILES_TO_M
-    if waterway_radius_miles is None:
-        waterway_radius_miles = lookup_waterway.DEFAULT_WATERWAY_RADIUS_MILES
-    include_place = city_radius_miles > 0
+    params, include_place, _ = _query_params(
+        lake_radius_miles=lake_radius_miles,
+        ocean_radius_miles=ocean_radius_miles,
+        city_radius_miles=city_radius_miles,
+        waterway_radius_miles=waterway_radius_miles,
+    )
+    params["lon"] = lon
+    params["lat"] = lat
     conn = pool.getconn()
     try:
         include_waterway = lookup_waterway.table_exists(conn)
-        waterway_radius_m = waterway_radius_miles * _MILES_TO_M
-        sql, _ = _query_single_sql(include_place, include_waterway=include_waterway)
-        params: List[Any] = [lon, lat, lake_radius_m, ocean_radius_m, ocean_radius_m]
-        if include_waterway:
-            params.append(waterway_radius_m)
-        if include_place:
-            params.append(city_radius_m)
+        sql = _query_single_sql(include_place, include_waterway=include_waterway)
         with conn.cursor() as cur:
             cur.execute(sql, params)
             rows = cur.fetchall()
@@ -426,7 +251,7 @@ def query_single(
         try:
             conn.rollback()
         except Exception:
-            pass  # e.g. "another command is already in progress" when worker was killed during execute
+            traceback.print_exc()
         pool.putconn(conn)
 
 
@@ -442,25 +267,19 @@ def query_batch(
     if not points:
         return []
     n = len(points)
-    indices = list(range(n))
-    lons = [p[1] for p in points]
-    lats = [p[0] for p in points]
-    lake_radius_m = lake_radius_miles * _MILES_TO_M
-    ocean_radius_m = ocean_radius_miles * _MILES_TO_M
-    city_radius_m = city_radius_miles * _MILES_TO_M
-    if waterway_radius_miles is None:
-        waterway_radius_miles = lookup_waterway.DEFAULT_WATERWAY_RADIUS_MILES
-    waterway_radius_m = waterway_radius_miles * _MILES_TO_M
-    include_place = city_radius_miles > 0
+    params, include_place, _ = _query_params(
+        lake_radius_miles=lake_radius_miles,
+        ocean_radius_miles=ocean_radius_miles,
+        city_radius_miles=city_radius_miles,
+        waterway_radius_miles=waterway_radius_miles,
+    )
+    params["indices"] = list(range(n))
+    params["lons"] = [p[1] for p in points]
+    params["lats"] = [p[0] for p in points]
     conn = pool.getconn()
     try:
         include_waterway = lookup_waterway.table_exists(conn)
         sql = _query_batch_sql(include_place, include_waterway=include_waterway)
-        params: List[Any] = [indices, lons, lats, lake_radius_m, ocean_radius_m, ocean_radius_m]
-        if include_waterway:
-            params.append(waterway_radius_m)
-        if include_place:
-            params.append(city_radius_m)
         with conn.cursor() as cur:
             cur.execute(sql, params)
             rows = cur.fetchall()
@@ -469,38 +288,26 @@ def query_batch(
         try:
             conn.rollback()
         except Exception:
-            pass  # e.g. "another command is already in progress" when worker was killed during execute
+            traceback.print_exc()
         pool.putconn(conn)
 
 
 def check_health(conn: Any) -> Tuple[bool, Optional[str]]:
-    """Check DB connectivity and that tables exist. Returns (ok, error_message)."""
-    try:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT EXISTS (SELECT 1
-                               FROM information_schema.tables
-                               WHERE table_schema = %s
-                                 AND table_name = %s) AND EXISTS (SELECT 1
-                                                                  FROM information_schema.tables
-                                                                  WHERE table_schema = %s
-                                                                    AND table_name = %s) AND EXISTS (SELECT 1
-                                                                                                     FROM information_schema.tables
-                                                                                                     WHERE table_schema = %s
-                                                                                                       AND table_name = %s)
-                """,
-                (SCHEMA, lookup_admin.TABLE_NAME, SCHEMA, lookup_protected_areas.TABLE_NAME, SCHEMA, lookup_water.TABLE_NAME),
-            )
-            row = cur.fetchone()
-            if not row or not row[0]:
-                return False, (
-                    f"Tables {SCHEMA}.{lookup_admin.TABLE_NAME}, {SCHEMA}.{lookup_protected_areas.TABLE_NAME} "
-                    f"or {SCHEMA}.{lookup_water.TABLE_NAME} not found"
-                )
-        return True, None
-    except Exception:
-        raise
+    """Check DB connectivity (SELECT 1) and that required tables exist (to_regclass)."""
+    admin_reg = f"{SCHEMA}.{lookup_admin.TABLE_NAME}"
+    protected_reg = f"{SCHEMA}.{lookup_protected_areas.TABLE_NAME}"
+    water_reg = f"{SCHEMA}.{lookup_water.TABLE_NAME}"
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT 1, to_regclass(%s), to_regclass(%s), to_regclass(%s)",
+            (admin_reg, protected_reg, water_reg),
+        )
+        row = cur.fetchone()
+    if not row or row[0] != 1 or row[1] is None or row[2] is None or row[3] is None:
+        return False, (
+            f"Tables {admin_reg}, {protected_reg} or {water_reg} not found"
+        )
+    return True, None
 
 
 def get_stats(conn: Any) -> Dict[str, Any]:

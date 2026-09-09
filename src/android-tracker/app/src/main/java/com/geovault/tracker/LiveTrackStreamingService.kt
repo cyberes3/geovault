@@ -65,26 +65,16 @@ object StreamingTrackPointParser {
         val data = json.optJSONObject("data") ?: return emptyList()
         val trackId = data.optString("track_id", "").trim()
         if (trackId.isBlank()) return emptyList()
-        val updates = data.optJSONArray("updates")
-        if (updates != null) {
-            return (0 until updates.length()).mapNotNull { index ->
-                val update = updates.optJSONObject(index) ?: return@mapNotNull null
-                parsePoint(
-                    trackId = trackId,
-                    pointArr = update.optJSONArray("point"),
-                    props = update.optJSONObject("props"),
-                    nowMs = nowMs,
-                )
-            }
-        }
-        return listOfNotNull(
+        val updates = data.optJSONArray("updates") ?: return emptyList()
+        return (0 until updates.length()).mapNotNull { index ->
+            val update = updates.optJSONObject(index) ?: return@mapNotNull null
             parsePoint(
                 trackId = trackId,
-                pointArr = data.optJSONArray("point"),
-                props = data.optJSONObject("props"),
+                pointArr = update.optJSONArray("point"),
+                props = update.optJSONObject("props"),
                 nowMs = nowMs,
             )
-        )
+        }
     }
 
     private fun parsePoint(

@@ -10,7 +10,8 @@ from django.contrib.gis.geos import Point
 
 from django.contrib.auth import get_user_model
 
-from api.models import FeatureStore, ImportQueue
+from api.models import FeatureStore, ImportDraftFeature, ImportQueue
+from api.services.feature_service import FeatureService
 from geo_lib.feature_id import generate_geojson_hash
 
 
@@ -40,11 +41,10 @@ class TestFeatureAPI(TestCase):
                 'tags': ['test', 'point']
             }
         }
-        self.point_feature = FeatureStore.objects.create(
-            user=self.user,
-            geojson=self.point_feature_data,
-            geometry=Point(-122.4194, 37.7749, 0.0),  # 3D Point with Z=0.0
-            geojson_hash=generate_geojson_hash(self.point_feature_data)
+        self.point_feature = FeatureService.create(
+            self.user,
+            self.point_feature_data,
+            geojson_hash=generate_geojson_hash(self.point_feature_data),
         )
 
         self.linestring_feature_data = {
@@ -59,11 +59,10 @@ class TestFeatureAPI(TestCase):
                 'tags': ['test', 'line']
             }
         }
-        self.linestring_feature = FeatureStore.objects.create(
-            user=self.user,
-            geojson=self.linestring_feature_data,
-            geometry=Point(-122.4194, 37.7749, 0.0),  # 3D Point with Z=0.0  # Simplified for test
-            geojson_hash=generate_geojson_hash(self.linestring_feature_data)
+        self.linestring_feature = FeatureService.create(
+            self.user,
+            self.linestring_feature_data,
+            geojson_hash=generate_geojson_hash(self.linestring_feature_data),
         )
 
     def test_get_feature(self):
@@ -360,6 +359,9 @@ class TestFeatureAPI(TestCase):
             self.point_feature.geojson['geometry']['coordinates'],
             [-104.26, 39.43, 0.0]
         )
+        self.assertIsNotNone(self.point_feature.geometry)
+        self.assertAlmostEqual(self.point_feature.geometry.x, -104.26, places=5)
+        self.assertAlmostEqual(self.point_feature.geometry.y, 39.43, places=5)
 
     def test_update_feature_metadata_coordinates_empty(self):
         """Test updating coordinates with empty array is rejected."""
@@ -634,15 +636,20 @@ class TestFeatureAPI(TestCase):
         response = self.client.get('/api/features/search/')
         self.assertEqual(response.status_code, 400)
 
+    def test_search_features_by_indexed_tag(self):
+        response = self.client.get('/api/features/search/', {'query': 'point'})
+        self.assertEqual(response.status_code, 200)
+        names = {feature['properties']['name'] for feature in response.json()['data']['features']}
+        self.assertIn('Test Point', names)
+
     def test_search_features_limit(self):
         """Test that search results are limited to 100 features."""
-        # Create 150 features that all match the search query
         for i in range(150):
             feature_data = {
                 'type': 'Feature',
                 'geometry': {
                     'type': 'Point',
-                    'coordinates': [-122.4194 + i * 0.001, 37.7749 + i * 0.001, 0.0]
+                    'coordinates': [10.0 + i * 0.001, 20.0 + i * 0.001, 0.0]
                 },
                 'properties': {
                     'name': f'Searchable Feature {i}',
@@ -653,191 +660,131 @@ class TestFeatureAPI(TestCase):
             FeatureStore.objects.create(
                 user=self.user,
                 geojson=feature_data,
-                geometry=Point(-122.4194 + i * 0.001, 37.7749 + i * 0.001, 0.0),
+                geometry=Point(10.0 + i * 0.001, 20.0 + i * 0.001, 0.0),
                 geojson_hash=generate_geojson_hash(feature_data)
             )
-        
-        # Search for features - should return max 100
+
         response = self.client.get('/api/features/search/', {'query': 'Searchable'})
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
         self.assertIn('data', data)
-        # Should be limited to 100 features
         self.assertEqual(data['feature_count'], 100)
         self.assertEqual(len(data['data']['features']), 100)
 
     def test_get_features_by_tag(self):
-        """Test getting features grouped by tags."""
-        response = self.client.get('/api/features/by-tag/')
+        """Legacy by-tag grouping is replaced by the paginated catalog."""
+        response = self.client.get('/api/tags/')
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
-        self.assertIn('user_tags', data)
-        self.assertIn('system_tags', data)
+        self.assertIn('items', data)
+        names = {item['name'] for item in data['items']}
+        self.assertIn('test', names)
 
     def test_get_features_by_tag_pagination(self):
-        """Test pagination for features by tag."""
-        response = self.client.get('/api/features/by-tag/', {'page': '1'})
+        response = self.client.get('/api/tags/', {'page': '1'})
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
-        self.assertIn('user_tags', data)
-        self.assertIn('system_tags', data)
+        self.assertIn('items', data)
+        self.assertIn('page', data)
 
     def test_get_features_by_tag_search(self):
-        """Test searching tags in features by tag."""
-        response = self.client.get('/api/features/by-tag/', {'search': 'test'})
+        response = self.client.get('/api/tags/', {'search': 'test'})
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
-        self.assertIn('user_tags', data)
+        names = {item['name'] for item in data['items']}
+        self.assertIn('test', names)
 
-    def test_filter_features_by_tags(self):
-        """Test filtering features by tags (AND logic)."""
+    def test_filter_features_by_tags_removed(self):
         response = self.client.get('/api/features/filter-by-tags/', {'tags': 'test'})
+        self.assertEqual(response.status_code, 404)
+
+    def test_filter_features_by_tags_via_geojson(self):
+        response = self.client.get('/api/geojson/', {
+            'bbox': '-180,-90,180,90',
+            'zoom': '10',
+            'tags': 'test',
+            'match_mode': 'AND',
+        })
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
-        self.assertIn('data', data)
-        self.assertGreater(data['feature_count'], 0)
-
-    def test_filter_features_by_tags_multiple(self):
-        """Test filtering by multiple tags."""
-        response = self.client.get(
-            '/api/features/filter-by-tags/',
-            {'tags': ['test', 'point']}
-        )
-        self.assertEqual(response.status_code, 200)
-        data = json.loads(response.content)
-        self.assertIn('data', data)
-
-    def test_filter_features_by_tags_no_tags(self):
-        """Test filtering without tags parameter."""
-        response = self.client.get('/api/features/filter-by-tags/')
-        self.assertEqual(response.status_code, 400)
+        self.assertGreater(len(data['data']['features']), 0)
 
     def test_filter_features_by_tags_or_mode(self):
-        """Test filtering features by tags with OR logic."""
-        response = self.client.get(
-            '/api/features/filter-by-tags/',
-            {'tags': ['test', 'nonexistent'], 'match_mode': 'OR'}
-        )
+        response = self.client.get('/api/geojson/', {
+            'bbox': '-180,-90,180,90',
+            'zoom': '10',
+            'tags': ['test', 'nonexistent'],
+            'match_mode': 'OR',
+        })
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
-        self.assertIn('data', data)
-        self.assertEqual(data['match_mode'], 'OR')
-        # Should return features with 'test' tag even though 'nonexistent' doesn't match
-        self.assertGreater(data['feature_count'], 0)
-
-    def test_filter_features_by_tags_and_mode_explicit(self):
-        """Test filtering features by tags with explicit AND logic."""
-        response = self.client.get(
-            '/api/features/filter-by-tags/',
-            {'tags': ['test', 'point'], 'match_mode': 'AND'}
-        )
-        self.assertEqual(response.status_code, 200)
-        data = json.loads(response.content)
-        self.assertIn('data', data)
-        self.assertEqual(data['match_mode'], 'AND')
-        # Should return features that have both 'test' and 'point' tags
-        self.assertGreaterEqual(data['feature_count'], 0)
+        self.assertGreater(len(data['data']['features']), 0)
 
     def test_filter_features_by_tags_invalid_match_mode(self):
-        """Test filtering with invalid match_mode parameter."""
-        response = self.client.get(
-            '/api/features/filter-by-tags/',
-            {'tags': 'test', 'match_mode': 'INVALID'}
-        )
+        response = self.client.get('/api/geojson/', {
+            'bbox': '-180,-90,180,90',
+            'zoom': '10',
+            'tags': 'test',
+            'match_mode': 'INVALID',
+        })
         self.assertEqual(response.status_code, 400)
         data = json.loads(response.content)
         self.assertIn('error', data)
 
     def test_filter_features_by_prefix_tag(self):
-        """Test filtering features by prefix tag."""
-        # First, create a feature with a prefixed tag
-        feature_data = {
+        FeatureService.create(self.user, {
             'type': 'Feature',
-            'geometry': {
-                'type': 'Point',
-                'coordinates': [-122.5, 37.8, 0.0]
-            },
-            'properties': {
-                'name': 'Ski Resort',
-                'tags': ['ski-resort:vail', 'colorado']
-            }
-        }
-        FeatureStore.objects.create(
-            user=self.user,
-            geojson=feature_data,
-            geometry=Point(-122.5, 37.8, 0.0),
-            geojson_hash=generate_geojson_hash(feature_data)
-        )
-        
-        # Test prefix matching
-        response = self.client.get(
-            '/api/features/filter-by-tags/',
-            {'tags': 'ski-resort:'}
-        )
+            'geometry': {'type': 'Point', 'coordinates': [10.0, 20.0, 0.0]},
+            'properties': {'name': 'Ski Resort', 'tags': ['ski-resort:vail', 'colorado']},
+        })
+        response = self.client.get('/api/geojson/', {
+            'bbox': '0,0,20,30',
+            'zoom': '10',
+            'tags': 'ski-resort:',
+        })
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
-        self.assertIn('data', data)
-        # Should find the feature with ski-resort:vail tag
-        self.assertGreater(data['feature_count'], 0)
-        
-        # Verify the returned feature has the expected tag
-        features = data['data']['features']
-        found = False
-        for feature in features:
-            tags = feature['properties'].get('tags', [])
-            if any(tag.startswith('ski-resort:') for tag in tags):
-                found = True
-                break
+        self.assertGreater(len(data['data']['features']), 0)
+        found = any(
+            any(str(tag).startswith('ski-resort:') for tag in feature['properties'].get('tags', []))
+            for feature in data['data']['features']
+        )
         self.assertTrue(found, "Should find feature with ski-resort: prefix")
 
     def test_filter_features_by_mixed_tags(self):
-        """Test filtering with both exact and prefix tags."""
-        # Create features with various tags
-        feature1_data = {
+        FeatureService.create(self.user, {
             'type': 'Feature',
-            'geometry': {
-                'type': 'Point',
-                'coordinates': [-111.0, 40.0, 0.0]
-            },
-            'properties': {
-                'name': 'Utah Ski Resort',
-                'tags': ['utah', 'ski-resort:alta']
-            }
-        }
-        FeatureStore.objects.create(
-            user=self.user,
-            geojson=feature1_data,
-            geometry=Point(-111.0, 40.0, 0.0),
-            geojson_hash=generate_geojson_hash(feature1_data)
-        )
-        
-        # Test mixed exact and prefix matching with AND mode
-        response = self.client.get(
-            '/api/features/filter-by-tags/',
-            {'tags': ['utah', 'ski-resort:'], 'match_mode': 'AND'}
-        )
-        self.assertEqual(response.status_code, 200)
-        data = json.loads(response.content)
-        # Should find features with 'utah' tag AND any tag starting with 'ski-resort:'
-        self.assertGreater(data['feature_count'], 0)
-        
-        # Test with OR mode
-        response = self.client.get(
-            '/api/features/filter-by-tags/',
-            {'tags': ['utah', 'ski-resort:'], 'match_mode': 'OR'}
-        )
-        self.assertEqual(response.status_code, 200)
-        data = json.loads(response.content)
-        # Should find features with 'utah' tag OR any tag starting with 'ski-resort:'
-        self.assertGreater(data['feature_count'], 0)
+            'geometry': {'type': 'Point', 'coordinates': [10.0, 20.0, 0.0]},
+            'properties': {'name': 'Utah Ski Resort', 'tags': ['utah', 'ski-resort:alta']},
+        })
+        and_response = self.client.get('/api/geojson/', {
+            'bbox': '0,0,20,30',
+            'zoom': '10',
+            'tags': ['utah', 'ski-resort:'],
+            'match_mode': 'AND',
+        })
+        self.assertEqual(and_response.status_code, 200)
+        self.assertGreater(len(and_response.json()['data']['features']), 0)
+        or_response = self.client.get('/api/geojson/', {
+            'bbox': '0,0,20,30',
+            'zoom': '10',
+            'tags': ['utah', 'ski-resort:'],
+            'match_mode': 'OR',
+        })
+        self.assertEqual(or_response.status_code, 200)
+        self.assertGreater(len(or_response.json()['data']['features']), 0)
 
     def test_get_all_features(self):
-        """Test getting all features."""
+        """Catalog endpoint returns ListProjection rows, not a GeoJSON FeatureCollection."""
         response = self.client.get('/api/features/all/')
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
-        self.assertIn('data', data)
-        self.assertGreater(data['feature_count'], 0)
+        self.assertIn('items', data)
+        self.assertGreater(len(data['items']), 0)
+        item = data['items'][0]
+        self.assertEqual(set(item.keys()), {'id', 'name', 'geometry_type'})
+        self.assertNotIn('data', data)
+        self.assertNotIn('features', data)
 
     def test_bulk_update_features_metadata(self):
         """Test bulk updating features metadata."""
@@ -1254,32 +1201,34 @@ class TestFeatureAPI(TestCase):
 
     def test_apply_replacement_geometry(self):
         """Test applying replacement geometry."""
-        # Create an ImportQueue entry with replacement geometry
         replacement_feature = {
             'type': 'Feature',
             'geometry': {
                 'type': 'Point',
-                'coordinates': [-122.3994, 37.7949, 0.0]  # 3D coordinates
+                'coordinates': [10.0, 20.0, 0.0]
             },
             'properties': {
-                'feature_hash': generate_geojson_hash({
-                    'type': 'Feature',
-                    'geometry': {
-                        'type': 'Point',
-                        'coordinates': [-122.3994, 37.7949, 0.0]
-                    },
-                    'properties': {}
-                })
+                'name': 'Replacement',
             }
         }
+        replacement_feature['properties']['geojson_hash'] = generate_geojson_hash(replacement_feature)
         import_queue = ImportQueue.objects.create(
             user=self.user,
             original_filename='replacement.kml',
             raw_file='',
-            geofeatures=[replacement_feature],
-            replacement=self.point_feature.id
+            replacement=self.point_feature.id,
+            queue_status=ImportQueue.STATUS_READY,
         )
-        
+        ImportDraftFeature.objects.create(
+            queue=import_queue,
+            user=self.user,
+            geojson=replacement_feature,
+            geojson_hash=replacement_feature['properties']['geojson_hash'],
+            name='Replacement',
+            geometry_type='Point',
+            spatial_index=0,
+        )
+
         response = self.client.post(
             f'/api/feature/{self.point_feature.id}/apply-replacement/',
             data=json.dumps({
@@ -1292,7 +1241,7 @@ class TestFeatureAPI(TestCase):
         self.point_feature.refresh_from_db()
         self.assertEqual(
             self.point_feature.geojson['geometry']['coordinates'],
-            [-122.3994, 37.7949, 0.0]
+            [10.0, 20.0, 0.0]
         )
 
     def test_apply_replacement_geometry_invalid(self):

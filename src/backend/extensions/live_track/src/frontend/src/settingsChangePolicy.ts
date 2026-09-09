@@ -3,8 +3,8 @@ export interface SettingsSnapshot {
 }
 
 export function didRecentDataWindowChange(previousSnapshot: SettingsSnapshot | null | undefined, currentSnapshot: SettingsSnapshot | null | undefined): boolean {
-  const previous = String(previousSnapshot?.recentDataWindow ?? '');
-  const current = String(currentSnapshot?.recentDataWindow ?? '');
+  const previous = String(previousSnapshot?.recentDataWindow || 'all');
+  const current = String(currentSnapshot?.recentDataWindow || 'all');
   return current !== previous;
 }
 

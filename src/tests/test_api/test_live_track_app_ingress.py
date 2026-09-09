@@ -15,6 +15,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from extensions.live_track.src.backend.models import LiveTrack
+from test_utils.live_track_points import stored_track_points
 
 
 def _patch_live_track_enabled():
@@ -23,7 +24,7 @@ def _patch_live_track_enabled():
     mock_config.extension_settings.side_effect = (
         lambda name: {"enabled": True} if name == "live_track" else {}
     )
-    return patch("website.extensions.extension_loader.get_config", return_value=mock_config)
+    return patch("website.extensions.registry.get_config", return_value=mock_config)
 
 
 _GVL2_MAGIC = b"GVL2"
@@ -154,15 +155,13 @@ class TestLiveTrackAppIngress(TestCase):
 
         self.assertEqual(response.status_code, 200)
         track = LiveTrack.objects.get(id=self.track_id)
-        geom = track.geometry or {}
-        coords = geom.get("coordinates", [])
+        coords, params = stored_track_points(track)
 
         self.assertEqual(len(coords), 1)
         self.assertEqual(coords[0][0], -122.0)
         self.assertEqual(coords[0][1], 37.0)
         self.assertEqual(coords[0][2], 1705312800000)
 
-        params = track.point_params or []
         self.assertEqual(len(params), 1)
         self.assertNotIn("dir", params[0])
 
@@ -185,7 +184,7 @@ class TestLiveTrackAppIngress(TestCase):
 
         self.assertEqual(response.status_code, 200)
         track = LiveTrack.objects.get(id=self.track_id)
-        params = track.point_params or []
+        _coords, params = stored_track_points(track)
 
         self.assertEqual(len(params), 1)
         self.assertAlmostEqual(params[0].get("alt"), 100.5, places=1)
@@ -218,8 +217,7 @@ class TestLiveTrackAppIngress(TestCase):
 
         self.assertEqual(response.status_code, 200)
         track = LiveTrack.objects.get(id=self.track_id)
-        coords = (track.geometry or {}).get("coordinates", [])
-        params = track.point_params or []
+        coords, params = stored_track_points(track)
 
         self.assertEqual(len(coords), 3)
         self.assertEqual(len(params), 3)
@@ -245,8 +243,7 @@ class TestLiveTrackAppIngress(TestCase):
                 response = self._ingress_post(payload)
         self.assertEqual(response.status_code, 200)
         track = LiveTrack.objects.get(id=self.track_id)
-        coords = (track.geometry or {}).get("coordinates", [])
-        params = track.point_params or []
+        coords, params = stored_track_points(track)
         self.assertEqual(len(coords), 2)
         self.assertEqual(len(params), 2)
         self.assertEqual(coords[0], [-122.0, 37.0, 1705312800000])
@@ -272,8 +269,7 @@ class TestLiveTrackAppIngress(TestCase):
                 response = self._ingress_post(bytes(out))
         self.assertEqual(response.status_code, 200)
         track = LiveTrack.objects.get(id=self.track_id)
-        coords = (track.geometry or {}).get("coordinates", [])
-        params = track.point_params or []
+        coords, params = stored_track_points(track)
         self.assertEqual(len(coords), 2)
         self.assertEqual(len(params), 2)
         self.assertEqual(coords[0], [-122.0, 37.0, 1705312800000])
@@ -300,7 +296,7 @@ class TestLiveTrackAppIngress(TestCase):
                 response = self._ingress_post(bytes(out))
         self.assertEqual(response.status_code, 200)
         track = LiveTrack.objects.get(id=self.track_id)
-        params = track.point_params or []
+        _coords, params = stored_track_points(track)
         self.assertEqual(len(params), 1)
         self.assertEqual(params[0].get("starttimestamp"), 1705312700000)
         self.assertEqual(params[0].get("ser"), "build-9.9")
@@ -389,7 +385,7 @@ class TestLiveTrackAppIngress(TestCase):
                 )
         self.assertEqual(response.status_code, 200)
         track = LiveTrack.objects.get(id=self.track_id)
-        coords = (track.geometry or {}).get("coordinates", [])
+        coords, _params = stored_track_points(track)
         self.assertEqual(len(coords), 1)
         self.assertEqual(coords[0][1], 37.0)
         self.assertEqual(coords[0][0], -122.0)
@@ -411,8 +407,7 @@ class TestLiveTrackAppIngress(TestCase):
                 response = self._ingress_post(payload)
         self.assertEqual(response.status_code, 200)
         track = LiveTrack.objects.get(id=self.track_id)
-        coords = (track.geometry or {}).get("coordinates", [])
-        params = track.point_params or []
+        coords, params = stored_track_points(track)
         self.assertEqual(len(coords), 4)
         self.assertEqual(len(params), 4)
         self.assertEqual(coords[0][2], 1705312800000)
@@ -429,7 +424,7 @@ class TestLiveTrackAppIngress(TestCase):
                 response = self._ingress_post(bytes(out))
         self.assertEqual(response.status_code, 200)
         track = LiveTrack.objects.get(id=self.track_id)
-        coords = (track.geometry or {}).get("coordinates", [])
+        coords, _params = stored_track_points(track)
         self.assertEqual(len(coords), 0)
 
     def test_app_ingress_404_nonexistent_tracker_uuid(self):
@@ -529,7 +524,7 @@ class TestLiveTrackAppIngress(TestCase):
                 response = self._ingress_post(payload)
         self.assertEqual(response.status_code, 200)
         track = LiveTrack.objects.get(id=self.track_id)
-        params = track.point_params or []
+        _coords, params = stored_track_points(track)
         self.assertEqual(len(params), 1)
         self.assertNotIn("sat", params[0])
 
@@ -548,7 +543,7 @@ class TestLiveTrackAppIngress(TestCase):
                 response = self._ingress_post(payload)
         self.assertEqual(response.status_code, 200)
         track = LiveTrack.objects.get(id=self.track_id)
-        params = track.point_params or []
+        _coords, params = stored_track_points(track)
         self.assertEqual(len(params), 2)
         self.assertEqual(params[0].get("batt"), 0)
         self.assertFalse(params[0].get("ischarging"))
@@ -567,7 +562,7 @@ class TestLiveTrackAppIngress(TestCase):
                 response = self._ingress_post(payload)
         self.assertEqual(response.status_code, 200)
         track = LiveTrack.objects.get(id=self.track_id)
-        coords = (track.geometry or {}).get("coordinates", [])
+        coords, _params = stored_track_points(track)
         self.assertEqual(len(coords), 1)
         self.assertAlmostEqual(coords[0][1], 37.123456, places=4)
         self.assertAlmostEqual(coords[0][0], -122.654321, places=4)
@@ -591,7 +586,7 @@ class TestLiveTrackAppIngress(TestCase):
                 response = self._ingress_post(payload)
         self.assertEqual(response.status_code, 200)
         track = LiveTrack.objects.get(id=self.track_id)
-        params = track.point_params or []
+        _coords, params = stored_track_points(track)
         self.assertEqual(len(params), 1)
         self.assertEqual(params[0].get("prov"), long_prov)
         self.assertEqual(params[0].get("ser"), long_ser)
@@ -611,7 +606,7 @@ class TestLiveTrackAppIngress(TestCase):
                 response = self._ingress_post(payload)
         self.assertEqual(response.status_code, 200)
         track = LiveTrack.objects.get(id=self.track_id)
-        params = track.point_params or []
+        _coords, params = stored_track_points(track)
         self.assertEqual(len(params), 1)
         self.assertNotIn("ser", params[0])
 
@@ -633,7 +628,7 @@ class TestLiveTrackAppIngress(TestCase):
                 response = self._ingress_post(bytes(out))
         self.assertEqual(response.status_code, 200)
         track = LiveTrack.objects.get(id=self.track_id)
-        params = track.point_params or []
+        _coords, params = stored_track_points(track)
         self.assertEqual(len(params), 1)
         self.assertIn("prov", params[0])
         self.assertIn("desc", params[0])
@@ -694,7 +689,7 @@ class TestLiveTrackAppIngress(TestCase):
                 )
         self.assertEqual(response.status_code, 200)
         track = LiveTrack.objects.get(id=self.track_id)
-        coords = (track.geometry or {}).get("coordinates", [])
+        coords, _params = stored_track_points(track)
         self.assertEqual(len(coords), 1)
         self.assertEqual(coords[0][1], 37.0)
         self.assertEqual(coords[0][0], -122.0)
@@ -712,7 +707,7 @@ class TestLiveTrackAppIngress(TestCase):
             )
         self.assertEqual(response.status_code, 400)
         self.assertIn("Content-Encoding", response.content.decode())
-        self.assertEqual((LiveTrack.objects.get(id=self.track_id).geometry or {}).get("coordinates", []), [])
+        self.assertEqual(stored_track_points(LiveTrack.objects.get(id=self.track_id))[0], [])
 
     def test_app_ingress_400_deflate_decompression_bomb_rejected(self):
         """A tiny deflate body that decompresses far past the 2MB cap is rejected with 400."""
@@ -746,8 +741,7 @@ class TestLiveTrackAppIngress(TestCase):
 
         self.assertEqual(response.status_code, 200)
         track = LiveTrack.objects.get(id=self.track_id)
-        coords = (track.geometry or {}).get("coordinates", [])
-        params = track.point_params or []
+        coords, params = stored_track_points(track)
         self.assertEqual(len(coords), 2)
         self.assertEqual(len(params), 2)
         self.assertEqual(coords[0], [-122.0, 37.0, duplicate_ts])
@@ -778,8 +772,7 @@ class TestLiveTrackAppIngress(TestCase):
         self.assertEqual(response1.status_code, 200)
         self.assertEqual(response2.status_code, 200)
         track = LiveTrack.objects.get(id=self.track_id)
-        coords = (track.geometry or {}).get("coordinates", [])
-        params = track.point_params or []
+        coords, params = stored_track_points(track)
         self.assertEqual(len(coords), 2)
         self.assertEqual(len(params), 2)
         self.assertEqual(coords[0], [-122.0, 37.0, ts])
@@ -810,7 +803,7 @@ class TestLiveTrackAppIngress(TestCase):
 
         self.assertEqual(duplicate_response.status_code, 200)
         track = LiveTrack.objects.get(id=self.track_id)
-        coords = (track.geometry or {}).get("coordinates", [])
+        coords, _params = stored_track_points(track)
         self.assertEqual(coords, [[-122.0, 37.0, ts]])
         self.assertEqual(track.updated_at, old_updated_at)
 

@@ -1,0 +1,6 @@
+name = "exif_geotagger"
+version = "1.0.0"
+description = "Geotag photos using a map interface."
+icon = "CameraIcon"
+umd_global = "ExifGeotaggerExtension"
+requires_map_engine = "maplibre"

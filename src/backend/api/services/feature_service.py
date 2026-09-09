@@ -8,9 +8,12 @@ to an extension-scoped feature (e.g. `places`) by accident -- this is the fix fo
 endpoints" class of bug (see `api/models.py`'s `FeatureStoreQuerySet` docstring for the
 underlying queryset methods this builds on).
 """
+import copy
+import json
 import traceback
 from typing import Optional
 
+from django.contrib.gis.geos import GEOSGeometry
 from django.http import Http404
 
 from api.models import FeatureStore
@@ -18,8 +21,11 @@ from geo_lib.feature_id import generate_geojson_hash
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.processing.import_operations.styling import apply_bulk_operations as apply_bulk_operations_to_features
 from geo_lib.processing.logging import ImportLog
-from geo_lib.processing.tagging.const_strings import CONST_INTERNAL_TAGS, is_protected_tag
 from geo_lib.processing.tagging.generate import generate_auto_tags
+from geo_lib.tags.protected import TagValidationError
+from geo_lib.tags.tag_set import TagSet
+from geo_lib.tags.tag_writer import SystemTagWriter, TagWriter
+from geo_lib.spatial.coordinates import ensure_3d_geometry_coordinates
 from geo_lib.types.feature import (
     GeoFeatureSupported,
     LineStringFeature,
@@ -29,7 +35,6 @@ from geo_lib.types.feature import (
 )
 from geo_lib.validation.geojson.geojson_whitelist import validate_and_normalize_geojson_feature
 from geo_lib.validation.geometry_validation import GeometryValidationError
-from website.settings_utils import get_required_setting
 
 _logger = get_tagged_logger('FEATURE_SERVICE')
 
@@ -66,6 +71,56 @@ class FeatureService:
             return qs.get(id=feature_id)
         except FeatureStore.DoesNotExist:
             raise Http404("Feature not found or access denied")
+
+    @staticmethod
+    def geometry_from_geojson(geojson: dict):
+        """Build a PostGIS geometry from a GeoJSON feature, or None if it cannot be stored."""
+        geom_data = geojson.get('geometry') if isinstance(geojson, dict) else None
+        if not isinstance(geom_data, dict) or not geom_data.get('type'):
+            return None
+        if geom_data['type'] == 'GeometryCollection':
+            return None
+        if not geom_data.get('coordinates'):
+            return None
+        geom_data = ensure_3d_geometry_coordinates(copy.deepcopy(geom_data))
+        return GEOSGeometry(json.dumps(geom_data))
+
+    @staticmethod
+    def create(
+        user,
+        geojson: dict,
+        *,
+        scope: Optional[str] = None,
+        source=None,
+        geojson_hash: Optional[str] = None,
+    ) -> FeatureStore:
+        """
+        Persist a FeatureStore row, including PostGIS geometry and optional extension scope.
+        """
+        if geojson_hash is None:
+            geojson_hash = generate_geojson_hash(geojson)
+        feature = FeatureStore.objects.create(
+            user=user,
+            geojson=geojson,
+            geometry=FeatureService.geometry_from_geojson(geojson),
+            geojson_hash=geojson_hash,
+            scope=scope,
+            source=source,
+        )
+        TagWriter.reindex_feature(feature)
+        return feature
+
+    @staticmethod
+    def delete(user, feature_id: int, *, scope: Optional[str] = None) -> bool:
+        """
+        Delete an owned feature. Returns False if it is missing or not in scope.
+        """
+        try:
+            feature = FeatureService.get_owned_feature_or_404(user, feature_id, scope=scope)
+        except Http404:
+            return False
+        feature.delete()
+        return True
 
     @staticmethod
     def extract_system_tags(feature: dict) -> list:
@@ -111,30 +166,15 @@ class FeatureService:
         Validate a list of user-supplied tags: must be a list of non-empty, non-control-character
         strings within `TAG_MAX_LENGTH`, none of which are protected system tag names.
 
+        Protected-prefix checks run after lowercase.
+
         Raises:
             FeatureValidationError: on the first invalid tag found, with a human-readable message.
         """
-        if not isinstance(tags, list):
-            raise FeatureValidationError('tags must be an array')
-
-        tag_max_length = get_required_setting('TAG_MAX_LENGTH')
-        for tag in tags:
-            if not isinstance(tag, str):
-                raise FeatureValidationError('all tags must be strings')
-            if is_protected_tag(tag, CONST_INTERNAL_TAGS):
-                raise FeatureValidationError(
-                    'System tags (type, import-year, import-month, feature-year, feature-month, '
-                    'source-file, track, elevation, reverse geocoding) cannot be added as user tags'
-                )
-            if len(tag) > tag_max_length:
-                raise FeatureValidationError(
-                    f'Tag "{tag[:50]}..." exceeds maximum length of {tag_max_length} characters'
-                )
-            if not tag.strip():
-                raise FeatureValidationError('Tags cannot be empty or contain only whitespace')
-            if any(ord(c) < 32 and c not in '\t\n\r' for c in tag):
-                raise FeatureValidationError('Tags cannot contain control characters')
-        return tags
+        try:
+            return list(TagSet.normalize_user_tags(tags))
+        except TagValidationError as exc:
+            raise FeatureValidationError(exc.message) from exc
 
     @staticmethod
     def apply_bulk_operations(queryset, bulk_ops: dict) -> int:
@@ -159,7 +199,15 @@ class FeatureService:
         if not isinstance(original_geojson, dict):
             return False
 
-        updated_features = apply_bulk_operations_to_features([original_geojson], bulk_ops)
+        extra_tags = bulk_ops.get('tags') if isinstance(bulk_ops, dict) else None
+        if extra_tags:
+            try:
+                FeatureService.validate_user_tags(extra_tags)
+            except FeatureValidationError:
+                return False
+
+        styling_ops = {key: value for key, value in bulk_ops.items() if key != 'tags'}
+        updated_features = apply_bulk_operations_to_features([original_geojson], styling_ops)
         if not updated_features:
             return False
 
@@ -174,6 +222,13 @@ class FeatureService:
         feature.geojson = normalized_feature
         feature.geojson_hash = generate_geojson_hash(normalized_feature)
         feature.save(update_fields=['geojson', 'geojson_hash'])
+        if extra_tags:
+            try:
+                TagWriter.merge_user_tags(feature, extra_tags)
+            except TagValidationError:
+                return False
+        else:
+            TagWriter.reindex_feature(feature)
         return True
 
     @staticmethod
@@ -205,8 +260,8 @@ class FeatureService:
         if not isinstance(existing_user_tags, list):
             existing_user_tags = []
 
-        new_system_tags = generate_auto_tags(feature_instance, import_log=ImportLog())
-
+        generated = generate_auto_tags(feature_instance, import_log=ImportLog())
+        new_system_tags = SystemTagWriter.apply_regenerated(feature, generated)
         geojson_data['properties']['tags'] = existing_user_tags
         geojson_data['properties']['system_tags'] = new_system_tags
 
@@ -214,4 +269,5 @@ class FeatureService:
 
         feature.geojson = normalized_feature
         feature.save()
+        TagWriter.reindex_feature(feature)
         return feature

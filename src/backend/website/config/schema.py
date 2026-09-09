@@ -135,12 +135,13 @@ class AreasServerConfig(BaseModel):
     verify_ssl: bool = True
     max_batch_size: int = 100
     city_radius_miles: float = 3.0
+    ocean_radius_miles: float = 1.0
+    waterway_radius_miles: float = 300 / 5280.0
 
 
 class ReverseGeocodingConfig(BaseModel):
     """Reverse geocoding (proximity tags, admin boundaries) for imported features."""
     enabled: bool = True
-    city_proximity_miles: float = 5.0
     lake_proximity_miles: float = 1.0
     areas_server: AreasServerConfig = Field(default_factory=AreasServerConfig)
     linestring_geocode_points: int = 4

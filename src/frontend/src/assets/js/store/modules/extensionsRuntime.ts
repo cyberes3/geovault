@@ -1,5 +1,6 @@
 import type { Module } from 'vuex';
 import type { RootState } from '../rootState';
+import { BAKED_MAP_ROUTE_PREFIXES, BAKED_PUBLIC_SHARE_ROUTE_PREFIXES } from '@/extensions/bakedRoutePrefixes';
 
 /** Chrome's `beforeinstallprompt` event, captured here and replayed on demand. */
 export interface BeforeInstallPromptEvent extends Event {
@@ -20,8 +21,8 @@ export interface ExtensionsRuntimeState {
 export const extensionsRuntimeModule: Module<ExtensionsRuntimeState, RootState> = {
     namespaced: true,
     state: (): ExtensionsRuntimeState => ({
-        mapRoutePrefixes: [],
-        publicShareRoutePrefixes: [],
+        mapRoutePrefixes: [...BAKED_MAP_ROUTE_PREFIXES],
+        publicShareRoutePrefixes: [...BAKED_PUBLIC_SHARE_ROUTE_PREFIXES],
         deferredPrompt: null,
     }),
     getters: {

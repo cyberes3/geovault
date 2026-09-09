@@ -10,7 +10,8 @@ import uuid
 
 from django.contrib.auth import get_user_model
 
-from api.models import FeatureStore, Collection
+from api.models import Collection, CollectionTagRule, FeatureStore
+from api.services.feature_service import FeatureService
 from geo_lib.feature_id import generate_geojson_hash
 
 
@@ -384,28 +385,26 @@ class TestMaxFeaturesLimit(TestCase):
         
         # Should limit features returned to exactly the limit
         self.assertEqual(data['feature_count'], 5)
-        # When limit is applied, total_count equals the limited count (we avoid COUNT queries)
-        self.assertEqual(data['total_features_in_bbox'], 5)
+        # Honest matched_count: total matching rows, not the truncated page
+        self.assertEqual(data['total_features_in_bbox'], 20)
         # Verify the limit is in the response
         self.assertEqual(data['max_features_limit'], 5)
 
     @patch('api.views.features.bbox.execution.get_required_setting')
     @patch('api.views.features.bbox.response.get_required_setting')
     @patch('api.views.features.bbox.params.get_required_setting')
-    def test_max_features_unlimited(self, mock_params_setting, mock_response_setting, mock_execution_setting):
-        """Test behavior when limit is -1 (unlimited)."""
-        # Set limit to -1 (unlimited), applied identically across every bbox submodule
-        mock_params_setting.return_value = -1
-        mock_response_setting.return_value = -1
-        mock_execution_setting.return_value = -1
-        
-        # Create many features
+    def test_max_features_high_budget_returns_all(self, mock_params_setting, mock_response_setting, mock_execution_setting):
+        """A budget larger than the match set returns every matching feature."""
+        mock_params_setting.return_value = 5000
+        mock_response_setting.return_value = 5000
+        mock_execution_setting.return_value = 5000
+
         for i in range(50):
             feature_data = {
                 'type': 'Feature',
                 'geometry': {
                     'type': 'Point',
-                    'coordinates': [-122.4194 + i * 0.001, 37.7749 + i * 0.001, 0.0]
+                    'coordinates': [10.0 + i * 0.001, 20.0 + i * 0.001, 0.0]
                 },
                 'properties': {'name': f'Test Point {i}'}
             }
@@ -417,15 +416,14 @@ class TestMaxFeaturesLimit(TestCase):
                              0.0),
                 geojson_hash=generate_geojson_hash(feature_data)
             )
-        
+
         response = self.client.get(
             '/api/geojson/',
-            {'bbox': '-123,37,-121,38', 'zoom': '10'}
+            {'bbox': '9.0,19.0,11.0,21.0', 'zoom': '10'}
         )
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
-        
-        # Should return all features
+
         self.assertEqual(data['feature_count'], 50)
         self.assertEqual(data['total_features_in_bbox'], 50)
 
@@ -456,21 +454,18 @@ class TestCollectionModeWithBbox(TestCase):
                     'tags': ['collection-tag'] if i < 3 else ['other-tag']
                 }
             }
-            FeatureStore.objects.create(
-                user=self.user,
-                geojson=feature_data,
-                geometry=Point(feature_data['geometry']['coordinates'][0],
-                             feature_data['geometry']['coordinates'][1],
-                             0.0),
-                geojson_hash=generate_geojson_hash(feature_data)
+            FeatureService.create(
+                self.user,
+                feature_data,
+                geojson_hash=generate_geojson_hash(feature_data),
             )
 
         # Create collection
         self.collection = Collection.objects.create(
             user=self.user,
             name='Test Collection',
-            tags=['collection-tag']
         )
+        CollectionTagRule.objects.create(collection=self.collection, tag='collection-tag')
 
     def test_bbox_with_collection_parameter(self):
         """Test bbox query with collection parameter."""
@@ -607,3 +602,42 @@ class TestBboxResponseStructure(TestCase):
         # Total in DB: 2. Expected in response: 1.
         self.assertEqual(data['feature_count'], 1)
         self.assertEqual(data['data']['features'][0]['properties']['name'], 'Standard Feature')
+
+
+class TestBboxReadDoesNotMutateStoredGeojson(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_user(
+            email='dto@example.com',
+            password='testpass123',
+            username='dtouser'
+        )
+        self.client.force_login(self.user)
+        feature_data = {
+            'type': 'Feature',
+            'geometry': {
+                'type': 'Point',
+                'coordinates': [10.0, 20.0, 0.0]
+            },
+            'properties': {
+                'name': 'Stored Point'
+            }
+        }
+        self.feature = FeatureStore.objects.create(
+            user=self.user,
+            geojson=feature_data,
+            geometry=Point(10.0, 20.0, 0.0),
+            geojson_hash=generate_geojson_hash(feature_data)
+        )
+
+    def test_bbox_response_does_not_write_database_id_into_store(self):
+        response = self.client.get(
+            '/api/geojson/',
+            {'bbox': '9.0,19.0,11.0,21.0', 'zoom': '10'}
+        )
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertEqual(data['data']['features'][0]['properties']['database_id'], self.feature.id)
+
+        self.feature.refresh_from_db()
+        self.assertNotIn('database_id', self.feature.geojson.get('properties', {}))

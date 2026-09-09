@@ -3,7 +3,7 @@ import sys
 from datetime import timedelta
 from pathlib import Path
 
-from website.extensions.extension_hooks import (
+from website.extensions.capabilities import (
     register_bg_task,
     register_periodic_bg_task,
     register_well_known,

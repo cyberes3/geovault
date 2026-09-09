@@ -12,6 +12,7 @@ from django.db import transaction
 
 from api.models import FeatureStore
 from geo_lib.logging.console import get_tagged_logger
+from geo_lib.tags.tag_writer import SystemTagWriter
 from geo_lib.processing.tagging.modules.reverse_geocoding import ReverseGeocodingTagGenerator
 from geo_lib.types.feature import (
     PointFeature, LineStringFeature, MultiLineStringFeature, PolygonFeature
@@ -98,12 +99,9 @@ def reverse_geocode_feature_async(feature_id: int):
                     return
 
                 geojson.setdefault('properties', {})
-                geojson['properties']['system_tags'] = list(set(geojson['properties'].get('system_tags', []) + reverse_geocoding_tags))
-                # Ensure the hash in properties matches the model field hash
                 geojson['properties']['geojson_hash'] = feature_store.geojson_hash
-
                 feature_store.geojson = geojson
-                feature_store.save(update_fields=['geojson'])
+                SystemTagWriter.replace_geocoding_tags(feature_store, reverse_geocoding_tags)
         except Exception:
             # Log error but don't raise - this is background processing
             _logger.error(f"Error in background reverse geocoding for feature {feature_id}: {traceback.format_exc()}")
