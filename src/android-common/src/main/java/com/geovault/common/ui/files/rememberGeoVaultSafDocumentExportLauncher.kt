@@ -3,7 +3,6 @@ package com.geovault.common.ui.files
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -16,17 +15,36 @@ data class GeoVaultSafExportRequest(
     val suggestedFileName: String,
     val fallbackBaseName: String,
     val extensionWithoutDot: String,
+    val mimeType: String? = null,
 )
 
 @Composable
 fun rememberGeoVaultSafDocumentExportLauncher(
     mimeType: String,
     writeFailedMessage: String = "Export failed",
+    onWriteFailed: ((String) -> Unit)? = null,
+): (GeoVaultSafExportRequest) -> Unit {
+    return rememberGeoVaultSafDocumentExportLauncher(
+        defaultMimeType = mimeType,
+        writeFailedMessage = writeFailedMessage,
+        onWriteFailed = onWriteFailed,
+    )
+}
+
+/**
+ * One SAF create-document launcher that takes MIME from [GeoVaultSafExportRequest.mimeType]
+ * (or [defaultMimeType]) so a host can export several formats without stacked contracts.
+ */
+@Composable
+fun rememberGeoVaultSafDocumentExportLauncher(
+    writeFailedMessage: String = "Export failed",
+    onWriteFailed: ((String) -> Unit)? = null,
+    defaultMimeType: String? = null,
 ): (GeoVaultSafExportRequest) -> Unit {
     val context = LocalContext.current
     var pending by remember { mutableStateOf<GeoVaultSafExportRequest?>(null) }
     val launcher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument(mimeType)
+        GeoVaultCreateDocumentWithMimeContract(),
     ) { uri: Uri? ->
         val request = pending
         pending = null
@@ -42,11 +60,23 @@ fun rememberGeoVaultSafDocumentExportLauncher(
                 extensionWithoutDot = request.extensionWithoutDot,
             )
         }.onFailure {
-            Toast.makeText(context.applicationContext, writeFailedMessage, Toast.LENGTH_LONG).show()
+            val message = writeFailedMessage
+            if (onWriteFailed != null) {
+                onWriteFailed(message)
+            } else {
+                Toast.makeText(context.applicationContext, message, Toast.LENGTH_LONG).show()
+            }
         }
     }
     return { request ->
+        val mime = request.mimeType ?: defaultMimeType
+            ?: error("GeoVaultSafExportRequest.mimeType is required when no default MIME is set")
         pending = request
-        launcher.launch(request.suggestedFileName)
+        launcher.launch(
+            GeoVaultCreateDocumentRequest(
+                suggestedName = request.suggestedFileName,
+                mimeType = mime,
+            ),
+        )
     }
 }

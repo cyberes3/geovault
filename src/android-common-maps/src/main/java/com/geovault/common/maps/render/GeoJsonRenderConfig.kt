@@ -55,6 +55,13 @@ data class GeoJsonRenderConfig(
     val symbolIconStyles: Map<String, MapSymbolIconStyle> = emptyMap(),
     val showPolygonFill: Boolean = true,
     val showPolygonOutline: Boolean = true,
+    /**
+     * How polygon rims are painted when [showPolygonOutline] is true.
+     * [PolygonOutlineStyle.SIMPLE] is the default single [org.maplibre.android.style.layers.LineLayer].
+     * [PolygonOutlineStyle.OUTLINED] is opt-in (survey KML/CAD rims) and uses the same
+     * triple [com.geovault.common.maps.core.OutlinedGeoJsonLineLayers] stack as linework.
+     */
+    val polygonOutlineStyle: PolygonOutlineStyle = PolygonOutlineStyle.SIMPLE,
     val defaultPointRadius: Float = 6f,
     val defaultPointFillColorHex: String = GeoVaultColorTokens.Hex.MapPointDefault,
     val defaultPointStrokeColorHex: String = GeoVaultColorTokens.Hex.Surface,
@@ -120,6 +127,11 @@ data class GeoJsonPointClusteringConfig(
             ),
         )
     }
+}
+
+enum class PolygonOutlineStyle {
+    SIMPLE,
+    OUTLINED,
 }
 
 data class GeoJsonPointClusterCircleStyle(

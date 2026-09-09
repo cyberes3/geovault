@@ -23,4 +23,9 @@ class GeoJsonRenderConfigTest {
     fun overlayPointLabels_defaultToNormalCollisionBehavior() {
         assertFalse(GeoJsonRenderConfig().overlayPointLabelsAllowOverlap)
     }
+
+    @Test
+    fun polygonOutlineStyle_defaultsToSimple() {
+        assertEquals(PolygonOutlineStyle.SIMPLE, GeoJsonRenderConfig().polygonOutlineStyle)
+    }
 }

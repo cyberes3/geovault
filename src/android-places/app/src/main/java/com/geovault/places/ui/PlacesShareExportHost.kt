@@ -9,9 +9,8 @@ import androidx.compose.ui.platform.LocalContext
 import com.geovault.common.files.GeoVaultExportFileNames
 import com.geovault.common.files.GeoVaultFileExport
 import com.geovault.common.ui.GeoVaultAppSnackbarLayer
-import com.geovault.common.ui.components.GeoVaultActionSheetDialog
-import com.geovault.common.ui.components.GeoVaultActionSheetOption
 import com.geovault.common.ui.components.GeoVaultMultiSelectDialog
+import com.geovault.common.ui.components.GeoVaultShareSaveActionSheet
 import com.geovault.common.ui.files.GeoVaultSafExportRequest
 import com.geovault.common.ui.files.rememberGeoVaultSafDocumentExportLauncher
 import com.geovault.common.ui.snackbar.GeoVaultSnackbarModel
@@ -60,44 +59,37 @@ fun PlacesShareExportHost(
 
     if (showActionSheet) {
         val baseName = GeoVaultExportFileNames.timestamped("places_export")
-        GeoVaultActionSheetDialog(
+        GeoVaultShareSaveActionSheet(
             title = "Share places",
-            options = listOf(
-                GeoVaultActionSheetOption(
-                    label = "Share",
-                    onClick = {
-                        showActionSheet = false
-                        val bytes = pendingKmzBytes
-                        pendingKmzBytes = null
-                        if (bytes != null) {
-                            fileExport.shareBytes(
-                                bytes = bytes,
-                                fileName = "$baseName.kmz",
-                                mimeType = KMZ_MIME_TYPE,
-                                chooserTitle = "Share places",
-                            )
-                        }
-                    },
-                ),
-                GeoVaultActionSheetOption(
-                    label = "Save to device",
-                    onClick = {
-                        showActionSheet = false
-                        val bytes = pendingKmzBytes
-                        pendingKmzBytes = null
-                        if (bytes != null) {
-                            launchSaveDocument(
-                                GeoVaultSafExportRequest(
-                                    bytes = bytes,
-                                    suggestedFileName = "$baseName.kmz",
-                                    fallbackBaseName = baseName,
-                                    extensionWithoutDot = "kmz",
-                                )
-                            )
-                        }
-                    },
-                ),
-            ),
+            saveLabel = "Save to device",
+            onShare = {
+                showActionSheet = false
+                val bytes = pendingKmzBytes
+                pendingKmzBytes = null
+                if (bytes != null) {
+                    fileExport.shareBytes(
+                        bytes = bytes,
+                        fileName = "$baseName.kmz",
+                        mimeType = KMZ_MIME_TYPE,
+                        chooserTitle = "Share places",
+                    )
+                }
+            },
+            onSave = {
+                showActionSheet = false
+                val bytes = pendingKmzBytes
+                pendingKmzBytes = null
+                if (bytes != null) {
+                    launchSaveDocument(
+                        GeoVaultSafExportRequest(
+                            bytes = bytes,
+                            suggestedFileName = "$baseName.kmz",
+                            fallbackBaseName = baseName,
+                            extensionWithoutDot = "kmz",
+                        )
+                    )
+                }
+            },
             onDismissRequest = {
                 showActionSheet = false
                 pendingKmzBytes = null

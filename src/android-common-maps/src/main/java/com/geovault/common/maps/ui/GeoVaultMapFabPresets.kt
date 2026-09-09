@@ -3,6 +3,7 @@ package com.geovault.common.maps.ui
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Remove
 import com.geovault.common.maps.core.GeoVaultBaseMap
@@ -70,6 +71,22 @@ fun geoVaultZoomOutFabAction(
                 map.animateCameraWithPadding(CameraUpdateFactory.zoomBy(-1.0))
             }
         },
+    )
+}
+
+fun geoVaultFitAllFabAction(
+    onFitAll: () -> Unit,
+    tooltip: String,
+    id: String = "fit_all",
+    order: Int = 40,
+): GeoVaultMapFabAction {
+    return GeoVaultMapFabAction(
+        id = id,
+        order = order,
+        icon = GeoVaultMapFabIcon.Vector(Icons.Filled.Home),
+        contentDescription = tooltip,
+        tooltip = tooltip,
+        onTap = onFitAll,
     )
 }
 

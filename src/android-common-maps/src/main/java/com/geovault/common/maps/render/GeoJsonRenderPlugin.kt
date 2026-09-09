@@ -385,6 +385,9 @@ class GeoJsonRenderPlugin(
         lineThinLayerId,
         polygonsFillLayerId,
         polygonsOutlineLayerId,
+        polygonsOutlineOuterLayerId,
+        polygonsOutlineBorderLayerId,
+        polygonsOutlineFillLayerId,
     )
 
     private fun rectAround(point: PointF, halfPx: Float): RectF =
@@ -739,14 +742,49 @@ class GeoJsonRenderPlugin(
                 ),
             )
         }
-        if (config.showPolygonOutline && style.getLayer(polygonsOutlineLayerId) == null) {
-            addLayerWithPlacement(
-                style,
-                LineLayer(polygonsOutlineLayerId, polygonsSourceId).withProperties(
-                    PropertyFactory.lineColor(Expression.get("outlineColor")),
-                    PropertyFactory.lineWidth(config.defaultPolygonOutlineWidth),
-                ),
-            )
+        if (config.showPolygonOutline) {
+            when (config.polygonOutlineStyle) {
+                PolygonOutlineStyle.SIMPLE -> {
+                    if (style.getLayer(polygonsOutlineLayerId) == null) {
+                        addLayerWithPlacement(
+                            style,
+                            LineLayer(polygonsOutlineLayerId, polygonsSourceId).withProperties(
+                                PropertyFactory.lineColor(Expression.get("outlineColor")),
+                                PropertyFactory.lineWidth(config.defaultPolygonOutlineWidth),
+                            ),
+                        )
+                    }
+                }
+                PolygonOutlineStyle.OUTLINED -> {
+                    if (style.getLayer(polygonsOutlineOuterLayerId) == null) {
+                        addLayerWithPlacement(
+                            style,
+                            OutlinedGeoJsonLineLayers.createOuterLayer(
+                                layerId = polygonsOutlineOuterLayerId,
+                                sourceId = polygonsSourceId,
+                            ),
+                        )
+                    }
+                    if (style.getLayer(polygonsOutlineBorderLayerId) == null) {
+                        addLayerWithPlacement(
+                            style,
+                            OutlinedGeoJsonLineLayers.createBorderLayer(
+                                layerId = polygonsOutlineBorderLayerId,
+                                sourceId = polygonsSourceId,
+                            ),
+                        )
+                    }
+                    if (style.getLayer(polygonsOutlineFillLayerId) == null) {
+                        addLayerWithPlacement(
+                            style,
+                            OutlinedGeoJsonLineLayers.createFillLayer(
+                                layerId = polygonsOutlineFillLayerId,
+                                sourceId = polygonsSourceId,
+                            ),
+                        )
+                    }
+                }
+            }
         }
         if (pendingPointPresentationLayers.isNotEmpty()) {
             addLayerStackWithPlacement(style, pendingPointPresentationLayers)
@@ -826,7 +864,7 @@ class GeoJsonRenderPlugin(
             linesJson = buildLinesFeatureCollectionJson(state.lines),
             polygonsJson = buildPolygonsFeatureCollectionJson(
                 polygons = state.polygons,
-                emitLineColorProperty = !config.showPolygonOutline,
+                emitLineColorProperty = config.polygonOutlineStyle == PolygonOutlineStyle.OUTLINED,
             ),
             markerImageIds = state.points.mapNotNull { it.iconImageId }.toSet(),
         )
@@ -997,6 +1035,9 @@ class GeoJsonRenderPlugin(
     private val lineThinLayerId = "$sourceIdPrefix-lines-thin-layer"
     private val polygonsFillLayerId = "$sourceIdPrefix-polygons-fill-layer"
     private val polygonsOutlineLayerId = "$sourceIdPrefix-polygons-outline-layer"
+    private val polygonsOutlineOuterLayerId = polygonsOutlineOuterLayerId(sourceIdPrefix)
+    private val polygonsOutlineBorderLayerId = polygonsOutlineBorderLayerId(sourceIdPrefix)
+    private val polygonsOutlineFillLayerId = polygonsOutlineFillLayerId(sourceIdPrefix)
 
     companion object {
         private const val PROPERTY_CLUSTER: String = "cluster"
@@ -1042,6 +1083,15 @@ class GeoJsonRenderPlugin(
 
         fun polygonsOutlineLayerId(sourceIdPrefix: String): String = "$sourceIdPrefix-polygons-outline-layer"
 
+        fun polygonsOutlineOuterLayerId(sourceIdPrefix: String): String =
+            "$sourceIdPrefix-polygons-outline-outer-layer"
+
+        fun polygonsOutlineBorderLayerId(sourceIdPrefix: String): String =
+            "$sourceIdPrefix-polygons-outline-border-layer"
+
+        fun polygonsOutlineFillLayerId(sourceIdPrefix: String): String =
+            "$sourceIdPrefix-polygons-outline-fill-layer"
+
         fun pointHitLayerIds(sourceIdPrefix: String): List<String> = listOf(
             pointsOverlayIconLayerId(sourceIdPrefix),
             pointsIconLayerId(sourceIdPrefix),
@@ -1058,6 +1108,9 @@ class GeoJsonRenderPlugin(
             lineThinLayerId(sourceIdPrefix),
             polygonsFillLayerId(sourceIdPrefix),
             polygonsOutlineLayerId(sourceIdPrefix),
+            polygonsOutlineOuterLayerId(sourceIdPrefix),
+            polygonsOutlineBorderLayerId(sourceIdPrefix),
+            polygonsOutlineFillLayerId(sourceIdPrefix),
         )
 
         fun pointClusterCircleLayerId(sourceIdPrefix: String, index: Int): String =

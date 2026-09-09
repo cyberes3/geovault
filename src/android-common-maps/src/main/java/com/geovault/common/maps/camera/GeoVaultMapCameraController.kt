@@ -5,6 +5,7 @@ import com.geovault.common.maps.core.animateCameraToFitLatLngBounds
 import com.geovault.common.maps.core.geoVaultCenterCameraPreserveZoom
 import com.geovault.common.maps.core.geoVaultLatLngBoundsForPoints
 import com.geovault.common.maps.core.moveCameraToFitLatLngBounds
+import com.geovault.common.maps.geojson.GeoJsonGeometryVertices
 import com.geovault.common.maps.render.MapRenderState
 import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.camera.CameraUpdateFactory
@@ -46,6 +47,29 @@ class GeoVaultMapCameraController(
         animate: Boolean = true,
     ) {
         fitPoints(renderStatePoints(renderState), paddingPx, animate)
+    }
+
+    fun fitGeometryJson(
+        geometryJson: String?,
+        paddingPx: IntArray,
+        animate: Boolean = true,
+        singlePointZoom: Double = LIST_INITIAL_FOCUS_ZOOM,
+    ): Boolean {
+        val points = GeoJsonGeometryVertices.latLngs(geometryJson)
+        return if (animate) {
+            fitPoints(
+                points = points,
+                paddingPx = paddingPx,
+                animate = true,
+                singlePointZoom = singlePointZoom,
+            )
+        } else {
+            snapFitPoints(
+                points = points,
+                paddingPx = paddingPx,
+                singlePointZoom = singlePointZoom,
+            )
+        }
     }
 
     fun snapFitPoints(
