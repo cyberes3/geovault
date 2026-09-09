@@ -57,6 +57,26 @@ class GeoVaultMapPaddingPolicy(
             viewport[3].roundToInt().coerceAtLeast(0),
         )
     }
+
+    companion object {
+        /**
+         * FAB-column padding plus the live bottom-drawer height and a small visual gap so
+         * fitted content sits above the sheet rather than under the drag handle.
+         */
+        fun forBottomDrawer(
+            density: Density,
+            drawerVisibleHeightPx: Int,
+            extraBottomDp: Dp,
+        ): GeoVaultMapPaddingPolicy {
+            val drawerDp = with(density) { drawerVisibleHeightPx.toDp() }
+            return GeoVaultMapPaddingPolicy(
+                includeDefaultFabColumnPadding = true,
+                mapPaddingDp = GeoVaultMapPaddingDp(
+                    bottom = drawerDp + extraBottomDp,
+                ),
+            )
+        }
+    }
 }
 
 internal val DEFAULT_GEO_VAULT_MAP_PADDING_POLICY = GeoVaultMapPaddingPolicy(

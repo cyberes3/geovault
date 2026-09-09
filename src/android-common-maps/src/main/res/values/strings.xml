@@ -1,9 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="gv_common_map_toggle_content_description">Change the map style or layers you use for this view.</string>
-    <string name="gv_common_geocode_search_dialog_title">Search location</string>
-    <string name="gv_common_geocode_search_placeholder">Search address or place</string>
-    <string name="gv_common_geocode_search_empty_no_results">No results found</string>
+    <string name="gv_common_geocode_search_dialog_title">Search</string>
+    <string name="gv_common_geocode_search_placeholder">Search Address or Place</string>
+    <string name="gv_common_geocode_search_empty_no_results">No Results Found</string>
+    <string name="gv_common_geocode_search_error">Could Not Search Places. Try Again.</string>
+    <string name="gv_common_geocode_search_local_section">Results</string>
+    <string name="gv_common_geocode_search_places_section">Places</string>
     <string name="gv_common_geocode_search_done">Done</string>
     <string name="gv_common_map_drawer_search_content_description">Search map</string>
     <string name="gv_common_map_drawer_search_tooltip">Search for an address or place to move the map.</string>

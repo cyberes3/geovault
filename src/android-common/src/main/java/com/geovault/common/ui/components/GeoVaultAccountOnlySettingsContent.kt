@@ -31,6 +31,7 @@ fun GeoVaultAccountOnlySettingsContent(
     serverBlockTitle: String? = null,
     disconnectButtonText: String? = null,
     disconnectButtonTooltip: String? = null,
+    trailingContent: (@Composable ColumnScope.() -> Unit)? = null,
 ) {
     Column(
         modifier = modifier
@@ -56,5 +57,8 @@ fun GeoVaultAccountOnlySettingsContent(
             disconnectButtonText = disconnectButtonText,
             disconnectButtonTooltip = disconnectButtonTooltip,
         )
+        if (trailingContent != null) {
+            trailingContent()
+        }
     }
 }

@@ -35,6 +35,24 @@ class GeoVaultLatLngBoundsTest {
     }
 
     @Test
+    fun geoVaultLatLngBoundsForPoints_datelineShortArc() {
+        val bounds = geoVaultLatLngBoundsForPoints(
+            listOf(
+                LatLng(0.0, -170.0),
+                LatLng(1.0, 145.0),
+                LatLng(-2.0, -170.5),
+            ),
+        )
+        assertNotNull(bounds)
+        val span = if (bounds!!.longitudeEast >= bounds.longitudeWest) {
+            bounds.longitudeEast - bounds.longitudeWest
+        } else {
+            (180.0 - bounds.longitudeWest) + (bounds.longitudeEast + 180.0)
+        }
+        assertTrue("expected short dateline arc (<90°), was $span", span < 90.0)
+    }
+
+    @Test
     fun geoVaultLatLngBoundsForPoints_twoNearbyPoints_matchesBuilder() {
         val a = LatLng(40.0, -120.0)
         val b = LatLng(41.0, -121.0)

@@ -108,6 +108,16 @@ class GeoJsonRenderPlugin(
         }
 
     var onRenderedMapBackgroundTapped: (() -> Boolean)? = null
+        set(value) {
+            field = value
+            updateTapListenerRegistration()
+        }
+
+    /**
+     * Optional wrapper around cluster-expansion camera moves so hosts can pause follow
+     * (e.g. [com.geovault.common.maps.ui.camerafollow.GeoVaultMapHeadingFollowFabBundle.runProgrammaticCamera]).
+     */
+    var wrapProgrammaticCamera: ((block: () -> Unit) -> Unit)? = null
 
     var renderedMapTapHitKinds: Set<GeoVaultRenderedMapHitKind> =
         setOf(GeoVaultRenderedMapHitKind.Point, GeoVaultRenderedMapHitKind.Overlay)
@@ -152,6 +162,7 @@ class GeoJsonRenderPlugin(
         renderExecutor.shutdownNow()
         onRenderedMapHitSelected = null
         onRenderedMapBackgroundTapped = null
+        wrapProgrammaticCamera = null
     }
 
     override fun onStyleLoaded(map: MapLibreMap, style: Style) {
@@ -170,9 +181,15 @@ class GeoJsonRenderPlugin(
         activePopup = null
     }
 
+    private fun shouldAttachTapListener(): Boolean {
+        return onRenderedMapHitSelected != null ||
+            onRenderedMapBackgroundTapped != null ||
+            config.pointClustering != null
+    }
+
     private fun updateTapListenerRegistration() {
         val attachedMap = map ?: return
-        if (onRenderedMapHitSelected == null) {
+        if (!shouldAttachTapListener()) {
             detachTapListener()
             return
         }
@@ -225,9 +242,54 @@ class GeoJsonRenderPlugin(
             }
         }
 
+        if (tryExpandCluster(attachedMap, screenPoint, density)) {
+            return true
+        }
+
         activePopup?.dismiss()
         activePopup = null
         return onRenderedMapBackgroundTapped?.invoke() ?: false
+    }
+
+    private fun tryExpandCluster(
+        mapLibreMap: MapLibreMap,
+        screenPoint: PointF,
+        density: Float,
+    ): Boolean {
+        val clustering = config.pointClustering ?: return false
+        val clusterLayerIds = pointClusterLayerIds(sourceIdPrefix, clustering)
+        val halfPx = (CLUSTER_TOLERANCE_DP * density) / 2f
+        val clusterFeatures = runCatching {
+            mapLibreMap.queryRenderedFeatures(
+                rectAround(screenPoint, halfPx),
+                *clusterLayerIds.toTypedArray(),
+            )
+        }.getOrElse { emptyList() }
+        val cluster = clusterFeatures.firstOrNull() ?: return false
+        val source = mapLibreMap.style
+            ?.getSourceAs<GeoJsonSource>(pointsSourceId)
+            ?: return true
+        val zoomDelta = runCatching {
+            source.getClusterExpansionZoom(cluster).toDouble() -
+                mapLibreMap.cameraPosition.zoom +
+                CLUSTER_EXPANSION_ZOOM_PADDING
+        }.getOrNull() ?: return true
+        val clickPoint = android.graphics.Point(screenPoint.x.toInt(), screenPoint.y.toInt())
+        val expand = {
+            mapLibreMap.animateCamera(
+                org.maplibre.android.camera.CameraUpdateFactory.zoomBy(
+                    maxOf(zoomDelta, MIN_CLUSTER_ZOOM_DELTA),
+                    clickPoint,
+                ),
+            )
+        }
+        val wrap = wrapProgrammaticCamera
+        if (wrap != null) {
+            wrap(expand)
+        } else {
+            expand()
+        }
+        return true
     }
 
     private fun dispatchRenderedHitResolution(
@@ -939,6 +1001,9 @@ class GeoJsonRenderPlugin(
     companion object {
         private const val PROPERTY_CLUSTER: String = "cluster"
         private const val PROPERTY_POINT_COUNT: String = "point_count"
+        private const val CLUSTER_TOLERANCE_DP: Float = 44f
+        private const val CLUSTER_EXPANSION_ZOOM_PADDING: Double = 0.25
+        private const val MIN_CLUSTER_ZOOM_DELTA: Double = 0.5
 
         fun pointsSourceId(sourceIdPrefix: String): String = "$sourceIdPrefix-points-source"
 

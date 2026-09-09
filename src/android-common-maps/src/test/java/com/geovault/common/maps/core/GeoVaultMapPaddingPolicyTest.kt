@@ -64,4 +64,18 @@ class GeoVaultMapPaddingPolicyTest {
 
         assertArrayEquals(doubleArrayOf(20.0, 10.0, 14.0, 6.0), px, 0.001)
     }
+
+    @Test
+    fun forBottomDrawer_addsDrawerHeightAndExtraBottom() {
+        val density = Density(2f)
+        val policy = GeoVaultMapPaddingPolicy.forBottomDrawer(
+            density = density,
+            drawerVisibleHeightPx = 100,
+            extraBottomDp = 8.dp,
+        )
+
+        val boundsPx = policy.computeBoundsFitPaddingPx(density)
+
+        assertArrayEquals(intArrayOf(48, 32, 176, 148), boundsPx)
+    }
 }

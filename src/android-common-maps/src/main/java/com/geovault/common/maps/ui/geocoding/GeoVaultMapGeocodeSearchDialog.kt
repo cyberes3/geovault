@@ -11,11 +11,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.AlertDialog
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.Divider
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
-import androidx.compose.material.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -33,19 +32,26 @@ import androidx.compose.ui.unit.dp
 import com.geovault.common.maps.R
 import com.geovault.common.maps.geocoding.GeocodeSearchResult
 import com.geovault.common.maps.geocoding.GeocodingRepository
+import com.geovault.common.ui.components.GeoVaultFormDialog
 import com.geovault.common.ui.components.GeoVaultLoadingSpinner
 import com.geovault.common.ui.components.GeoVaultSearchField
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.common.ui.theme.geoVaultContentSecondaryColor
-import com.geovault.common.ui.theme.geoVaultDialogAccentButtonColor
-import com.geovault.common.ui.theme.geoVaultDialogSurfaceColor
-import com.geovault.common.ui.theme.geoVaultDialogTitleColor
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
+
+data class GeoVaultMapSearchLocalResult(
+    val id: String,
+    val title: String,
+    val subtitle: String? = null,
+)
 
 /**
- * Modal search over the server geocoding API: debounced query, list of top results, pick to dismiss.
+ * Modal search over optional local results plus the server geocoding API.
  *
- * Search state lives inside the dialog; callers supply [repository] and handle [onPickResult].
+ * Local search runs on [Dispatchers.Default]. Geocode failures are shown as an error, not
+ * as an empty-results list.
  */
 @Composable
 fun GeoVaultMapGeocodeSearchDialog(
@@ -54,135 +60,281 @@ fun GeoVaultMapGeocodeSearchDialog(
     onDismissRequest: () -> Unit,
     onPickResult: (GeocodeSearchResult) -> Unit,
     modifier: Modifier = Modifier,
+    title: String? = null,
+    placeholder: String? = null,
+    localSectionTitle: String? = null,
+    searchLocal: (suspend (String) -> List<GeoVaultMapSearchLocalResult>)? = null,
+    localSearchGeneration: Any? = null,
+    onPickLocal: ((GeoVaultMapSearchLocalResult) -> Unit)? = null,
 ) {
     if (!visible) return
 
     var query by remember { mutableStateOf("") }
-    var results by remember { mutableStateOf<List<GeocodeSearchResult>>(emptyList()) }
-    var isSearching by remember { mutableStateOf(false) }
+    var localResults by remember { mutableStateOf<List<GeoVaultMapSearchLocalResult>>(emptyList()) }
+    var geocodeResults by remember { mutableStateOf<List<GeocodeSearchResult>>(emptyList()) }
+    var geocodeError by remember { mutableStateOf(false) }
+    var isSearchingLocal by remember { mutableStateOf(false) }
+    var isSearchingGeocode by remember { mutableStateOf(false) }
     val searchFieldFocusRequester = remember { FocusRequester() }
+    val dialogTitle = title ?: stringResource(R.string.gv_common_geocode_search_dialog_title)
+    val searchPlaceholder = placeholder
+        ?: stringResource(R.string.gv_common_geocode_search_placeholder)
+    val placesTitle = stringResource(R.string.gv_common_geocode_search_places_section)
+    val resolvedLocalTitle = localSectionTitle
+        ?: stringResource(R.string.gv_common_geocode_search_local_section)
 
     LaunchedEffect(visible) {
         if (visible) {
             query = ""
-            results = emptyList()
-            isSearching = false
-            // Wait one frame so the field is laid out and attached before requesting focus —
-            // requesting on the same frame the dialog mounts silently no-ops on the IME.
+            localResults = emptyList()
+            geocodeResults = emptyList()
+            geocodeError = false
+            isSearchingLocal = false
+            isSearchingGeocode = false
             withFrameNanos { }
             searchFieldFocusRequester.requestFocus()
         }
+    }
+
+    LaunchedEffect(query, visible, localSearchGeneration, searchLocal) {
+        if (!visible) return@LaunchedEffect
+        val trimmed = query.trim()
+        if (trimmed.isEmpty()) {
+            localResults = emptyList()
+            isSearchingLocal = false
+            return@LaunchedEffect
+        }
+        val localSearch = searchLocal ?: run {
+            localResults = emptyList()
+            isSearchingLocal = false
+            return@LaunchedEffect
+        }
+        delay(280)
+        if (query.trim() != trimmed) return@LaunchedEffect
+        isSearchingLocal = true
+        val found = withContext(Dispatchers.Default) { localSearch(trimmed) }
+        if (query.trim() != trimmed) {
+            isSearchingLocal = false
+            return@LaunchedEffect
+        }
+        localResults = found
+        isSearchingLocal = false
     }
 
     LaunchedEffect(query, visible) {
         if (!visible) return@LaunchedEffect
         val trimmed = query.trim()
         if (trimmed.isEmpty()) {
-            results = emptyList()
-            isSearching = false
+            geocodeResults = emptyList()
+            geocodeError = false
+            isSearchingGeocode = false
             return@LaunchedEffect
         }
         delay(280)
         if (query.trim() != trimmed) return@LaunchedEffect
-        isSearching = true
+        isSearchingGeocode = true
+        geocodeError = false
         val response = repository.search(trimmed)
         if (query.trim() != trimmed) {
-            isSearching = false
+            isSearchingGeocode = false
             return@LaunchedEffect
         }
-        results = response.getOrElse { emptyList() }
-        isSearching = false
+        response.fold(
+            onSuccess = { found ->
+                geocodeResults = found
+                geocodeError = false
+            },
+            onFailure = {
+                geocodeResults = emptyList()
+                geocodeError = true
+            },
+        )
+        isSearchingGeocode = false
     }
 
-    AlertDialog(
+    GeoVaultFormDialog(
         modifier = modifier,
+        title = dialogTitle,
+        onConfirm = onDismissRequest,
         onDismissRequest = onDismissRequest,
-        backgroundColor = geoVaultDialogSurfaceColor(),
-        title = {
-            Text(
-                text = stringResource(R.string.gv_common_geocode_search_dialog_title),
-                style = MaterialTheme.typography.subtitle1.copy(fontWeight = FontWeight.Bold),
-                color = geoVaultDialogTitleColor(),
-            )
-        },
-        text = {
-            // Fixed-height container so the dialog reserves space for results from the moment
-            // it opens — keyboard appearing + first results no longer cause it to grow/shift.
-            Column(
+        confirmText = stringResource(R.string.gv_common_geocode_search_done),
+        showDismissButton = false,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(360.dp),
+        ) {
+            GeoVaultSearchField(
+                value = query,
+                onValueChange = { query = it },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(360.dp),
-            ) {
-                GeoVaultSearchField(
-                    value = query,
-                    onValueChange = { query = it },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .focusRequester(searchFieldFocusRequester),
-                    placeholder = stringResource(R.string.gv_common_geocode_search_placeholder),
-                )
-                Box(modifier = Modifier.fillMaxSize()) {
-                    when {
-                        isSearching -> {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(top = 16.dp),
-                                horizontalArrangement = Arrangement.Center,
-                            ) {
-                                GeoVaultLoadingSpinner(spinnerSize = 18.dp)
-                            }
+                    .focusRequester(searchFieldFocusRequester),
+                placeholder = searchPlaceholder,
+            )
+            Box(modifier = Modifier.fillMaxSize()) {
+                val trimmedQuery = query.trim()
+                val hasAnyResults = localResults.isNotEmpty() || geocodeResults.isNotEmpty()
+                val isSearching = isSearchingLocal || isSearchingGeocode
+                when {
+                    trimmedQuery.isEmpty() -> Unit
+                    !hasAnyResults && isSearching -> {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 16.dp),
+                            horizontalArrangement = Arrangement.Center,
+                        ) {
+                            GeoVaultLoadingSpinner(spinnerSize = 18.dp)
                         }
-                        query.trim().isEmpty() -> Unit
-                        results.isEmpty() -> {
-                            Text(
-                                text = stringResource(R.string.gv_common_geocode_search_empty_no_results),
-                                style = MaterialTheme.typography.body2,
-                                color = geoVaultContentSecondaryColor(),
-                                modifier = Modifier.padding(top = 12.dp),
-                            )
-                        }
-                        else -> {
-                            LazyColumn(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(top = 8.dp),
-                            ) {
+                    }
+                    !hasAnyResults && geocodeError -> {
+                        Text(
+                            text = stringResource(R.string.gv_common_geocode_search_error),
+                            style = MaterialTheme.typography.body2,
+                            color = geoVaultContentSecondaryColor(),
+                            modifier = Modifier.padding(top = 12.dp),
+                        )
+                    }
+                    !hasAnyResults -> {
+                        Text(
+                            text = stringResource(R.string.gv_common_geocode_search_empty_no_results),
+                            style = MaterialTheme.typography.body2,
+                            color = geoVaultContentSecondaryColor(),
+                            modifier = Modifier.padding(top = 12.dp),
+                        )
+                    }
+                    else -> {
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(top = 8.dp),
+                        ) {
+                            if (localResults.isNotEmpty()) {
+                                item("local-header") {
+                                    SearchSectionHeader(resolvedLocalTitle)
+                                }
                                 items(
-                                    count = results.size,
-                                    key = { index -> index },
-                                ) { index ->
-                                    val item = results[index]
-                                    GeoVaultGeocodeSearchResultRow(
+                                    items = localResults,
+                                    key = { item -> "local:${item.id}" },
+                                ) { item ->
+                                    GeoVaultMapSearchLocalResultRow(
                                         result = item,
                                         onClick = {
-                                            onPickResult(item)
+                                            onPickLocal?.invoke(item)
                                             onDismissRequest()
                                         },
                                     )
-                                    Divider(
-                                        color = if (MaterialTheme.colors.isLight) {
-                                            GeoVaultColorTokens.BorderLight
-                                        } else {
-                                            GeoVaultColorTokens.Dark.BorderLight
+                                    SearchResultDivider()
+                                }
+                            }
+                            if (geocodeResults.isNotEmpty()) {
+                                item("places-header") {
+                                    SearchSectionHeader(
+                                        text = placesTitle,
+                                        topPadding = if (localResults.isNotEmpty()) 12.dp else 0.dp,
+                                    )
+                                }
+                                itemsIndexed(
+                                    items = geocodeResults,
+                                    key = { index, result ->
+                                        "place:$index:${result.place_name ?: result.text}"
+                                    },
+                                ) { _, result ->
+                                    GeoVaultGeocodeSearchResultRow(
+                                        result = result,
+                                        onClick = {
+                                            onPickResult(result)
+                                            onDismissRequest()
                                         },
                                     )
+                                    SearchResultDivider()
+                                }
+                            }
+                            if (geocodeError && geocodeResults.isEmpty()) {
+                                item("places-error") {
+                                    Text(
+                                        text = stringResource(R.string.gv_common_geocode_search_error),
+                                        style = MaterialTheme.typography.body2,
+                                        color = geoVaultContentSecondaryColor(),
+                                        modifier = Modifier.padding(top = 12.dp),
+                                    )
+                                }
+                            } else if (isSearchingGeocode && geocodeResults.isEmpty()) {
+                                item("places-spinner") {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(top = 12.dp),
+                                        horizontalArrangement = Arrangement.Center,
+                                    ) {
+                                        GeoVaultLoadingSpinner(spinnerSize = 16.dp)
+                                    }
                                 }
                             }
                         }
                     }
                 }
             }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismissRequest) {
-                Text(
-                    text = stringResource(R.string.gv_common_geocode_search_done),
-                    color = geoVaultDialogAccentButtonColor(),
-                )
-            }
+        }
+    }
+}
+
+@Composable
+private fun SearchSectionHeader(
+    text: String,
+    topPadding: androidx.compose.ui.unit.Dp = 0.dp,
+) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.caption.copy(fontWeight = FontWeight.Bold),
+        color = geoVaultContentSecondaryColor(),
+        modifier = Modifier.padding(top = topPadding, bottom = 4.dp),
+    )
+}
+
+@Composable
+private fun SearchResultDivider() {
+    Divider(
+        color = if (MaterialTheme.colors.isLight) {
+            GeoVaultColorTokens.BorderLight
+        } else {
+            GeoVaultColorTokens.Dark.BorderLight
         },
     )
+}
+
+@Composable
+fun GeoVaultMapSearchLocalResultRow(
+    result: GeoVaultMapSearchLocalResult,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 4.dp, vertical = 10.dp),
+    ) {
+        Text(
+            text = result.title,
+            style = MaterialTheme.typography.body1.copy(fontWeight = FontWeight.SemiBold),
+            color = MaterialTheme.colors.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        if (!result.subtitle.isNullOrBlank()) {
+            Text(
+                text = result.subtitle,
+                style = MaterialTheme.typography.body2,
+                color = geoVaultContentSecondaryColor(),
+                modifier = Modifier.padding(top = 2.dp),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
 }
 
 @Composable

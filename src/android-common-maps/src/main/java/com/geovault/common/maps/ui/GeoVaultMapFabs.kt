@@ -93,6 +93,30 @@ class GeoVaultMapFabBuilder {
     }
 
     fun build(): List<GeoVaultMapFabAction> = actions.sortedBy { it.order }
+
+    /**
+     * Re-emits a preset [GeoVaultMapFabAction], optionally overriding order and enabled.
+     */
+    fun forward(
+        preset: GeoVaultMapFabAction,
+        orderOverride: Int? = null,
+        enabled: Boolean = preset.enabled,
+    ): GeoVaultMapFabBuilder {
+        return action(
+            id = preset.id,
+            order = orderOverride ?: preset.order,
+            icon = preset.icon,
+            contentDescription = preset.contentDescription,
+            enabled = enabled,
+            emphasized = preset.emphasized,
+            backgroundColor = preset.backgroundColor,
+            contentColor = preset.contentColor,
+            onTap = preset.onTap,
+            tooltip = preset.tooltip,
+            iconRotationDegrees = preset.iconRotationDegrees,
+            useIntrinsicIconColors = preset.useIntrinsicIconColors,
+        )
+    }
 }
 
 fun buildGeoVaultMapFabActions(block: GeoVaultMapFabBuilder.() -> Unit): List<GeoVaultMapFabAction> {

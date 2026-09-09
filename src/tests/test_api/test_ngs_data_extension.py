@@ -1,8 +1,11 @@
 """
 Tests for the ngs_data extension (NGS per-region SQLite download).
 """
+import hashlib
+import importlib.util
 import json
 import os
+import sqlite3
 import tempfile
 import zipfile
 from datetime import datetime, timezone
@@ -121,6 +124,7 @@ class TestNgsDataExtensionAPI(TestCase):
         from extensions.ngs_data.src.backend import views as ngs_views
 
         payload = b"sqlite-bytes-here"
+        digest = hashlib.sha256(payload).hexdigest()
         with tempfile.TemporaryDirectory() as tmp:
             fpath = os.path.join(tmp, "CA.sqlite")
             with open(fpath, "wb") as f:
@@ -133,20 +137,46 @@ class TestNgsDataExtensionAPI(TestCase):
         data = json.loads(response.content)
         dbs = data.get("databases")
         self.assertEqual(len(dbs), 1)
-        self.assertEqual(
-            dbs[0],
-            {
-                "id": "CA",
-                "display_name": "California",
-                "size_bytes": len(payload),
-            },
-        )
+        self.assertEqual(dbs[0]["id"], "CA")
+        self.assertEqual(dbs[0]["display_name"], "California")
+        self.assertEqual(dbs[0]["size_bytes"], len(payload))
+        self.assertEqual(dbs[0]["sha256"], digest)
+        self.assertEqual(dbs[0]["schema_version"], 0)
+        self.assertTrue(dbs[0]["generated_at"])
         self.assertEqual(
             response["CDN-Cache-Control"],
             f"public, max-age={ngs_views._NGS_CATALOG_CDN_CACHE_MAX_AGE_SECONDS}",
         )
         self.assertEqual(response["Cache-Control"], "private, max-age=0")
         self.assertEqual(response["Vary"], "Authorization, Cookie")
+
+    def test_catalog_reads_sqlite_schema_and_generated_at(self):
+        from extensions.ngs_data.src.backend import views as ngs_views
+
+        generated_at = "2026-01-02T03:04:05+00:00"
+        with tempfile.TemporaryDirectory() as tmp:
+            fpath = Path(tmp) / "CA.sqlite"
+            conn = sqlite3.connect(fpath)
+            conn.execute("PRAGMA user_version = 1")
+            conn.execute(
+                "CREATE TABLE ngs_meta (key TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL)"
+            )
+            conn.execute(
+                "INSERT INTO ngs_meta (key, value) VALUES (?, ?)",
+                ("generated_at", generated_at),
+            )
+            conn.commit()
+            conn.close()
+            digest = hashlib.sha256(fpath.read_bytes()).hexdigest()
+            with _patch_ngs_data_enabled(), patch.object(
+                ngs_views, "_ngs_data_dir", return_value=Path(tmp)
+            ):
+                response = self.client.get("/api/extensions/ngs-data/catalog/")
+        self.assertEqual(response.status_code, 200)
+        entry = json.loads(response.content)["databases"][0]
+        self.assertEqual(entry["sha256"], digest)
+        self.assertEqual(entry["schema_version"], 1)
+        self.assertEqual(entry["generated_at"], generated_at)
 
     def test_catalog_second_request_uses_server_cache(self):
         from extensions.ngs_data.src.backend import views as ngs_views
@@ -157,7 +187,7 @@ class TestNgsDataExtensionAPI(TestCase):
             with open(fpath, "wb") as f:
                 f.write(payload)
             p = Path(tmp)
-            cache_key = f"{ngs_views._NGS_CATALOG_CACHE_PREFIX}:{p.resolve()}"
+            cache_key = ngs_views.catalog_cache_key(p)
             cache.delete(cache_key)
             try:
                 with _patch_ngs_data_enabled(), patch.object(
@@ -172,6 +202,24 @@ class TestNgsDataExtensionAPI(TestCase):
         self.assertEqual(r1.status_code, 200)
         self.assertEqual(r2.status_code, 200)
         self.assertEqual(json.loads(r1.content), json.loads(r2.content))
+
+    def test_catalog_cache_key_changes_when_file_changes(self):
+        from extensions.ngs_data.src.backend import views as ngs_views
+
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp)
+            fpath = p / "CA.sqlite"
+            fpath.write_bytes(b"one")
+            first_key = ngs_views.catalog_cache_key(p)
+            fpath.write_bytes(b"two-changed")
+            second_key = ngs_views.catalog_cache_key(p)
+        self.assertNotEqual(first_key, second_key)
+
+    def test_catalog_cache_ttl_is_hours_not_years(self):
+        from extensions.ngs_data.src.backend import views as ngs_views
+
+        self.assertGreaterEqual(ngs_views._NGS_CATALOG_CACHE_TIMEOUT_SECONDS, 60 * 60)
+        self.assertLessEqual(ngs_views._NGS_CATALOG_CACHE_TIMEOUT_SECONDS, 60 * 60 * 24)
 
     def test_datasheet_unauthenticated_401(self):
         self.client.logout()
@@ -463,3 +511,100 @@ class TestNgsDatasheetImport(TestCase):
             "created=1 updated=2 skipped=3 invalid_blocks=4 processed=5",
             out.getvalue(),
         )
+
+
+def _load_server_module(name: str, relative_path: str):
+    from extensions.ngs_data.src.backend.region_files import CONTRACT_PATH
+
+    path = CONTRACT_PATH.parents[1] / relative_path
+    spec = importlib.util.spec_from_file_location(name, path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Cannot load {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+class TestNgsRegionContract(TestCase):
+    def test_annex_a_display_names(self):
+        from extensions.ngs_data.src.backend.region_files import display_name_for
+
+        self.assertEqual(display_name_for("HA"), "Haiti")
+        self.assertEqual(display_name_for("HI"), "Hawaii")
+        self.assertEqual(display_name_for("VI"), "British Virgin Islands")
+        self.assertEqual(display_name_for("VQ"), "U.S. Virgin Islands")
+        self.assertEqual(display_name_for("MQ"), "Midway Islands")
+        self.assertEqual(display_name_for("AA"), "Aruba")
+        self.assertEqual(display_name_for("CQ"), "Northern Mariana Islands")
+        self.assertEqual(display_name_for("ML"), "Marshall Islands")
+        self.assertEqual(display_name_for("U1"), "Offshore CORS")
+
+    def test_python_allowlist_matches_contract_and_kotlin(self):
+        from extensions.ngs_data.src.backend.region_files import (
+            ALLOWED_REGION_KEYS,
+            REGION_DISPLAY_NAMES,
+        )
+
+        keys_mod = _load_server_module("generate_ngs_region_keys", "generate-ngs-region-keys.py")
+        contract_keys = set(keys_mod.load_region_keys())
+        self.assertEqual(set(ALLOWED_REGION_KEYS), contract_keys)
+        self.assertEqual(set(REGION_DISPLAY_NAMES), contract_keys)
+        kotlin_source = keys_mod.KOTLIN_PATH.read_text(encoding="utf-8")
+        self.assertIn("Generated from server/ngs_data/region_contract.json", kotlin_source)
+        self.assertEqual(keys_mod.parse_kotlin_region_keys(kotlin_source), contract_keys)
+        self.assertEqual(keys_mod.render_ngs_region_keys_kotlin(sorted(contract_keys)), kotlin_source)
+
+    def test_pid_and_region_acceptance(self):
+        from extensions.ngs_data.src.backend.region_files import (
+            accepted_region_key,
+            is_valid_ngs_pid,
+        )
+
+        self.assertTrue(is_valid_ngs_pid("AB1234"))
+        self.assertFalse(is_valid_ngs_pid("ab1234"))
+        self.assertFalse(is_valid_ngs_pid("AB123"))
+        self.assertFalse(is_valid_ngs_pid("ABC123"))
+        self.assertEqual(accepted_region_key("ca"), "CA")
+        self.assertEqual(accepted_region_key("_UNKNOWN"), "")
+        self.assertEqual(accepted_region_key("ZZ"), "")
+        self.assertEqual(accepted_region_key(""), "")
+
+
+class TestNgsRegionGenerator(TestCase):
+    def test_derived_columns_do_not_invent_good_or_not_destroyed(self):
+        gen = _load_server_module("generate_ngs_regions", "generate-ngs-regions.py")
+        poor = gen.derived_station_columns({"LAST_COND": "POOR"})
+        blank = gen.derived_station_columns({"LAST_COND": "  "})
+        missing = gen.derived_station_columns({})
+        destroyed = gen.derived_station_columns({"LAST_COND": "DESTROYED"})
+        self.assertEqual(poor[0], "POOR")
+        self.assertEqual(poor[1], "P")
+        self.assertIsNone(poor[-1])
+        self.assertIsNone(blank[0])
+        self.assertIsNone(blank[1])
+        self.assertIsNone(blank[-1])
+        self.assertIsNone(missing[1])
+        self.assertIsNone(missing[-1])
+        self.assertEqual(destroyed[1], "X")
+        self.assertEqual(destroyed[-1], 1)
+        self.assertIsNone(gen.recovery_code_from_last_cond(None))
+        self.assertIsNone(gen.recovery_code_from_last_cond("MONUMENTED"))
+        self.assertEqual(gen.recovery_code_from_last_cond("GOOD"), "G")
+
+    def test_ensure_db_sets_user_version_and_generated_at(self):
+        from extensions.ngs_data.src.backend.region_files import SQLITE_SCHEMA_VERSION
+
+        gen = _load_server_module("generate_ngs_regions", "generate-ngs-regions.py")
+        generated_at = "2026-03-04T05:06:07+00:00"
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "CA.sqlite"
+            conn = sqlite3.connect(path)
+            gen.ensure_db(conn)
+            gen.stamp_db_meta(conn, generated_at)
+            conn.commit()
+            version = conn.execute("PRAGMA user_version").fetchone()[0]
+            meta = dict(conn.execute("SELECT key, value FROM ngs_meta"))
+            conn.close()
+        self.assertEqual(version, SQLITE_SCHEMA_VERSION)
+        self.assertEqual(meta["generated_at"], generated_at)
+        self.assertEqual(meta["schema_version"], str(SQLITE_SCHEMA_VERSION))

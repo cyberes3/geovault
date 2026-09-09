@@ -168,19 +168,22 @@ object GeoVaultHttp {
     }
 
     private fun authTokenInterceptor(auth: GeoVaultAuthSession): Interceptor = Interceptor { chain ->
+        val request = chain.request()
         val token = auth.cachedAccessToken()
-        val request = if (!token.isNullOrBlank()) {
-            chain.request().newBuilder().header("Authorization", "Bearer $token").build()
+        val next = if (!token.isNullOrBlank() && shouldAttachAuthorization(request.url)) {
+            request.newBuilder().header("Authorization", "Bearer $token").build()
         } else {
-            chain.request()
+            request
         }
-        chain.proceed(request)
+        chain.proceed(next)
     }
 
     private fun authFailureInterceptor(context: Context, auth: GeoVaultAuthSession): Interceptor =
         Interceptor { chain ->
             val response = chain.proceed(chain.request())
-            if (response.code == 401 && response.request.header(RETRY_HEADER) != null) {
+            if (response.code == 403 ||
+                (response.code == 401 && response.request.header(RETRY_HEADER) != null)
+            ) {
                 auth.handleAuthFailure()
             }
             response
@@ -221,6 +224,21 @@ object GeoVaultHttp {
                 api = null
             }
         }
+    }
+
+    private fun shouldAttachAuthorization(url: okhttp3.HttpUrl): Boolean {
+        if (url.isHttps) return true
+        return isPrivateLanHost(url.host)
+    }
+
+    private fun isPrivateLanHost(host: String): Boolean {
+        val h = host.lowercase()
+        if (h == "localhost" || h == "127.0.0.1" || h == "::1" || h == "[::1]") return true
+        val parts = h.split('.')
+        if (parts.size != 4) return false
+        val a = parts[0].toIntOrNull() ?: return false
+        val b = parts[1].toIntOrNull() ?: return false
+        return a == 10 || (a == 192 && b == 168) || (a == 172 && b in 16..31)
     }
 
     private const val RETRY_HEADER = "X-Geovault-Retry"

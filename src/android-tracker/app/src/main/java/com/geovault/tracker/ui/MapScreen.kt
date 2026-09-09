@@ -1,8 +1,6 @@
 package com.geovault.tracker.ui
 
-import android.app.Activity
 import android.location.Location
-import android.view.WindowManager
 import kotlinx.coroutines.delay
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -55,6 +53,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import com.geovault.common.ui.GeoVaultKeepScreenOn
 import com.geovault.common.ui.time.rememberNowMs
 import com.geovault.common.maps.core.GeoVaultMainMap
 import com.geovault.common.maps.core.GeoVaultMainMapView
@@ -210,16 +209,8 @@ private fun TrackerMapAuthenticatedContent(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    val activity = context as? Activity
     val shouldKeepScreenOn = isActive && chrome.keepScreenOnWhileViewingMap
-    DisposableEffect(activity, shouldKeepScreenOn) {
-        if (activity != null && shouldKeepScreenOn) {
-            activity.window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        }
-        onDispose {
-            activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        }
-    }
+    GeoVaultKeepScreenOn(enabled = shouldKeepScreenOn)
 
     val density = LocalDensity.current
     // MEASURED-NOT-GUESSED CHIP RESERVE: the top-left chip's height varies with its content

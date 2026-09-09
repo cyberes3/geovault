@@ -2,9 +2,11 @@ package com.geovault.common.maps.ui
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Remove
 import com.geovault.common.maps.core.GeoVaultBaseMap
+import com.geovault.common.ui.theme.GeoVaultColorTokens
 import org.maplibre.android.camera.CameraUpdateFactory
 
 /**
@@ -68,5 +70,24 @@ fun geoVaultZoomOutFabAction(
                 map.animateCameraWithPadding(CameraUpdateFactory.zoomBy(-1.0))
             }
         },
+    )
+}
+
+fun geoVaultStopNavigationFabAction(
+    onStop: () -> Unit,
+    tooltip: String,
+    id: String = "stop_nav",
+    order: Int = 70,
+    enabled: Boolean = true,
+): GeoVaultMapFabAction {
+    return GeoVaultMapFabAction(
+        id = id,
+        order = order,
+        icon = GeoVaultMapFabIcon.Vector(Icons.Filled.Close),
+        contentDescription = tooltip,
+        tooltip = tooltip,
+        contentColor = GeoVaultColorTokens.Error,
+        enabled = enabled,
+        onTap = onStop,
     )
 }
