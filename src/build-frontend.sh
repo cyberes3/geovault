@@ -22,7 +22,8 @@ fi
 # Install dependencies
 echo "Installing frontend dependencies..."
 npm install
-npm audit fix
+# Remaining advisories (for example a MapLibre major bump) must not abort the build.
+npm audit fix || true
 
 echo "Running frontend build..."
 npm run build
@@ -47,7 +48,7 @@ for EXT_DIR in */; do
         # Install dependencies
         echo "  Installing dependencies..."
         npm install
-        npm audit fix
+        npm audit fix || true
         
         echo "  Running build..."
         npm run build
