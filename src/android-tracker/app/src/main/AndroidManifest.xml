@@ -96,6 +96,14 @@
         </receiver>
 
         <receiver
+            android:name=".streaming.LiveStreamNotificationStopReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.geovault.tracker.LIVE_STREAM_NOTIFICATION_STOP" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
             android:name=".ForegroundNotificationReshowReceiver"
             android:exported="false">
             <intent-filter>
@@ -107,6 +115,14 @@
         <receiver
             android:name=".TrackingLocationUpdateReceiver"
             android:exported="false" />
+
+        <receiver
+            android:name=".runtime.TrackingEngineStopReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.geovault.tracker.ACTION_ENGINE_STOP" />
+            </intent-filter>
+        </receiver>
 
         <receiver
             android:name=".TrackingRecoveryReceiver"

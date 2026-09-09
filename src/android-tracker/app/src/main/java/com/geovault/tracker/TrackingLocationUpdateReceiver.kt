@@ -6,6 +6,9 @@ import android.content.Context
 import android.content.Intent
 import android.location.Location
 import com.geovault.common.logging.GeoVaultCaptureLog
+import com.geovault.tracker.tracking.TrackingServiceDelivery
+import com.geovault.tracker.tracking.TrackingServiceDeliveryResult
+import com.geovault.tracker.tracking.TrackingServiceDeliverySource
 import com.geovault.tracker.tracking.TrackingServiceIntents
 import com.google.android.gms.location.LocationResult
 
@@ -15,7 +18,7 @@ class TrackingLocationUpdateReceiver : BroadcastReceiver() {
         if (locations.isEmpty()) return
 
         val appContext = context.applicationContext
-        val result = TrackingServiceDeliveryHelper.deliver(
+        val result = TrackingServiceDelivery.deliver(
             context = appContext,
             intent = TrackingServiceIntents.buildLocationUpdateIntent(
                 context = appContext,

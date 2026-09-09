@@ -14,8 +14,8 @@ import com.geovault.tracker.logging.GeoVaultPointRecordingLog
 import com.geovault.tracker.policy.filter.StationaryConfidence
 import com.geovault.tracker.sensor.ImuClassification
 import com.geovault.tracker.sensor.ImuMotionContext
-import com.geovault.tracker.services.LocationIngestResult
-import com.geovault.tracker.services.TrackingMotionMode
+import com.geovault.tracker.positioning.ingest.LocationIngestResult
+import com.geovault.tracker.positioning.TrackingMotionMode
 import com.geovault.tracker.settings.TrackerSettings
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
@@ -106,7 +106,7 @@ internal class MotionSubsystem(private val rt: PositioningRuntime) {
                 name = "imu_vehicular_wake",
                 details = "confidence=${ctx.confidence} cooldownUntil=$cooldownUntilMs",
             )
-            rt.collection.resumeGps("imu_vehicular_wake")
+            rt.motionOrchestrator.resume(ResumeIntent.ImuVehicular)
         }
     }
 
@@ -281,7 +281,7 @@ internal class MotionSubsystem(private val rt: PositioningRuntime) {
                 motionMode = motionMode,
                 radiusMeters = stationaryRadius,
             )
-            rt.collection.pauseGps()
+            rt.motionOrchestrator.pause(PauseIntent.Stationary)
         }
         rt.deps.autoTrackingMotionCoordinator.clearEvidenceCandidate()
         if (!gpsBeingPaused) {
@@ -326,7 +326,7 @@ internal class MotionSubsystem(private val rt: PositioningRuntime) {
                 details = "mode=${output.state.mode} reason=$reason path=${output.transitionPath}"
             )
         }
-        rt.projection.syncRuntimeStateStore()
+        rt.projection.commit()
     }
 
     fun maybeApplyElasticDistanceFilter(observedSpeedMps: Float?, measuredAccuracyMeters: Float?) {

@@ -4,14 +4,16 @@ import android.app.Service
 import android.location.Location
 import com.geovault.common.logging.GeoVaultCaptureLog
 import com.geovault.tracker.R
-import com.geovault.tracker.TrackingRecoveryCoordinator
+import com.geovault.tracker.runtime.RuntimeTrigger
+import com.geovault.tracker.runtime.TrackerRuntimeCommands
+import com.geovault.tracker.runtime.TrackerRuntimeEngine
 import com.geovault.tracker.location.TrackingControlEvent
 import com.geovault.tracker.location.TrackingLifecycleState
 import com.geovault.tracker.location.TrackingPermissionGate
+import com.geovault.tracker.policy.RemoteStreamIngressPolicy
 import com.geovault.tracker.policy.TrackPointBus
 import com.geovault.tracker.positioning.config.GpsRuntimeEvent
-import com.geovault.tracker.runtime.RuntimeServiceEventType
-import com.geovault.tracker.services.QueueUploadScope
+import com.geovault.tracker.positioning.QueueUploadScope
 import com.geovault.tracker.tracking.TrackingServiceConstants
 import com.geovault.tracker.tracking.TrackingServiceIntents
 import kotlinx.coroutines.CancellationException
@@ -143,7 +145,7 @@ internal class SessionLifecycleSubsystem(private val rt: PositioningRuntime) {
         selectedTrackerId: String,
         sessionStartedAtMs: Long,
     ) {
-        SessionResetCoordinator(rt).applyForStart(
+        resetForStart(
             selectedTrackerId = selectedTrackerId,
             sessionStartedAtMs = sessionStartedAtMs,
         )
@@ -157,20 +159,15 @@ internal class SessionLifecycleSubsystem(private val rt: PositioningRuntime) {
         rt.collection.transitionGpsState(GpsRuntimeEvent.TRACKING_STARTED, "perform_start_tracking")
         rt.projection.transitionControlState(TrackingControlEvent.StartSucceeded)
         rt.projection.updateRuntimeSnapshot {
-            rt.deps.sessionCoordinator.transitionToRunning(
-                previous = it,
+            it.transitionToRunning(
                 nowMs = sessionStartedAtMs,
                 sessionVisibleBoundaryId = rt.state.sessionVisibleBoundaryId
             )
         }
-        rt.deps.settingsRepository.setWasTrackingBeforeExit(true)
-        TrackingRecoveryCoordinator.markTrackingStarted(rt.ports.service.applicationContext)
-        rt.deps.runtimeEventPublisher.publish(
-            type = RuntimeServiceEventType.TRACKING_STARTED,
-            reason = "start_tracking",
-            trigger = TrackingServiceIntents.mapRuntimeTrigger(trigger)
+        TrackerRuntimeEngine.get(rt.ports.service.applicationContext).handle(
+            TrackerRuntimeCommands.ServiceStarted(trigger = RuntimeTrigger.EXPLICIT_START),
         )
-        rt.projection.syncRuntimeStateStore()
+        rt.projection.commit()
     }
 
     private fun startRuntimeBackgroundJobs(runGeneration: Int) {
@@ -181,15 +178,16 @@ internal class SessionLifecycleSubsystem(private val rt: PositioningRuntime) {
         rt.upload.startBacklogUploader(rt.state.sessionBoundaryForBacklogId, runGeneration)
         rt.upload.startPreflightMonitor(runGeneration)
         rt.deps.imuMotionClassifier?.start()
-        rt.projection.syncRuntimeStateStore()
+        rt.projection.commit()
     }
 
     fun stopTracking(reason: String, failureReason: String? = null) {
         GeoVaultCaptureLog.d(TrackingServiceConstants.TAG, "Stopping tracking reason=$reason wasRunning=${rt.state.isTracking}")
         rt.projection.transitionControlState(TrackingControlEvent.StopRequested, failureReason = failureReason)
         rt.lifecycle.transitionToStoppedState(failureReason = failureReason)
-        rt.deps.settingsRepository.clearWasTrackingBeforeExit()
-        TrackingRecoveryCoordinator.markIntentionalStop(rt.ports.service.applicationContext, reason = reason)
+        TrackerRuntimeEngine.get(rt.ports.service.applicationContext).handle(
+            TrackerRuntimeCommands.ServiceStopped(reason = reason),
+        )
         rt.projection.transitionControlState(TrackingControlEvent.StopCompleted)
         rt.lifecycle.cleanupServiceResources(reason = reason)
         TrackPointBus.resumeLocalDelivery()
@@ -202,14 +200,11 @@ internal class SessionLifecycleSubsystem(private val rt: PositioningRuntime) {
         rt.lifecycle.setStartupInProgress(false)
         rt.state.startupReadyForEvents = false
         rt.collection.transitionGpsState(GpsRuntimeEvent.TRACKING_STOPPED, "transition_to_stopped_state")
-        SessionResetCoordinator(rt).applyForStop()
+        resetForStop()
         rt.projection.updateRuntimeSnapshot {
-            rt.deps.sessionCoordinator.transitionToStopped(
-                previous = it,
-                failureReason = failureReason
-            )
+            it.transitionToStopped(failureReason = failureReason)
         }
-        rt.projection.syncRuntimeStateStore(
+        rt.projection.commit(
             lifecycleStateOverride = TrackingLifecycleState.STOPPED,
             failureReasonOverride = failureReason,
         )
@@ -264,6 +259,48 @@ internal class SessionLifecycleSubsystem(private val rt: PositioningRuntime) {
 
     fun isTrackingActiveOrStarting(): Boolean {
         return rt.state.isTracking || rt.state.startupInProgress
+    }
+
+    fun resetForStart(selectedTrackerId: String, sessionStartedAtMs: Long) {
+        if (selectedTrackerId.isNotEmpty()) {
+            rt.deps.locationIngestCoordinator.resetSession(selectedTrackerId)
+        }
+        rt.deps.pointFreshnessTracker.reset(sessionStartedAtMs = sessionStartedAtMs)
+        rt.deps.repeatedOutlierSuppressor.reset()
+        rt.deps.providerHealthController.reset()
+        rt.deps.stationaryFreshnessCoordinator.resetSession()
+        rt.state.resetForStart()
+        rt.deps.lowAccuracyFallbackCoordinator.onTrackingStopped()
+        rt.recovery.pausedFreshness.clearPausedFreshnessProbe(
+            reason = "start_tracking",
+            clearLastFreshnessTimestamp = true,
+        )
+        rt.deps.autoTrackingMotionEngine.reset(sessionStartedAtMs)
+        rt.deps.autoTrackingMotionCoordinator.reset()
+        rt.motion.clearSessionImuState()
+    }
+
+    fun resetForStop() {
+        rt.deps.stationaryFreshnessCoordinator.onStopped(reason = "tracking_stopped")
+        rt.recovery.pausedFreshness.clearPausedFreshnessProbe(
+            reason = "tracking_stopped",
+            clearLastFreshnessTimestamp = true,
+        )
+        rt.deps.lowAccuracyFallbackCoordinator.onTrackingStopped()
+        rt.deps.repeatedOutlierSuppressor.reset()
+        rt.deps.freshnessRecoveryController.reset()
+        rt.deps.providerHealthController.reset()
+        rt.deps.recoveryAnchorStore.clear()
+        rt.deps.stationaryFreshnessCoordinator.clearRegion()
+        rt.deps.pointFreshnessTracker.reset(sessionStartedAtMs = 0L)
+        rt.state.resetForStop()
+        rt.deps.autoTrackingMotionCoordinator.reset()
+        rt.motion.stopAutoModeTick()
+        rt.recovery.fastLock.stopFastGpsLockWindow(reason = "tracking_stopped")
+        rt.motion.resetElasticDistanceOverride(reason = "tracking_stopped", reapplyRequest = false)
+        rt.ports.selectedTrackerId().trim().takeIf(String::isNotEmpty)?.let { stoppedTrackerId ->
+            RemoteStreamIngressPolicy.resetTrack(stoppedTrackerId)
+        }
     }
 
 }

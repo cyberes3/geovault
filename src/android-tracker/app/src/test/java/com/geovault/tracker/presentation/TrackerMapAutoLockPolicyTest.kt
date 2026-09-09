@@ -4,11 +4,12 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
+import com.geovault.tracker.map.MapSessionEngine
 class TrackerMapAutoLockPolicyTest {
 
     @Test
     fun recordingStart_singleSession_withDisplayed_returnsSelectionLock() {
-        val r = TrackerMapAutoLockPolicy.resolveAutoLockOnRecordingStart(
+        val r = MapSessionEngine.resolveAutoLockOnRecordingStart(
             mode = TrackerMapDisplayMode.SINGLE_SESSION,
             displayedTrackerId = " t1 ",
             selectedTrackerId = "sel",
@@ -21,7 +22,7 @@ class TrackerMapAutoLockPolicyTest {
 
     @Test
     fun recordingStart_singleSession_blankDisplayed_fallsBackToSelected() {
-        val r = TrackerMapAutoLockPolicy.resolveAutoLockOnRecordingStart(
+        val r = MapSessionEngine.resolveAutoLockOnRecordingStart(
             mode = TrackerMapDisplayMode.SINGLE_SESSION,
             displayedTrackerId = "  ",
             selectedTrackerId = "abc",
@@ -34,7 +35,7 @@ class TrackerMapAutoLockPolicyTest {
 
     @Test
     fun recordingStart_singleSession_bothBlank_returnsNone() {
-        val r = TrackerMapAutoLockPolicy.resolveAutoLockOnRecordingStart(
+        val r = MapSessionEngine.resolveAutoLockOnRecordingStart(
             mode = TrackerMapDisplayMode.SINGLE_SESSION,
             displayedTrackerId = "",
             selectedTrackerId = "   ",
@@ -44,7 +45,7 @@ class TrackerMapAutoLockPolicyTest {
 
     @Test
     fun recordingStart_allQueue_returnsLiveActiveFit() {
-        val r = TrackerMapAutoLockPolicy.resolveAutoLockOnRecordingStart(
+        val r = MapSessionEngine.resolveAutoLockOnRecordingStart(
             mode = TrackerMapDisplayMode.ALL_QUEUE,
             displayedTrackerId = "",
             selectedTrackerId = "",
@@ -54,7 +55,7 @@ class TrackerMapAutoLockPolicyTest {
 
     @Test
     fun recordingStart_group_returnsLiveActiveFit() {
-        val r = TrackerMapAutoLockPolicy.resolveAutoLockOnRecordingStart(
+        val r = MapSessionEngine.resolveAutoLockOnRecordingStart(
             mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
             displayedTrackerId = "g1",
             selectedTrackerId = "g2",
@@ -64,7 +65,7 @@ class TrackerMapAutoLockPolicyTest {
 
     @Test
     fun singleStream_emptyToOne_matchingDisplayed_returnsId() {
-        val id = TrackerMapAutoLockPolicy.resolveAutoSelectionLockForSingleStream(
+        val id = MapSessionEngine.resolveAutoSelectionLockForSingleStream(
             mode = TrackerMapDisplayMode.SINGLE_SESSION,
             previousTargets = emptySet(),
             nextTargets = setOf("remote-1"),
@@ -75,7 +76,7 @@ class TrackerMapAutoLockPolicyTest {
 
     @Test
     fun singleStream_multiToOne_matchingDisplayed_returnsId() {
-        val id = TrackerMapAutoLockPolicy.resolveAutoSelectionLockForSingleStream(
+        val id = MapSessionEngine.resolveAutoSelectionLockForSingleStream(
             mode = TrackerMapDisplayMode.SINGLE_SESSION,
             previousTargets = setOf("a", "b"),
             nextTargets = setOf("only"),
@@ -86,7 +87,7 @@ class TrackerMapAutoLockPolicyTest {
 
     @Test
     fun singleStream_unchangedSingle_returnsNull() {
-        val id = TrackerMapAutoLockPolicy.resolveAutoSelectionLockForSingleStream(
+        val id = MapSessionEngine.resolveAutoSelectionLockForSingleStream(
             mode = TrackerMapDisplayMode.SINGLE_SESSION,
             previousTargets = setOf("x"),
             nextTargets = setOf("x"),
@@ -97,7 +98,7 @@ class TrackerMapAutoLockPolicyTest {
 
     @Test
     fun singleStream_displayedMismatch_returnsNull() {
-        val id = TrackerMapAutoLockPolicy.resolveAutoSelectionLockForSingleStream(
+        val id = MapSessionEngine.resolveAutoSelectionLockForSingleStream(
             mode = TrackerMapDisplayMode.SINGLE_SESSION,
             previousTargets = emptySet(),
             nextTargets = setOf("a"),
@@ -108,7 +109,7 @@ class TrackerMapAutoLockPolicyTest {
 
     @Test
     fun singleStream_wrongMode_returnsNull() {
-        val id = TrackerMapAutoLockPolicy.resolveAutoSelectionLockForSingleStream(
+        val id = MapSessionEngine.resolveAutoSelectionLockForSingleStream(
             mode = TrackerMapDisplayMode.ALL_QUEUE,
             previousTargets = emptySet(),
             nextTargets = setOf("a"),
@@ -119,7 +120,7 @@ class TrackerMapAutoLockPolicyTest {
 
     @Test
     fun singleStream_twoTargets_returnsNull() {
-        val id = TrackerMapAutoLockPolicy.resolveAutoSelectionLockForSingleStream(
+        val id = MapSessionEngine.resolveAutoSelectionLockForSingleStream(
             mode = TrackerMapDisplayMode.SINGLE_SESSION,
             previousTargets = emptySet(),
             nextTargets = setOf("a", "b"),

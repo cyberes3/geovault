@@ -5,6 +5,8 @@ import com.geovault.tracker.AvailableToAddItem
 import com.geovault.tracker.AvailableToAddResponse
 import com.geovault.tracker.Group
 import com.geovault.tracker.Tracker
+import com.geovault.tracker.data.CatalogEntityType
+import com.geovault.tracker.data.PendingTransaction
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -79,9 +81,21 @@ class SharedUiStateTest {
     @Test
     fun pendingActionKeys_areSplitByMutationPhase() {
         val state = SharedUiState(
-            pendingOps = mapOf(
-                "k-add" to SharedMutationPhase.PENDING_ADD,
-                "k-remove" to SharedMutationPhase.PENDING_REMOVE,
+            mutations = listOf(
+                PendingTransaction(
+                    entityType = CatalogEntityType.Share,
+                    entityId = "k-add",
+                    op = "add",
+                    phase = SharedMutationPhase.PENDING_ADD.name,
+                    occupancyKey = "k-add",
+                ),
+                PendingTransaction(
+                    entityType = CatalogEntityType.Share,
+                    entityId = "k-remove",
+                    op = "remove",
+                    phase = SharedMutationPhase.PENDING_REMOVE.name,
+                    occupancyKey = "k-remove",
+                ),
             )
         )
 
@@ -90,7 +104,7 @@ class SharedUiStateTest {
     }
 
     @Test
-    fun addedHelpers_useSessionRetainedSets() {
+    fun addedHelpers_useQueuedSets() {
         val state = SharedUiState(
             trackers = listOf(
                 Tracker(id = "t-base", name = "Base", color = null, is_owner = false, visibility = "shared"),
@@ -98,21 +112,21 @@ class SharedUiStateTest {
             groups = listOf(
                 Group(id = "g-added", name = "Added Group", is_owner = false, visibility = "shared", is_accepted = true),
             ),
-            optimisticTrackerAdds = mapOf(
-                "t-add" to Tracker(id = "t-add", name = "Add", color = null, is_owner = false, visibility = "shared"),
-            ),
-            optimisticTrackerRemovals = setOf("t-base"),
-            retainedIncomingTrackers = mapOf(
-                "t-incoming-added" to AvailableToAddItem(id = "t-incoming-added", name = "Incoming Added")
-            ),
-            retainedIncomingGroups = mapOf(
-                "g-incoming-added" to AvailableToAddGroup(id = "g-incoming-added", name = "Incoming Group Added")
-            ),
-            retainedPublicTrackers = mapOf(
-                "t-public-added" to AvailableToAddItem(id = "t-public-added", name = "Public Added")
-            ),
-            retainedPublicGroups = mapOf(
-                "g-public-added" to AvailableToAddGroup(id = "g-public-added", name = "Public Group Added")
+            mutations = listOf(
+                PendingTransaction(
+                    entityType = CatalogEntityType.Tracker,
+                    entityId = "t-add",
+                    op = "add",
+                    phase = SharedMutationPhase.PENDING_ADD.name,
+                    occupancyKey = "t-add",
+                    addedTrackerId = "t-add",
+                    addedTracker = Tracker(id = "t-add", name = "Add", color = null, is_owner = false, visibility = "shared"),
+                    removalTrackerId = "t-base",
+                    incomingTracker = AvailableToAddItem(id = "t-incoming-added", name = "Incoming Added"),
+                    incomingGroup = AvailableToAddGroup(id = "g-incoming-added", name = "Incoming Group Added"),
+                    publicTracker = AvailableToAddItem(id = "t-public-added", name = "Public Added"),
+                    publicGroup = AvailableToAddGroup(id = "g-public-added", name = "Public Group Added"),
+                ),
             ),
         )
 
@@ -127,7 +141,7 @@ class SharedUiStateTest {
     }
 
     @Test
-    fun filteredSections_includeRetainedRowsWhenSourceListChanges() {
+    fun filteredSections_includeQueuedRowsWhenSourceListChanges() {
         val state = SharedUiState(
             trackers = listOf(
                 Tracker(id = "t-public-added", name = "Public Added", color = null, is_owner = false, visibility = "shared")
@@ -137,17 +151,18 @@ class SharedUiStateTest {
                 Group(id = "g-incoming-added", name = "Incoming Added Group", is_owner = false, visibility = "shared", is_accepted = true),
             ),
             availableToAdd = AvailableToAddResponse(),
-            retainedIncomingTrackers = mapOf(
-                "t-incoming-added" to AvailableToAddItem(id = "t-incoming-added", name = "Incoming Added")
-            ),
-            retainedIncomingGroups = mapOf(
-                "g-incoming-added" to AvailableToAddGroup(id = "g-incoming-added", name = "Incoming Added Group")
-            ),
-            retainedPublicTrackers = mapOf(
-                "t-public-added" to AvailableToAddItem(id = "t-public-added", name = "Public Added")
-            ),
-            retainedPublicGroups = mapOf(
-                "g-public-added" to AvailableToAddGroup(id = "g-public-added", name = "Public Added Group")
+            mutations = listOf(
+                PendingTransaction(
+                    entityType = CatalogEntityType.Share,
+                    entityId = "retain",
+                    op = "retain",
+                    phase = SharedMutationPhase.PENDING_ADD.name,
+                    occupancyKey = "retain",
+                    incomingTracker = AvailableToAddItem(id = "t-incoming-added", name = "Incoming Added"),
+                    incomingGroup = AvailableToAddGroup(id = "g-incoming-added", name = "Incoming Added Group"),
+                    publicTracker = AvailableToAddItem(id = "t-public-added", name = "Public Added"),
+                    publicGroup = AvailableToAddGroup(id = "g-public-added", name = "Public Added Group"),
+                ),
             ),
         )
 

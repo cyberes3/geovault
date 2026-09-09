@@ -5,15 +5,8 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
 /**
- * Ordered stages a remote (`REMOTE_STREAM`) point passes through before it ends up rendered on
- * the map. Point admission used to be decided independently across the WebSocket-level ID
- * filter, [RemoteTrackPointIngress] (now [RemoteTrackPointAdmissionPipeline]),
- * [RemoteStreamIngressPolicy]/[TrackPointPolicyEngine], and
- * [com.geovault.tracker.presentation.TrackerMapPointRouter], with no shared diagnostics — a
- * "streamed tracker not updating" report had to be root-caused by re-running a full audit
- * because no single place recorded *why* a track's points stopped advancing. Every stage now
- * reports through this one sink, keyed by (stage, reason), so that question can be answered from
- * capture logs alone.
+ * Ordered stages a remote (`REMOTE_STREAM`) point passes through before it is rendered.
+ * Every stage reports through this sink, keyed by (stage, reason).
  */
 enum class RemoteTrackPointAdmissionStage {
     /** Not in the socket's current subscription set, or structurally invalid (bad lat/lon/timestamp). */

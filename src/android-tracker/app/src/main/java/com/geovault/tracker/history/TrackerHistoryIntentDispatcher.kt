@@ -35,8 +35,7 @@ class TrackerHistoryIntentDispatcher(
             }
             is TrackerHistoryIntent.CommitOverlay -> {
                 val batch = intent.batch
-                if (batch.sourceKind == TrackerHistorySourceKind.RUNTIME_HEAD ||
-                    batch.sourceKind == TrackerHistorySourceKind.LOCAL_LIVE ||
+                if (batch.sourceKind == TrackerHistorySourceKind.LOCAL_LIVE ||
                     batch.sourceKind == TrackerHistorySourceKind.REMOTE_STREAM
                 ) {
                     // High-frequency paths: log via throttled tx line only.
@@ -75,8 +74,8 @@ class TrackerHistoryIntentDispatcher(
                 trackerId = batch.normalizedTrackerId,
                 window = batch.window.normalizedKey,
                 pointCount = batch.points.size,
-                committed = result.committed,
-                reason = result.reason,
+                committed = result.publishesSnapshot(),
+                reason = result.kindName(),
             )
         } else {
             TrackerHistoryDiagnostics.logTransaction(intentLabel, result, batch)

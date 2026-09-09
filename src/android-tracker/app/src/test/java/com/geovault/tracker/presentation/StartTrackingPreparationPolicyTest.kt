@@ -3,8 +3,8 @@ package com.geovault.tracker.presentation
 import com.geovault.tracker.runtime.RuntimeActionType
 import com.geovault.tracker.runtime.RuntimeCommandResult
 import com.geovault.tracker.runtime.StartGateDecision
-import com.geovault.tracker.services.RecordingRuntime
-import com.geovault.tracker.services.TrackingRuntimeSnapshot
+import com.geovault.tracker.positioning.RecordingRuntime
+import com.geovault.tracker.positioning.TrackingRuntimeSnapshot
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test

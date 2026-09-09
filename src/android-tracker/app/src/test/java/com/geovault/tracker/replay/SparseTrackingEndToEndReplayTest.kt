@@ -4,7 +4,7 @@ import com.geovault.tracker.location.StationaryPingController
 import com.geovault.tracker.positioning.PositioningContext
 import com.geovault.tracker.replay.runtime.CaptureReplaySessionLoader
 import com.geovault.tracker.replay.runtime.PositioningEndToEndReplayDriver
-import com.geovault.tracker.services.TrackingMotionMode
+import com.geovault.tracker.positioning.TrackingMotionMode
 import kotlin.math.asin
 import kotlin.math.cos
 import kotlin.math.sin

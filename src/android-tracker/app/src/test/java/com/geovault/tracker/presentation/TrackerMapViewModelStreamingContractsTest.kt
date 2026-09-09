@@ -1,17 +1,20 @@
 package com.geovault.tracker.presentation
 
-import com.geovault.tracker.services.RecordingRuntime
-import com.geovault.tracker.services.TrackingRuntimeSnapshot
-import com.geovault.tracker.policy.TrackPointEvent
+import com.geovault.tracker.map.MapRenderMath
+import com.geovault.tracker.map.MapSessionEngine
+import com.geovault.tracker.positioning.RecordingRuntime
+import com.geovault.tracker.positioning.TrackingRuntimeSnapshot
+import com.geovault.tracker.domain.TrackPoint
 import com.geovault.tracker.policy.TrackPointSource
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
+import com.geovault.tracker.map.MapTrailEngine
 class TrackerMapViewModelStreamingContractsTest {
 
     @Test
     fun resolveStreamTargetIds_singleSession_sameAsSelected_returnsEmpty() {
-        val ids = TrackerMapViewModel.resolveStreamTargetIds(
+        val ids = MapSessionEngine.resolveStreamTargetIds(
             mode = TrackerMapDisplayMode.SINGLE_SESSION,
             runtimeRunning = true,
             selectedTrackerId = "tracker-1",
@@ -23,7 +26,7 @@ class TrackerMapViewModelStreamingContractsTest {
 
     @Test
     fun resolveStreamTargetIds_singleSession_differentFromSelected_returnsDisplayedOnly() {
-        val ids = TrackerMapViewModel.resolveStreamTargetIds(
+        val ids = MapSessionEngine.resolveStreamTargetIds(
             mode = TrackerMapDisplayMode.SINGLE_SESSION,
             runtimeRunning = true,
             selectedTrackerId = "tracker-1",
@@ -35,7 +38,7 @@ class TrackerMapViewModelStreamingContractsTest {
 
     @Test
     fun resolveStreamTargetIds_groupPlaceholder_usesGroupTrackerIds() {
-        val ids = TrackerMapViewModel.resolveStreamTargetIds(
+        val ids = MapSessionEngine.resolveStreamTargetIds(
             mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
             runtimeRunning = false,
             selectedTrackerId = "tracker-1",
@@ -48,7 +51,7 @@ class TrackerMapViewModelStreamingContractsTest {
 
     @Test
     fun resolveStreamTargetIds_allQueue_whileRunning_excludesSelectedAndBlanks() {
-        val ids = TrackerMapViewModel.resolveStreamTargetIds(
+        val ids = MapSessionEngine.resolveStreamTargetIds(
             mode = TrackerMapDisplayMode.ALL_QUEUE,
             runtimeRunning = true,
             selectedTrackerId = "tracker-1",
@@ -63,7 +66,7 @@ class TrackerMapViewModelStreamingContractsTest {
         // STREAMING EXCLUSION: when the user is NOT recording, the selected tracker is just
         // another roster member and should be streamed alongside the rest. Only `locallyRecorded`
         // is excluded, and that is empty when not recording.
-        val ids = TrackerMapViewModel.resolveStreamTargetIds(
+        val ids = MapSessionEngine.resolveStreamTargetIds(
             mode = TrackerMapDisplayMode.ALL_QUEUE,
             runtimeRunning = false,
             selectedTrackerId = "tracker-1",
@@ -76,7 +79,7 @@ class TrackerMapViewModelStreamingContractsTest {
     @Test
     fun resolveStreamTargetIds_groupPlaceholder_notRunning_includesSelected() {
         // STREAMING EXCLUSION: same rationale as above for group mode.
-        val ids = TrackerMapViewModel.resolveStreamTargetIds(
+        val ids = MapSessionEngine.resolveStreamTargetIds(
             mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
             runtimeRunning = false,
             selectedTrackerId = "tracker-1",
@@ -89,7 +92,7 @@ class TrackerMapViewModelStreamingContractsTest {
 
     @Test
     fun filterRemoteLastPointsForAcceptedIds_dropsStaleRemoteHeads() {
-        val filtered = TrackerMapViewModel.filterRemoteLastPointsForAcceptedIds(
+        val filtered = MapSessionEngine.filterRemoteLastPointsForAcceptedIds(
             remoteLastPoints = mapOf(
                 "accepted" to remotePoint("accepted"),
                 "stale" to remotePoint("stale"),
@@ -117,7 +120,7 @@ class TrackerMapViewModelStreamingContractsTest {
             bearing = null,
             accuracy = null,
             sat = null,
-            prov = TrackerMapPointProvenancePolicy.PROVENANCE_LOCAL_GPS,
+            prov = MapTrailEngine.PROVENANCE_LOCAL_GPS,
             dist = null,
             startTimestampMs = sessionStart,
         )
@@ -132,17 +135,19 @@ class TrackerMapViewModelStreamingContractsTest {
                 sessionStartTimeMs = sessionStart,
             ),
             mode = TrackerMapDisplayMode.SINGLE_SESSION,
-            trail = listOf(tail),
         )
 
-        val coord = TrackerMapViewModel.resolveLiveHeadCoord(state)
+        val coord = MapSessionEngine.resolveLiveHeadCoord(
+            state = state,
+            singleTrail = listOf(tail),
+        )
 
         assertEquals(41.0 to -75.0, coord)
     }
 
     @Test
     fun resolveLiveHeadCoord_usesRuntimeWhenTrailFromPriorSession() {
-        // PRIOR-SESSION FALLBACK: just after starting a new session, `state.trail` may still
+        // PRIOR-SESSION FALLBACK: just after starting a new session, the single trail may still
         // hold the previous session's tail until the reload completes. The new runtime fix
         // is from the current session and is the only correct camera target — the helper
         // must NOT pin the camera to the prior session's tail.
@@ -159,7 +164,7 @@ class TrackerMapViewModelStreamingContractsTest {
             bearing = null,
             accuracy = null,
             sat = null,
-            prov = TrackerMapPointProvenancePolicy.PROVENANCE_LOCAL_GPS,
+            prov = MapTrailEngine.PROVENANCE_LOCAL_GPS,
             dist = null,
             startTimestampMs = priorSession,
         )
@@ -174,10 +179,12 @@ class TrackerMapViewModelStreamingContractsTest {
                 sessionStartTimeMs = activeSession,
             ),
             mode = TrackerMapDisplayMode.SINGLE_SESSION,
-            trail = listOf(priorTail),
         )
 
-        val coord = TrackerMapViewModel.resolveLiveHeadCoord(state)
+        val coord = MapSessionEngine.resolveLiveHeadCoord(
+            state = state,
+            singleTrail = listOf(priorTail),
+        )
 
         assertEquals(41.0 to -75.0, coord)
     }
@@ -206,24 +213,24 @@ class TrackerMapViewModelStreamingContractsTest {
             ),
             mode = TrackerMapDisplayMode.SINGLE_SESSION,
             displayedTrackerId = trackerId,
-            trail = listOf(
-                serverTail,
-                sessionPoint(
-                    trackerId = trackerId,
-                    time = sessionStart + 200L,
-                    latitude = 41.0,
-                    longitude = -75.0,
-                    startTimestampMs = sessionStart,
-                ),
-            ),
         )
 
-        val projected = TrackerMapEffectiveSessionProjector.project(
+        val projected = MapRenderMath.project(
             TrackerMapEffectiveSessionInput(
                 state = state,
                 plan = singlePlan(trackerId),
                 trailPointLimit = 100,
                 nowMs = sessionStart + 1_000L,
+                singleTrail = listOf(
+                    serverTail,
+                    sessionPoint(
+                        trackerId = trackerId,
+                        time = sessionStart + 200L,
+                        latitude = 41.0,
+                        longitude = -75.0,
+                        startTimestampMs = sessionStart,
+                    ),
+                ),
             )
         )
 
@@ -266,15 +273,15 @@ class TrackerMapViewModelStreamingContractsTest {
             ),
             mode = TrackerMapDisplayMode.SINGLE_SESSION,
             displayedTrackerId = trackerId,
-            trail = listOf(previousPoint, serverCurrentPoint, runtimePoint),
         )
 
-        val projected = TrackerMapEffectiveSessionProjector.project(
+        val projected = MapRenderMath.project(
             TrackerMapEffectiveSessionInput(
                 state = state,
                 plan = singlePlan(trackerId),
                 trailPointLimit = 100,
                 nowMs = 11_000L,
+                singleTrail = listOf(previousPoint, serverCurrentPoint, runtimePoint),
             )
         )
 
@@ -287,7 +294,7 @@ class TrackerMapViewModelStreamingContractsTest {
 
     @Test
     fun allQueueTrailsWithLocalRuntimeOverlay_groupWhileTracking_addsSelectedLocalPoint() {
-        val trails = TrackerMapViewModel.allQueueTrailsWithLocalRuntimeOverlay(
+        val trails = MapSessionEngine.allQueueTrailsWithLocalRuntimeOverlay(
             mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
             runtime = TrackingRuntimeSnapshot(
                 isRunning = true,
@@ -311,7 +318,7 @@ class TrackerMapViewModelStreamingContractsTest {
 
     @Test
     fun allQueueTrailsWithLocalRuntimeOverlay_groupWithoutSelected_doesNotAddPoint() {
-        val trails = TrackerMapViewModel.allQueueTrailsWithLocalRuntimeOverlay(
+        val trails = MapSessionEngine.allQueueTrailsWithLocalRuntimeOverlay(
             mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
             runtime = TrackingRuntimeSnapshot(
                 isRunning = true,
@@ -345,13 +352,13 @@ class TrackerMapViewModelStreamingContractsTest {
             bearing = null,
             accuracy = null,
             sat = null,
-            prov = TrackerMapPointProvenancePolicy.PROVENANCE_LOCAL_GPS,
+            prov = MapTrailEngine.PROVENANCE_LOCAL_GPS,
             dist = null,
             startTimestampMs = sessionStart,
         )
         val initial = mapOf("tracker-1" to listOf(newerFix))
 
-        val trails = TrackerMapViewModel.allQueueTrailsWithLocalRuntimeOverlay(
+        val trails = MapSessionEngine.allQueueTrailsWithLocalRuntimeOverlay(
             mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
             runtime = TrackingRuntimeSnapshot(
                 isRunning = true,
@@ -372,7 +379,7 @@ class TrackerMapViewModelStreamingContractsTest {
 
     @Test
     fun allQueueTrailsWithLocalRuntimeOverlay_usesRecordingTrackerWhenSelectedDiffers() {
-        val trails = TrackerMapViewModel.allQueueTrailsWithLocalRuntimeOverlay(
+        val trails = MapSessionEngine.allQueueTrailsWithLocalRuntimeOverlay(
             mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
             runtime = TrackingRuntimeSnapshot(
                 isRunning = true,
@@ -391,7 +398,7 @@ class TrackerMapViewModelStreamingContractsTest {
 
     @Test
     fun singleTrailWithLocalRuntimeOverlay_emptyTrail_addsRuntimeHead() {
-        val trail = TrackerMapViewModel.singleTrailWithLocalRuntimeOverlay(
+        val trail = MapSessionEngine.singleTrailWithLocalRuntimeOverlay(
             mode = TrackerMapDisplayMode.SINGLE_SESSION,
             runtime = TrackingRuntimeSnapshot(
                 isRunning = true,
@@ -409,7 +416,7 @@ class TrackerMapViewModelStreamingContractsTest {
 
         assertEquals(1, trail.size)
         assertEquals("local", trail.first().trackerId)
-        assertEquals(TrackerMapPointProvenancePolicy.PROVENANCE_LOCAL_GPS_RUNTIME, trail.first().prov)
+        assertEquals(MapTrailEngine.PROVENANCE_LOCAL_GPS_RUNTIME, trail.first().prov)
         assertEquals(500L, trail.first().startTimestampMs)
     }
 
@@ -426,11 +433,11 @@ class TrackerMapViewModelStreamingContractsTest {
             bearing = null,
             accuracy = null,
             sat = null,
-            prov = TrackerMapPointProvenancePolicy.PROVENANCE_LOCAL_GPS,
+            prov = MapTrailEngine.PROVENANCE_LOCAL_GPS,
             dist = null,
             startTimestampMs = 100L,
         )
-        val trail = TrackerMapViewModel.singleTrailWithLocalRuntimeOverlay(
+        val trail = MapSessionEngine.singleTrailWithLocalRuntimeOverlay(
             mode = TrackerMapDisplayMode.SINGLE_SESSION,
             runtime = TrackingRuntimeSnapshot(
                 isRunning = true,
@@ -465,13 +472,13 @@ class TrackerMapViewModelStreamingContractsTest {
             bearing = null,
             accuracy = null,
             sat = null,
-            prov = TrackerMapPointProvenancePolicy.PROVENANCE_LOCAL_GPS,
+            prov = MapTrailEngine.PROVENANCE_LOCAL_GPS,
             dist = null,
             startTimestampMs = sessionStart,
         )
         val original = listOf(sameSessionTail)
 
-        val trail = TrackerMapViewModel.singleTrailWithLocalRuntimeOverlay(
+        val trail = MapSessionEngine.singleTrailWithLocalRuntimeOverlay(
             mode = TrackerMapDisplayMode.SINGLE_SESSION,
             runtime = TrackingRuntimeSnapshot(
                 isRunning = true,
@@ -491,7 +498,7 @@ class TrackerMapViewModelStreamingContractsTest {
 
     @Test
     fun singleTrailWithLocalRuntimeOverlay_displayedRemote_doesNotOverlayLocal() {
-        val trail = TrackerMapViewModel.singleTrailWithLocalRuntimeOverlay(
+        val trail = MapSessionEngine.singleTrailWithLocalRuntimeOverlay(
             mode = TrackerMapDisplayMode.SINGLE_SESSION,
             runtime = TrackingRuntimeSnapshot(
                 isRunning = true,
@@ -510,28 +517,26 @@ class TrackerMapViewModelStreamingContractsTest {
 
     @Test
     fun singleRenderMarker_usesOverlaidRuntimeHeadWhenBusLags() {
-        val trail = TrackerMapViewModel.singleTrailWithLocalRuntimeOverlay(
+        val runtime = TrackingRuntimeSnapshot(
+            isRunning = true,
+            recordingRuntime = RecordingRuntime(sessionActive = true, selectedTrackerId = "local"),
+            selectedTrackerId = "local",
+            selectedTrackerName = "Local",
+            lastTrackedLatitude = 20.0,
+            lastTrackedLongitude = 10.0,
+            lastTrackedTimestampMs = 1000L,
+            sessionStartTimeMs = 500L,
+        )
+        val trail = MapSessionEngine.singleTrailWithLocalRuntimeOverlay(
             mode = TrackerMapDisplayMode.SINGLE_SESSION,
-            runtime = TrackingRuntimeSnapshot(
-                isRunning = true,
-                recordingRuntime = RecordingRuntime(sessionActive = true, selectedTrackerId = "local"),
-                selectedTrackerId = "local",
-                selectedTrackerName = "Local",
-                lastTrackedLatitude = 20.0,
-                lastTrackedLongitude = 10.0,
-                lastTrackedTimestampMs = 1000L,
-                sessionStartTimeMs = 500L,
-            ),
+            runtime = runtime,
             displayedTrackerId = "local",
             trail = emptyList(),
         )
-        val renderState = TrackerMapStateTransforms.buildRenderState(
+        val renderState = MapRenderMath.buildRenderState(
             mode = TrackerMapDisplayMode.SINGLE_SESSION,
             trail = trail,
-            runtime = TrackingRuntimeSnapshot(
-                selectedTrackerId = "local",
-                selectedTrackerName = "Local",
-            ),
+            runtime = runtime,
             displayedTrackerId = "local",
         )
 
@@ -545,7 +550,7 @@ class TrackerMapViewModelStreamingContractsTest {
         // STREAMING-RESUME SHORT-CIRCUIT (Bug 3): when the WS is already subscribed to exactly
         // the group's non-locally-recorded members, evaluateResumeAfterBackground should treat
         // resume as a no-op rather than triggering a redundant reload+reconcile pass.
-        val match = TrackerMapViewModel.streamingActiveTargetsMatchDisplayed(
+        val match = MapSessionEngine.streamingActiveTargetsMatchDisplayed(
             mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
             displayedIds = setOf("a", "b", "self"),
             localRecordingActive = true,
@@ -557,7 +562,7 @@ class TrackerMapViewModelStreamingContractsTest {
 
     @Test
     fun streamingActiveTargetsMatchDisplayed_groupModeWithMissingMember_returnsFalse() {
-        val match = TrackerMapViewModel.streamingActiveTargetsMatchDisplayed(
+        val match = MapSessionEngine.streamingActiveTargetsMatchDisplayed(
             mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
             displayedIds = setOf("a", "b"),
             localRecordingActive = false,
@@ -569,7 +574,7 @@ class TrackerMapViewModelStreamingContractsTest {
 
     @Test
     fun streamingActiveTargetsMatchDisplayed_singleSession_returnsFalse() {
-        val match = TrackerMapViewModel.streamingActiveTargetsMatchDisplayed(
+        val match = MapSessionEngine.streamingActiveTargetsMatchDisplayed(
             mode = TrackerMapDisplayMode.SINGLE_SESSION,
             displayedIds = setOf("a"),
             localRecordingActive = false,
@@ -585,7 +590,7 @@ class TrackerMapViewModelStreamingContractsTest {
             "a" to listOf(serverPoint("a", time = 1L)),
             "b" to emptyList(),
         )
-        val ready = TrackerMapViewModel.displayedRosterHasServerHistory(
+        val ready = MapSessionEngine.displayedRosterHasServerHistory(
             mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
             rosterIds = setOf("a", "b"),
             allQueueTrailsByTracker = partial,
@@ -599,7 +604,7 @@ class TrackerMapViewModelStreamingContractsTest {
             "a" to listOf(serverPoint("a", time = 1L)),
             "b" to listOf(serverPoint("b", time = 2L)),
         )
-        val ready = TrackerMapViewModel.displayedRosterHasServerHistory(
+        val ready = MapSessionEngine.displayedRosterHasServerHistory(
             mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
             rosterIds = setOf("a", "b"),
             allQueueTrailsByTracker = populated,
@@ -609,7 +614,7 @@ class TrackerMapViewModelStreamingContractsTest {
 
     @Test
     fun displayedRosterHasServerHistory_groupModeAllEmpty_returnsFalse() {
-        val ready = TrackerMapViewModel.displayedRosterHasServerHistory(
+        val ready = MapSessionEngine.displayedRosterHasServerHistory(
             mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
             rosterIds = setOf("a", "b"),
             allQueueTrailsByTracker = mapOf("a" to emptyList(), "b" to emptyList()),
@@ -626,7 +631,7 @@ class TrackerMapViewModelStreamingContractsTest {
             "a" to listOf(queuedPoint("a", time = 1L)),
             "b" to listOf(queuedPoint("b", time = 2L)),
         )
-        val ready = TrackerMapViewModel.displayedRosterHasServerHistory(
+        val ready = MapSessionEngine.displayedRosterHasServerHistory(
             mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
             rosterIds = setOf("a", "b"),
             allQueueTrailsByTracker = queueOnly,
@@ -636,35 +641,35 @@ class TrackerMapViewModelStreamingContractsTest {
 
     @Test
     fun resolveHistoryClearRefreshAction_singleMode_otherTracker_noOp() {
-        val action = TrackerMapViewModel.resolveHistoryClearRefreshAction(
+        val action = com.geovault.tracker.map.MapSessionEngine.resolveHistoryClearRefreshAction(
             mode = TrackerMapDisplayMode.SINGLE_SESSION,
             displayedTrackerId = "displayed",
             selectedTrackerId = "selected",
             clearedTrackerId = "other"
         )
-        assertEquals(TrackerMapViewModel.HistoryClearRefreshAction.NO_OP, action)
+        assertEquals(com.geovault.tracker.map.MapSessionEngine.HistoryClearRefreshAction.NO_OP, action)
     }
 
     @Test
     fun resolveHistoryClearRefreshAction_singleMode_displayedTracker_refreshes() {
-        val action = TrackerMapViewModel.resolveHistoryClearRefreshAction(
+        val action = com.geovault.tracker.map.MapSessionEngine.resolveHistoryClearRefreshAction(
             mode = TrackerMapDisplayMode.SINGLE_SESSION,
             displayedTrackerId = "displayed",
             selectedTrackerId = "selected",
             clearedTrackerId = "displayed"
         )
-        assertEquals(TrackerMapViewModel.HistoryClearRefreshAction.REFRESH_DISPLAYED_SINGLE, action)
+        assertEquals(com.geovault.tracker.map.MapSessionEngine.HistoryClearRefreshAction.REFRESH_DISPLAYED_SINGLE, action)
     }
 
     @Test
     fun resolveHistoryClearRefreshAction_groupMode_refreshesGroupOrAll() {
-        val action = TrackerMapViewModel.resolveHistoryClearRefreshAction(
+        val action = com.geovault.tracker.map.MapSessionEngine.resolveHistoryClearRefreshAction(
             mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
             displayedTrackerId = "",
             selectedTrackerId = "selected",
             clearedTrackerId = "any"
         )
-        assertEquals(TrackerMapViewModel.HistoryClearRefreshAction.REFRESH_GROUP_OR_ALL, action)
+        assertEquals(com.geovault.tracker.map.MapSessionEngine.HistoryClearRefreshAction.REFRESH_GROUP_OR_ALL, action)
     }
 
     // Filter-driven reload decisions live in TrackerMapFilterChangeReactor — see
@@ -673,7 +678,7 @@ class TrackerMapViewModelStreamingContractsTest {
 
     @Test
     fun resolveBottomCardVisibilityForMarkerTap_withSelection_showsCard() {
-        val visible = TrackerMapViewModel.resolveBottomCardVisibilityForMarkerTap(
+        val visible = MapSessionEngine.resolveBottomCardVisibilityForMarkerTap(
             hasSelectionCard = true
         )
         assertEquals(true, visible)
@@ -681,7 +686,7 @@ class TrackerMapViewModelStreamingContractsTest {
 
     @Test
     fun resolveBackgroundTapShouldCloseBottomCard_hiddenAndNoSelection_noClose() {
-        val shouldClose = TrackerMapViewModel.resolveBackgroundTapShouldCloseBottomCard(
+        val shouldClose = MapSessionEngine.resolveBackgroundTapShouldCloseBottomCard(
             isBottomCardVisible = false,
             hasSelectionCard = false
         )
@@ -690,7 +695,7 @@ class TrackerMapViewModelStreamingContractsTest {
 
     @Test
     fun resolveBackgroundTapShouldCloseBottomCard_visible_closes() {
-        val shouldClose = TrackerMapViewModel.resolveBackgroundTapShouldCloseBottomCard(
+        val shouldClose = MapSessionEngine.resolveBackgroundTapShouldCloseBottomCard(
             isBottomCardVisible = true,
             hasSelectionCard = true
         )
@@ -699,7 +704,7 @@ class TrackerMapViewModelStreamingContractsTest {
 
     @Test
     fun resolveRenderSelectedMapTrackerId_hiddenCard_dropsSelectionHighlight() {
-        val selectedId = TrackerMapViewModel.resolveRenderSelectedMapTrackerId(
+        val selectedId = MapSessionEngine.resolveRenderSelectedMapTrackerId(
             isBottomCardVisible = false,
             selectedMapTrackerId = "tracker-1"
         )
@@ -708,7 +713,7 @@ class TrackerMapViewModelStreamingContractsTest {
 
     @Test
     fun resolveRenderSelectedMapTrackerId_visibleCard_keepsSelectionHighlight() {
-        val selectedId = TrackerMapViewModel.resolveRenderSelectedMapTrackerId(
+        val selectedId = MapSessionEngine.resolveRenderSelectedMapTrackerId(
             isBottomCardVisible = true,
             selectedMapTrackerId = "tracker-1"
         )
@@ -717,67 +722,58 @@ class TrackerMapViewModelStreamingContractsTest {
 
     @Test
     fun resolveFocusActionVisible_singleSession_hidesFocusAction() {
-        val visible = TrackerMapViewModel.resolveFocusActionVisible(TrackerMapDisplayMode.SINGLE_SESSION)
+        val visible = MapSessionEngine.resolveFocusActionVisible(TrackerMapDisplayMode.SINGLE_SESSION)
         assertEquals(false, visible)
     }
 
     @Test
     fun resolveFocusActionVisible_allAndGroup_showFocusAction() {
-        val allVisible = TrackerMapViewModel.resolveFocusActionVisible(TrackerMapDisplayMode.ALL_QUEUE)
-        val groupVisible = TrackerMapViewModel.resolveFocusActionVisible(TrackerMapDisplayMode.GROUP_PLACEHOLDER)
+        val allVisible = MapSessionEngine.resolveFocusActionVisible(TrackerMapDisplayMode.ALL_QUEUE)
+        val groupVisible = MapSessionEngine.resolveFocusActionVisible(TrackerMapDisplayMode.GROUP_PLACEHOLDER)
         assertEquals(true, allVisible)
         assertEquals(true, groupVisible)
     }
 
     @Test
     fun resolveAllowedFallbackTrackerIds_singleSession_prefersDisplayedTrackerWhenVisible() {
-        val allowed = TrackerAccuracyFallbackPolicy.resolveAllowedFallbackTrackerIds(
-            TrackerAccuracyFallbackPolicyInput(
-                mode = TrackerMapDisplayMode.SINGLE_SESSION,
-                runtimeRunning = false,
-                selectedTrackerId = "tracker-1",
-                displayedTrackerId = "tracker-2",
-                visibleTrackerIds = setOf("tracker-1", "tracker-2")
-            )
+        val allowed = MapRenderMath.resolveAllowedFallbackTrackerIds(
+            mode = TrackerMapDisplayMode.SINGLE_SESSION,
+            selectedTrackerId = "tracker-1",
+            displayedTrackerId = "tracker-2",
+            visibleTrackerIds = setOf("tracker-1", "tracker-2")
         )
         assertEquals(setOf("tracker-2"), allowed)
     }
 
     @Test
     fun resolveAllowedFallbackTrackerIds_allQueue_allVisibleTrackersAllowed() {
-        val allowed = TrackerAccuracyFallbackPolicy.resolveAllowedFallbackTrackerIds(
-            TrackerAccuracyFallbackPolicyInput(
-                mode = TrackerMapDisplayMode.ALL_QUEUE,
-                runtimeRunning = false,
-                selectedTrackerId = "tracker-2",
-                displayedTrackerId = "",
-                visibleTrackerIds = setOf("tracker-1", "tracker-2", "tracker-3")
-            )
+        val allowed = MapRenderMath.resolveAllowedFallbackTrackerIds(
+            mode = TrackerMapDisplayMode.ALL_QUEUE,
+            selectedTrackerId = "tracker-2",
+            displayedTrackerId = "",
+            visibleTrackerIds = setOf("tracker-1", "tracker-2", "tracker-3")
         )
         assertEquals(setOf("tracker-1", "tracker-2", "tracker-3"), allowed)
     }
 
     @Test
     fun resolveAllowedFallbackTrackerIds_groupMode_allVisibleTrackersAllowed() {
-        val allowed = TrackerAccuracyFallbackPolicy.resolveAllowedFallbackTrackerIds(
-            TrackerAccuracyFallbackPolicyInput(
-                mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
-                runtimeRunning = true,
-                selectedTrackerId = "tracker-2",
-                displayedTrackerId = "",
-                visibleTrackerIds = setOf("tracker-1")
-            )
+        val allowed = MapRenderMath.resolveAllowedFallbackTrackerIds(
+            mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
+            selectedTrackerId = "tracker-2",
+            displayedTrackerId = "",
+            visibleTrackerIds = setOf("tracker-1")
         )
         assertEquals(setOf("tracker-1"), allowed)
     }
 
-    private fun remotePoint(trackerId: String): TrackPointEvent {
-        return TrackPointEvent(
-            source = TrackPointSource.REMOTE_STREAM,
-            trackId = trackerId,
-            lon = 2.0,
-            lat = 1.0,
-            timestampMs = 1_000L,
+    private fun remotePoint(trackerId: String): TrackPoint {
+        return TrackPoint(
+            provenance = TrackPointSource.REMOTE_STREAM,
+            trackerId = trackerId,
+            longitude = 2.0,
+            latitude = 1.0,
+            timeMs = 1_000L,
         )
     }
 
@@ -793,7 +789,7 @@ class TrackerMapViewModelStreamingContractsTest {
             bearing = null,
             accuracy = null,
             sat = null,
-            prov = TrackerMapPointProvenancePolicy.PROVENANCE_LOCAL_GPS,
+            prov = MapTrailEngine.PROVENANCE_LOCAL_GPS,
             dist = null,
         )
     }
@@ -810,7 +806,7 @@ class TrackerMapViewModelStreamingContractsTest {
             bearing = null,
             accuracy = null,
             sat = null,
-            prov = TrackerMapPointProvenancePolicy.PROVENANCE_SERVER_GEOMETRY,
+            prov = MapTrailEngine.PROVENANCE_SERVER_GEOMETRY,
             dist = null,
         )
     }
@@ -833,7 +829,7 @@ class TrackerMapViewModelStreamingContractsTest {
             bearing = null,
             accuracy = null,
             sat = null,
-            prov = TrackerMapPointProvenancePolicy.PROVENANCE_SERVER_GEOMETRY,
+            prov = MapTrailEngine.PROVENANCE_SERVER_GEOMETRY,
             dist = null,
             startTimestampMs = startTimestampMs,
         )

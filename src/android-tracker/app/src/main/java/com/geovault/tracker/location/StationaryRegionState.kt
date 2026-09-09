@@ -1,7 +1,7 @@
 package com.geovault.tracker.location
 
 import android.content.Context
-import com.geovault.tracker.services.TrackingMotionMode
+import com.geovault.tracker.positioning.TrackingMotionMode
 
 data class StationaryRegionState(
     val anchor: RecoveryAnchorState? = null,

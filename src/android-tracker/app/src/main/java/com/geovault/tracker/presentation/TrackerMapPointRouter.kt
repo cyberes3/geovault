@@ -1,6 +1,6 @@
 package com.geovault.tracker.presentation
 
-import com.geovault.tracker.policy.TrackPointEvent
+import com.geovault.tracker.domain.TrackPoint
 import com.geovault.tracker.policy.TrackPointSource
 
 data class TrackerMapPointRoute(
@@ -12,10 +12,10 @@ data class TrackerMapPointRoute(
 )
 
 object TrackerMapPointRouter {
-    fun route(event: TrackPointEvent, plan: TrackerMapStreamingPlan): TrackerMapPointRoute {
-        val trackerId = event.trackId.trim()
+    fun route(event: TrackPoint, plan: TrackerMapStreamingPlan): TrackerMapPointRoute {
+        val trackerId = event.trackerId.trim()
         if (trackerId.isEmpty()) return TrackerMapPointRoute(accepted = false)
-        return when (event.source) {
+        return when (event.provenance) {
             TrackPointSource.LOCAL_GPS -> routeLocal(trackerId, plan)
             TrackPointSource.REMOTE_STREAM -> routeRemote(trackerId, plan)
         }

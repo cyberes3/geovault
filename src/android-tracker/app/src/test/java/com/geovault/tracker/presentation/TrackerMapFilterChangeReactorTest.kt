@@ -1,6 +1,7 @@
 package com.geovault.tracker.presentation
 
 import com.geovault.tracker.Tracker
+import com.geovault.tracker.TrackerCatalogSettings
 import com.geovault.tracker.presentation.TrackerMapFilterChangeReactor.FilterChange
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -9,7 +10,7 @@ import org.junit.Test
 class TrackerMapFilterChangeReactorTest {
 
     private fun tracker(id: String, window: String? = null): Tracker {
-        val settings: Map<String, Any?>? = if (window != null) mapOf("recent_data_window" to window) else null
+        val settings = window?.let { TrackerCatalogSettings(recentDataWindow = it) }
         return Tracker(id = id, name = id, color = null, settings = settings)
     }
 

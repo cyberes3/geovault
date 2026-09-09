@@ -1,5 +1,6 @@
 package com.geovault.tracker.presentation
 
+import com.geovault.tracker.map.MapSessionEngine
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -7,7 +8,7 @@ class TrackerMapReopenOrchestratorTest {
 
     @Test
     fun trackingWithPoints_doesNotEmitDestructiveInvariantViolation() {
-        val outcome = TrackerMapReopenOrchestrator().resolve(
+        val outcome = MapSessionEngine.resolveReopen(
             TrackerMapResumeInput(
                 trackingRunning = true,
                 mapReady = true,

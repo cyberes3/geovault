@@ -1,6 +1,7 @@
 package com.geovault.tracker.presentation
 
 import com.geovault.tracker.Tracker
+import com.geovault.tracker.TrackerCatalogSettings
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -93,10 +94,10 @@ class TrackerSharingSettingsPolicyTest {
             id = "t1",
             name = "Tracker One",
             color = "#112233",
-            settings = mapOf(
-                "recent_data_window" to "1h",
-                "hidden" to true,
-                "allow_group_reshare" to true,
+            settings = TrackerCatalogSettings(
+                recentDataWindow = "1h",
+                hidden = true,
+                allowGroupReshare = true,
             ),
             visibility = "shared",
             share_params_with_recipients = true,
@@ -124,7 +125,7 @@ class TrackerSharingSettingsPolicyTest {
             id = "t1",
             name = "Tracker One",
             color = "#112233",
-            settings = mapOf("hidden" to true),
+            settings = TrackerCatalogSettings(hidden = true),
             visibility = "public",
         )
         val request = TrackerSharingSettingsPolicy.buildPreservingSettingsRequest(

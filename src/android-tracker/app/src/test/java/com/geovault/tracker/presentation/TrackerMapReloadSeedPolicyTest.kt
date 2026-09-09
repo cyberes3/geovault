@@ -4,6 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Test
 
+import com.geovault.tracker.map.MapTrailEngine
 class TrackerMapReloadSeedPolicyTest {
 
     @Test
@@ -12,7 +13,7 @@ class TrackerMapReloadSeedPolicyTest {
             groupId = "g1",
             trackerIds = setOf("b", " a ")
         )
-        val first = TrackerMapReloadSeedPolicy.streamSeed(
+        val first = MapTrailEngine.streamSeed(
             TrackerMapStreamSeedInput(
                 mode = TrackerMapDisplayMode.ALL_QUEUE,
                 runtimeRunning = true,
@@ -22,7 +23,7 @@ class TrackerMapReloadSeedPolicyTest {
                 groupSelection = selection
             )
         )
-        val second = TrackerMapReloadSeedPolicy.streamSeed(
+        val second = MapTrailEngine.streamSeed(
             TrackerMapStreamSeedInput(
                 mode = TrackerMapDisplayMode.ALL_QUEUE,
                 runtimeRunning = true,
@@ -41,7 +42,7 @@ class TrackerMapReloadSeedPolicyTest {
 
     @Test
     fun trailSeed_ignoresSessionBoundaryChanges() {
-        val base = TrackerMapReloadSeedPolicy.trailSeed(
+        val base = MapTrailEngine.trailSeed(
             TrackerMapTrailSeedInput(
                 mode = TrackerMapDisplayMode.SINGLE_SESSION,
                 runtimeRunning = false,
@@ -50,7 +51,7 @@ class TrackerMapReloadSeedPolicyTest {
                 groupSelection = TrackerMapGroupModeSelection(groupId = null, trackerIds = emptySet())
             )
         )
-        val changed = TrackerMapReloadSeedPolicy.trailSeed(
+        val changed = MapTrailEngine.trailSeed(
             TrackerMapTrailSeedInput(
                 mode = TrackerMapDisplayMode.SINGLE_SESSION,
                 runtimeRunning = false,
@@ -65,7 +66,7 @@ class TrackerMapReloadSeedPolicyTest {
 
     @Test
     fun trailSeed_changesWhenRenderMetadataSignatureChanges() {
-        val base = TrackerMapReloadSeedPolicy.trailSeed(
+        val base = MapTrailEngine.trailSeed(
             TrackerMapTrailSeedInput(
                 mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
                 runtimeRunning = false,
@@ -75,7 +76,7 @@ class TrackerMapReloadSeedPolicyTest {
                 renderMetadataSignature = "geometry:1,2;3,4",
             )
         )
-        val changed = TrackerMapReloadSeedPolicy.trailSeed(
+        val changed = MapTrailEngine.trailSeed(
             TrackerMapTrailSeedInput(
                 mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
                 runtimeRunning = false,

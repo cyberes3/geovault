@@ -2,11 +2,11 @@ package com.geovault.tracker.runtime
 
 import com.geovault.tracker.location.SyncFailureClass
 import com.geovault.tracker.positioning.config.GpsRuntimeState
-import com.geovault.tracker.services.ProviderHealthDecision
-import com.geovault.tracker.services.QueueUploadFailureReason
-import com.geovault.tracker.services.QueueUploadResult
-import com.geovault.tracker.services.QueueUploadScope
-import com.geovault.tracker.services.TrackingMotionMode
+import com.geovault.tracker.positioning.ProviderHealthDecision
+import com.geovault.tracker.positioning.QueueUploadFailureReason
+import com.geovault.tracker.positioning.QueueUploadResult
+import com.geovault.tracker.positioning.QueueUploadScope
+import com.geovault.tracker.positioning.TrackingMotionMode
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test

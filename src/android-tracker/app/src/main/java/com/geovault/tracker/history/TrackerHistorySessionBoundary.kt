@@ -2,14 +2,14 @@ package com.geovault.tracker.history
 
 import com.geovault.common.logging.GeoVaultCaptureLog
 import com.geovault.tracker.Tracker
-import com.geovault.tracker.services.TrackingRuntimeSnapshot
+import com.geovault.tracker.positioning.TrackingRuntimeSnapshot
 
 /**
  * Owns recording start/stop semantics for map history: recompose on session start,
  * clear display boundary on stop, and defer recompose until session start is known.
  * User-initiated clears use [TrackerHistoryIntent.Clear] elsewhere.
  */
-class TrackerHistorySessionBoundary {
+internal class TrackerHistorySessionBoundary {
     private var pendingRecomposeTrackerId: String? = null
 
     fun onRecordingStarted(
@@ -68,7 +68,6 @@ class TrackerHistorySessionBoundary {
             return
         }
         val activeTrackerId = runtime.locallyRecordedTrackerId.trim()
-            .ifBlank { runtime.selectedTrackerId.trim() }
         if (activeTrackerId != pendingTrackerId) return
         val sessionStart = runtime.sessionStartTimeMs.takeIf { it > 0L } ?: return
         pendingRecomposeTrackerId = null
@@ -104,8 +103,8 @@ class TrackerHistorySessionBoundary {
         GeoVaultCaptureLog.i(
             TAG,
             "map_update history_recompose tracker=$normalized window=${window.normalizedKey} " +
-                "sessionStart=${activeSessionStartMs ?: -1} committed=${result.committed} " +
-                "reason=${result.reason} points=${result.snapshot.points.size}",
+                "sessionStart=${activeSessionStartMs ?: -1} published=${result.publishesSnapshot()} " +
+                "kind=${result.kindName()} points=${result.snapshot.points.size}",
         )
     }
 

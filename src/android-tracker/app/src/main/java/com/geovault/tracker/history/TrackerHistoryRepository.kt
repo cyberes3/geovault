@@ -40,7 +40,7 @@ class TrackerHistoryRepository(
     }
 
     @Synchronized
-    fun commitTrunk(
+    internal fun commitTrunk(
         batch: TrackerHistorySourceBatch,
         activeSessionStartMs: Long?,
         nowMs: Long = System.currentTimeMillis(),
@@ -76,7 +76,9 @@ class TrackerHistoryRepository(
             }
         }
         sourceStore.putTrunk(trunkBatch)
-        lastTrunkFetchedAtMsByTracker[trunkBatch.normalizedTrackerId] = nowMs
+        if (!trunkBatch.degradedLocalOnly) {
+            lastTrunkFetchedAtMsByTracker[trunkBatch.normalizedTrackerId] = nowMs
+        }
         if (trunkBatch.sourceKind == TrackerHistorySourceKind.FILTERED_SERVER_TRUNK && !trunkBatch.complete) {
             GeoVaultCaptureLog.i(
                 TAG,
@@ -89,7 +91,7 @@ class TrackerHistoryRepository(
     }
 
     @Synchronized
-    fun commitOverlay(
+    internal fun commitOverlay(
         batch: TrackerHistorySourceBatch,
         activeSessionStartMs: Long?,
         nowMs: Long = System.currentTimeMillis(),
@@ -132,10 +134,10 @@ class TrackerHistoryRepository(
 
     /**
      * Overlay points already in the source store that the published snapshot does not include
-     * (typically [empty_snapshot_deferred]). Draw must still paint these.
+     * (typically [TrackerHistoryTransactionResult.DeferredEmpty]). Draw must still paint these.
      */
     @Synchronized
-    fun unpublishedOverlayQueuedLocations(key: TrackerHistoryKey): List<QueuedLocation> {
+    internal fun unpublishedOverlay(key: TrackerHistoryKey): List<QueuedLocation> {
         val publishedKeys = _snapshots.value[key]?.points?.map { it.key }?.toSet().orEmpty()
         return sourceStore.overlays(key)
             .flatMap { it.points }
@@ -145,7 +147,7 @@ class TrackerHistoryRepository(
     }
 
     @Synchronized
-    fun composeAndPublish(
+    internal fun composeAndPublish(
         key: TrackerHistoryKey,
         activeSessionStartMs: Long?,
         nowMs: Long = System.currentTimeMillis(),
@@ -169,13 +171,13 @@ class TrackerHistoryRepository(
                 forceCommitEmpty = forceCommitEmpty || deferralWatchdog.shouldForceCommit(key),
             ),
         )
-        if (result.committed) {
+        if (result.publishesSnapshot()) {
             deferralWatchdog.onCommitted(key)
             _snapshots.value = _snapshots.value + (key to result.snapshot)
             if (result.snapshot.trunk.isNotEmpty()) {
                 sourceStore.releaseClearBoundary(key.normalizedTrackerId)
             }
-        } else if (result.reason == "empty_snapshot_deferred") {
+        } else if (result is TrackerHistoryTransactionResult.DeferredEmpty) {
             deferralWatchdog.onDeferred(key)
             TrackerHistoryDiagnostics.logComposeDeferred(
                 trackerId = key.normalizedTrackerId,
@@ -224,7 +226,7 @@ class TrackerHistoryRepository(
                 nowMs = nowMs,
                 forceCommitEmpty = true,
             )
-            if (result.committed && result.snapshot.points != previousPoints) {
+            if (result.publishesSnapshot() && result.snapshot.points != previousPoints) {
                 changedKeys += key
             }
         }
@@ -244,10 +246,9 @@ class TrackerHistoryRepository(
             committedAtMs = nowMs,
             generation = nowMs,
         )
-        return TrackerHistoryTransactionResult(
+        return TrackerHistoryTransactionResult.RejectedTrunk(
             snapshot = previous,
-            committed = false,
-            reason = reason,
+            rejectReason = reason,
         )
     }
 }

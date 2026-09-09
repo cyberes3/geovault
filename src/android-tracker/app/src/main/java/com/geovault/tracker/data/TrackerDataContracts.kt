@@ -26,7 +26,6 @@ interface TrackerManagementRepository {
     suspend fun updateTrackerSettings(
         trackerId: String,
         request: TrackerSettingsRequest,
-        publishToStore: Boolean = true
     ): Tracker
     suspend fun deleteTracker(trackerId: String)
     suspend fun clearTrackerHistory(trackerId: String)
@@ -50,7 +49,6 @@ interface GroupManagementRepository {
     suspend fun patchGroup(
         groupId: String,
         request: com.geovault.tracker.GroupPatchRequest,
-        publishToStore: Boolean = true
     ): Group
     suspend fun deleteGroup(groupId: String)
     suspend fun addGroupTrack(groupId: String, trackId: String): Group

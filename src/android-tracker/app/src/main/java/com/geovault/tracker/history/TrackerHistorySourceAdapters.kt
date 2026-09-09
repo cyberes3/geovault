@@ -3,7 +3,7 @@ package com.geovault.tracker.history
 import com.geovault.common.logging.GeoVaultCaptureLog
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.db.QueuedLocation
-import com.geovault.tracker.policy.TrackPointEvent
+import com.geovault.tracker.domain.TrackPoint
 import com.geovault.tracker.policy.TrackPointSource
 import com.geovault.tracker.policy.WireTimestampNormalizer
 import com.geovault.tracker.presentation.TrackerMapPointStartTimestampParser
@@ -31,7 +31,7 @@ object TrackerHistorySourceAdapters {
             val lon = coord.getOrNull(0) ?: return@mapIndexedNotNull null
             val lat = coord.getOrNull(1) ?: return@mapIndexedNotNull null
             if (!lat.isFinite() || !lon.isFinite()) return@mapIndexedNotNull null
-            val params = pointParams.getOrNull(index).orEmpty()
+            val params = pointParams.getOrNull(index)
             TrackerHistoryPoint(
                 trackerId = trackerId,
                 timestampMs = timestamps[index],
@@ -41,7 +41,7 @@ object TrackerHistorySourceAdapters {
                 speed = params.speedMpsFromParams(),
                 bearing = params.floatValue("bearing"),
                 satellites = params.intValue("sat"),
-                startTimestampMs = WireTimestampNormalizer.normalizeToMilliseconds(params["starttimestamp"]),
+                startTimestampMs = WireTimestampNormalizer.normalizeToMilliseconds(params.jsonValue("starttimestamp")),
                 provenance = TrackerHistoryProvenance.SERVER_GEOMETRY,
                 rowId = -(index + 1L),
             )
@@ -101,23 +101,23 @@ object TrackerHistorySourceAdapters {
     }
 
     fun liveOverlay(
-        event: TrackPointEvent,
+        event: TrackPoint,
         window: TrackerHistoryWindow,
         activeSessionStartMs: Long?,
         fetchedAtMs: Long = System.currentTimeMillis(),
     ): TrackerHistorySourceBatch {
-        val sourceKind = when (event.source) {
+        val sourceKind = when (event.provenance) {
             TrackPointSource.LOCAL_GPS -> TrackerHistorySourceKind.LOCAL_LIVE
             TrackPointSource.REMOTE_STREAM -> TrackerHistorySourceKind.REMOTE_STREAM
         }
         val resolvedSessionStart = TrackerMapPointStartTimestampParser.parse(event.propsJson)
             ?: activeSessionStartMs
         return TrackerHistorySourceBatch(
-            trackerId = event.trackId.trim(),
+            trackerId = event.trackerId.trim(),
             window = window,
             sourceKind = sourceKind,
             points = listOf(
-                TrackerHistoryPoint.fromTrackPointEvent(
+                TrackerHistoryPoint.fromTrackPoint(
                     event = event,
                     startTimestampMs = resolvedSessionStart,
                 ),
@@ -157,27 +157,8 @@ object TrackerHistorySourceAdapters {
         )
     }
 
-    fun runtimeHeadOverlay(
-        point: QueuedLocation,
-        window: TrackerHistoryWindow,
-        fetchedAtMs: Long = System.currentTimeMillis(),
-    ): TrackerHistorySourceBatch {
-        return TrackerHistorySourceBatch(
-            trackerId = point.trackerId.trim(),
-            window = window,
-            sourceKind = TrackerHistorySourceKind.RUNTIME_HEAD,
-            points = listOf(
-                TrackerHistoryPoint.fromQueuedLocation(
-                    point = point,
-                    provenance = TrackerHistoryProvenance.RUNTIME_HEAD,
-                )
-            ),
-            fetchedAtMs = fetchedAtMs,
-        )
-    }
-
     private fun Tracker.historyWindowFromSettings(): TrackerHistoryWindow {
-        val key = settings?.get("recent_data_window") as? String
+        val key = catalogSettings.recentDataWindow
         return TrackerHistoryWindow(key ?: TrackerHistoryWindow.KEY_ALL)
     }
 
@@ -197,21 +178,30 @@ object TrackerHistorySourceAdapters {
     }
 
     /** Backend/GPSLogger store speed as `spd_kph`; [QueuedLocation.speed] is m/s. */
-    private fun Map<String, Any?>.speedMpsFromParams(): Float? {
+    private fun com.google.gson.JsonObject?.speedMpsFromParams(): Float? {
         val kph = floatValue("spd_kph") ?: return null
         return (kph / KPH_TO_MPS).takeIf { it.isFinite() }
     }
 
-    private fun Map<String, Any?>.floatValue(key: String): Float? {
-        return when (val value = this[key]) {
+    private fun com.google.gson.JsonObject?.jsonValue(key: String): Any? {
+        val element = this?.get(key) ?: return null
+        if (element.isJsonNull || !element.isJsonPrimitive) return null
+        val primitive = element.asJsonPrimitive
+        if (primitive.isNumber) return primitive.asNumber
+        if (primitive.isBoolean) return primitive.asBoolean
+        return primitive.asString
+    }
+
+    private fun com.google.gson.JsonObject?.floatValue(key: String): Float? {
+        return when (val value = jsonValue(key)) {
             is Number -> value.toFloat()
             is String -> value.toFloatOrNull()
             else -> null
         }?.takeIf { it.isFinite() }
     }
 
-    private fun Map<String, Any?>.intValue(key: String): Int? {
-        return when (val value = this[key]) {
+    private fun com.google.gson.JsonObject?.intValue(key: String): Int? {
+        return when (val value = jsonValue(key)) {
             is Number -> value.toInt()
             is String -> value.toIntOrNull()
             else -> null

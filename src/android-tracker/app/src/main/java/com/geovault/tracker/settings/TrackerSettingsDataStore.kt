@@ -43,21 +43,22 @@ class TrackerSettingsDataStore(context: Context) {
 
     suspend fun readRecord(): TrackerSettingsRecord = observeRecord().first()
 
+    suspend fun readDocument(): TrackerSettingsDocument {
+        migrateFromPreferencesDataStoreIfNeeded()
+        return store.data.first()
+    }
+
     suspend fun writeSettings(settings: TrackerSettings) {
         updateRecord(reason = "write_settings") { current ->
             current.copy(settings = settings)
         }
     }
 
-    suspend fun setWasTrackingBeforeExit(value: Boolean) {
-        updateRecord(reason = "set_was_tracking_before_exit") { current ->
-            current.copy(wasTrackingBeforeExit = value)
-        }
-    }
-
     suspend fun clearWasTrackingBeforeExit() {
-        updateRecord(reason = "clear_was_tracking_before_exit") { current ->
-            current.copy(wasTrackingBeforeExit = false)
+        migrateFromPreferencesDataStoreIfNeeded()
+        store.update { current ->
+            if (!current.wasTrackingBeforeExit) current
+            else current.copy(wasTrackingBeforeExit = false)
         }
     }
 
@@ -73,15 +74,17 @@ class TrackerSettingsDataStore(context: Context) {
                 GeoVaultCaptureLog.i(
                     TAG,
                     "datastore_write_ignored reason=$reason cause=no_op schema=${currentRecord.schemaVersion} " +
-                        "wasTrackingBeforeExit=${currentRecord.wasTrackingBeforeExit} settings=${settingsSummary(currentRecord.settings)}"
+                        "settings=${settingsSummary(currentRecord.settings)}"
                 )
                 return@update current
             }
             GeoVaultCaptureLog.i(
                 TAG,
-                "datastore_write reason=$reason schema=${next.schemaVersion} wasTrackingBeforeExit=${next.wasTrackingBeforeExit} settings=${settingsSummary(next.settings)}"
+                "datastore_write reason=$reason schema=${next.schemaVersion} settings=${settingsSummary(next.settings)}"
             )
-            TrackerSettingsDocument.fromRecord(next)
+            TrackerSettingsDocument.fromRecord(next).copy(
+                wasTrackingBeforeExit = current.wasTrackingBeforeExit
+            )
         }
     }
 

@@ -17,7 +17,6 @@ class SettingsPresentationTest {
             settings = TrackerSettings(
                 sendExtendedData = false,
             ),
-            wasTrackingBeforeExit = false,
             schemaVersion = TrackerSettingsDefaults.schemaVersion,
             revision = 7L,
         )
@@ -25,6 +24,6 @@ class SettingsPresentationTest {
         assertEquals(TrackerSettingsLoadState.Ready, merged.trackerLoadState)
         assertEquals(false, merged.trackerSettings.sendExtendedData)
         assertEquals(7L, merged.trackerRevision)
-        assertEquals(base.infoMessage, merged.infoMessage)
+        assertEquals(base.hiddenTrackerItems, merged.hiddenTrackerItems)
     }
 }

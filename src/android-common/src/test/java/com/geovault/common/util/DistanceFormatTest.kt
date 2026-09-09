@@ -1,6 +1,7 @@
 package com.geovault.common.util
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class DistanceFormatTest {
@@ -32,5 +33,26 @@ class DistanceFormatTest {
     fun measurementSystemFromLocale_usesImperialCountries() {
         assertEquals(MeasurementSystem.IMPERIAL, MeasurementSystem.fromLocale(java.util.Locale.US))
         assertEquals(MeasurementSystem.METRIC, MeasurementSystem.fromLocale(java.util.Locale.FRANCE))
+    }
+
+    @Test
+    fun metersToDisplayMagnitude_imperialRoundsAndKeepsMinimumOne() {
+        assertEquals("1", DistanceFormat.metersToDisplayMagnitude(0.31f, MeasurementSystem.IMPERIAL))
+    }
+
+    @Test
+    fun metersToDisplayMagnitude_metricZeroForNonPositive() {
+        assertEquals("0", DistanceFormat.metersToDisplayMagnitude(0f, MeasurementSystem.METRIC))
+    }
+
+    @Test
+    fun displayMagnitudeToMetersOrNull_convertsFeetToMeters() {
+        val meters = DistanceFormat.displayMagnitudeToMetersOrNull("328.084", MeasurementSystem.IMPERIAL)
+        assertEquals(100f, meters ?: 0f, 0.01f)
+    }
+
+    @Test
+    fun displayMagnitudeToMetersOrNull_returnsNullForInvalidNumber() {
+        assertNull(DistanceFormat.displayMagnitudeToMetersOrNull("abc", MeasurementSystem.METRIC))
     }
 }

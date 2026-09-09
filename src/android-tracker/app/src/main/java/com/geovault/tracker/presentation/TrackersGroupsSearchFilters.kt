@@ -10,7 +10,7 @@ fun filterVisibleOwnerTrackersForSearch(
     return trackers
         .filter { tracker ->
             tracker.isOwner() &&
-                (tracker.settings?.get("hidden") as? Boolean) != true
+                !tracker.catalogSettings.hidden
         }
         .filter { tracker ->
             matchesTrackerSearch(query, tracker.name, tracker.owner_email)

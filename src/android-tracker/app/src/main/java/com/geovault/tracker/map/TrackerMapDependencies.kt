@@ -1,13 +1,13 @@
 package com.geovault.tracker.map
 
 import android.app.Application
+import com.geovault.tracker.data.CatalogStateStore
 import com.geovault.tracker.data.TrackerManagementRepository
-import com.geovault.tracker.data.TrackerManagementStateStore
 import com.geovault.tracker.db.AppDatabase
 import com.geovault.tracker.di.TrackerAppServices
+import com.geovault.tracker.history.HistoryTrunkIngestor
 import com.geovault.tracker.history.TrackerHistoryIntentDispatcher
 import com.geovault.tracker.history.TrackerHistoryRepository
-import com.geovault.tracker.presentation.LiveTrackStreamingReconciler
 import com.geovault.tracker.settings.TrackerSettingsRepository
 import com.geovault.tracker.streaming.LiveStreamSubscriptionRepository
 
@@ -23,14 +23,15 @@ internal class TrackerMapDependencies(application: Application) {
     internal val dao = AppDatabase.getDatabase(application).locationDao()
     internal val trackerManagementRepository: TrackerManagementRepository =
         TrackerAppServices.from(application).trackerManagementRepository()
-    internal val trackerManagementStateStore: TrackerManagementStateStore =
-        TrackerAppServices.from(application).trackerManagementStateStore()
+    internal val catalogStateStore: CatalogStateStore =
+        TrackerAppServices.from(application).catalogStateStore()
     internal val trackerSettingsRepository: TrackerSettingsRepository =
         TrackerAppServices.from(application).trackerSettingsRepository()
     internal val liveStreamSubscriptionRepository: LiveStreamSubscriptionRepository =
         TrackerAppServices.from(application).liveStreamSubscriptionRepository()
-    internal val streamingReconciler = LiveTrackStreamingReconciler(liveStreamSubscriptionRepository)
     internal val historyRepository: TrackerHistoryRepository =
         TrackerAppServices.from(application).trackerHistoryRepository()
     internal val historyIntentDispatcher = TrackerHistoryIntentDispatcher(historyRepository)
+    internal val historyTrunkIngestor: HistoryTrunkIngestor =
+        TrackerAppServices.from(application).historyTrunkIngestor()
 }

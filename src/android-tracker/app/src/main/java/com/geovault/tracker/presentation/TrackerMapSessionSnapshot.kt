@@ -1,34 +1,34 @@
 package com.geovault.tracker.presentation
 
 import com.geovault.tracker.db.QueuedLocation
-import com.geovault.tracker.policy.TrackPointEvent
-import com.geovault.tracker.services.TrackingRuntimeSnapshot
+import com.geovault.tracker.domain.TrackPoint
+import com.geovault.tracker.positioning.TrackingRuntimeSnapshot
 
 data class TrackerTrackModel(
     val trackerId: String,
     /**
      * Time-sorted render trail for line drawing. Marker and camera heads use
-     * [TrackerMapLastPointResolver], not `renderTrail.lastOrNull()`.
+     * [com.geovault.tracker.map.MapRenderMath.resolveLastPoint], not `renderTrail.lastOrNull()`.
      */
     val renderTrail: List<QueuedLocation> = emptyList(),
-    val remoteHead: TrackPointEvent? = null,
+    val remoteHead: TrackPoint? = null,
 ) {
     /** Derived view: non-live-overlay points (server geometry, persisted DB fixes, etc.). */
     val historicalTrail: List<QueuedLocation>
-        get() = renderTrail.filterNot(TrackerMapPointProvenancePolicy::isLiveOverlay)
+        get() = renderTrail.filterNot(com.geovault.tracker.map.MapTrailEngine::isLiveOverlay)
 
     /** Derived view: in-memory live overlay points (bus-reduced local GPS / remote stream). */
     val liveTrail: List<QueuedLocation>
-        get() = renderTrail.filter(TrackerMapPointProvenancePolicy::isLiveOverlay)
+        get() = renderTrail.filter(com.geovault.tracker.map.MapTrailEngine::isLiveOverlay)
 }
 
-data class TrackerMapSessionSnapshot(
+internal data class TrackerMapSessionSnapshot(
     val uiState: TrackerMapUiState,
     val plan: TrackerMapStreamingPlan,
     val runtime: TrackingRuntimeSnapshot,
     val singleTrail: List<QueuedLocation>,
     val tracks: Map<String, TrackerTrackModel>,
-    val acceptedRemoteLastPoints: Map<String, TrackPointEvent>,
+    val acceptedRemoteLastPoints: Map<String, TrackPoint>,
 ) {
     val mode: TrackerMapDisplayMode
         get() = plan.mode

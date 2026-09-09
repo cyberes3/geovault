@@ -1,11 +1,12 @@
 package com.geovault.tracker.policy
 
+import com.geovault.tracker.domain.TrackPoint
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
-import com.geovault.tracker.services.TrackingRuntimeStateStore
+import com.geovault.tracker.runtime.TrackerRuntimeStore
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -16,7 +17,7 @@ class TrackPointBusTest {
     @Before
     fun setUp() {
         TrackPointBus.resetForTests()
-        TrackingRuntimeStateStore.update { it.copy(isRunning = false, selectedTrackerId = "") }
+        TrackerRuntimeStore.updateRecording { it.copy(isRunning = false, selectedTrackerId = "") }
     }
 
     @Test
@@ -27,12 +28,12 @@ class TrackPointBusTest {
             }
         }
         TrackPointBus.publish(
-            TrackPointEvent(
-                source = TrackPointSource.LOCAL_GPS,
-                trackId = "t",
-                lon = 10.0,
-                lat = 10.0,
-                timestampMs = 1_000L
+            TrackPoint(
+                provenance = TrackPointSource.LOCAL_GPS,
+                trackerId = "t",
+                longitude = 10.0,
+                latitude = 10.0,
+                timeMs = 1_000L
             )
         )
         val event = awaitEvent.await()
@@ -43,12 +44,12 @@ class TrackPointBusTest {
     fun pausedLocalDelivery_buffersAndReportsDiagnostics() {
         TrackPointBus.pauseLocalDelivery()
         TrackPointBus.publish(
-            TrackPointEvent(
-                source = TrackPointSource.LOCAL_GPS,
-                trackId = "t",
-                lon = 10.0,
-                lat = 10.0,
-                timestampMs = 1_000L
+            TrackPoint(
+                provenance = TrackPointSource.LOCAL_GPS,
+                trackerId = "t",
+                longitude = 10.0,
+                latitude = 10.0,
+                timeMs = 1_000L
             )
         )
         val diagnostics = TrackPointBus.diagnostics()
@@ -61,12 +62,12 @@ class TrackPointBusTest {
         TrackPointBus.pauseLocalDelivery()
         repeat(600) { index ->
             TrackPointBus.publish(
-                TrackPointEvent(
-                    source = TrackPointSource.LOCAL_GPS,
-                    trackId = "t",
-                    lon = 10.0 + (index * 0.00001),
-                    lat = 10.0,
-                    timestampMs = 1_000L + index
+                TrackPoint(
+                    provenance = TrackPointSource.LOCAL_GPS,
+                    trackerId = "t",
+                    longitude = 10.0 + (index * 0.00001),
+                    latitude = 10.0,
+                    timeMs = 1_000L + index
                 )
             )
         }
@@ -83,16 +84,16 @@ class TrackPointBusTest {
             }
         }
         TrackPointBus.publish(
-            TrackPointEvent(
-                source = TrackPointSource.REMOTE_STREAM,
-                trackId = "remote-1",
-                lon = 20.0,
-                lat = 10.0,
-                timestampMs = System.currentTimeMillis(),
+            TrackPoint(
+                provenance = TrackPointSource.REMOTE_STREAM,
+                trackerId = "remote-1",
+                longitude = 20.0,
+                latitude = 10.0,
+                timeMs = System.currentTimeMillis(),
                 orderingKey = 0L
             )
         )
         val event = awaitEvent.await()
-        assertEquals(event.timestampMs, event.orderingKey)
+        assertEquals(event.timeMs, event.orderingKey)
     }
 }

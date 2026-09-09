@@ -1,6 +1,7 @@
 package com.geovault.tracker.presentation
 
 import com.geovault.tracker.Group
+import com.geovault.tracker.MapVisibilityRequest
 import com.geovault.tracker.MapVisibilityResponse
 import com.geovault.tracker.Tracker
 
@@ -19,7 +20,7 @@ object HiddenMapItemsPolicy {
     fun hiddenOwnerTrackerIds(trackers: List<Tracker>): Set<String> {
         return trackers
             .asSequence()
-            .filter { it.isOwner() && it.settingBoolean("hidden") == true }
+            .filter { it.isOwner() && it.catalogSettings.hidden }
             .map { it.id.trim() }
             .filter { it.isNotEmpty() }
             .toSet()
@@ -68,14 +69,25 @@ object HiddenMapItemsPolicy {
             compareBy<HiddenMapItem>({ it.type.name }, { it.name.lowercase() }, { it.id })
         )
     }
-}
 
-private fun Tracker.settingBoolean(key: String): Boolean? {
-    val raw = settings?.get(key) ?: return null
-    return when (raw) {
-        is Boolean -> raw
-        is String -> raw.equals("true", ignoreCase = true)
-        is Number -> raw.toInt() != 0
-        else -> null
+    fun buildUnhideItemRequest(
+        mapVisibility: MapVisibilityResponse,
+        item: HiddenMapItem,
+    ): MapVisibilityRequest {
+        return when (item.type) {
+            HiddenMapItemType.TRACKER -> MapVisibilityRequest(
+                hidden_track_ids = mapVisibility.hidden_track_ids.filterNot { it == item.id },
+                hidden_group_ids = mapVisibility.hidden_group_ids,
+            )
+            HiddenMapItemType.GROUP -> MapVisibilityRequest(
+                hidden_track_ids = mapVisibility.hidden_track_ids,
+                hidden_group_ids = mapVisibility.hidden_group_ids.filterNot { it == item.id },
+            )
+        }
+    }
+
+    fun buildUnhideAllRequest(): MapVisibilityRequest {
+        return MapVisibilityRequest(hidden_track_ids = emptyList(), hidden_group_ids = emptyList())
     }
 }
+

@@ -1,11 +1,24 @@
 package com.geovault.tracker.presentation
 
+import com.geovault.common.net.GeoVaultApiFailure
 import com.geovault.tracker.MapVisibilityRequest
 import com.geovault.tracker.MapVisibilityResponse
 
-/**
- * Stateless map visibility policy shared across ViewModels.
- */
+enum class MapVisibilityToggleEntityType {
+    Tracker,
+    Group,
+}
+
+data class MapVisibilityToggleTarget(
+    val id: String,
+    val type: MapVisibilityToggleEntityType
+)
+
+sealed class MapVisibilityMutationResult {
+    data class Success(val visibility: MapVisibilityResponse) : MapVisibilityMutationResult()
+    data class Failure(val error: GeoVaultApiFailure) : MapVisibilityMutationResult()
+}
+
 object MapVisibilityTogglePolicy {
     fun toggleTracker(current: MapVisibilityResponse, trackerId: String): MapVisibilityRequest {
         val hidden = current.hidden_track_ids.toMutableSet()
@@ -24,12 +37,26 @@ object MapVisibilityTogglePolicy {
             hidden_group_ids = hidden.toList(),
         )
     }
-}
 
-internal fun toggleTrackerInVisibility(current: MapVisibilityResponse, trackerId: String): MapVisibilityRequest {
-    return MapVisibilityTogglePolicy.toggleTracker(current, trackerId)
-}
-
-internal fun toggleGroupInVisibility(current: MapVisibilityResponse, groupId: String): MapVisibilityRequest {
-    return MapVisibilityTogglePolicy.toggleGroup(current, groupId)
+    suspend fun toggle(
+        current: MapVisibilityResponse?,
+        target: MapVisibilityToggleTarget,
+        loadVisibility: suspend () -> MapVisibilityResponse,
+        patchVisibility: suspend (MapVisibilityRequest) -> MapVisibilityResponse,
+    ): MapVisibilityMutationResult {
+        val base = try {
+            current ?: loadVisibility()
+        } catch (e: GeoVaultApiFailure) {
+            return MapVisibilityMutationResult.Failure(e)
+        }
+        val request = when (target.type) {
+            MapVisibilityToggleEntityType.Tracker -> toggleTracker(base, target.id)
+            MapVisibilityToggleEntityType.Group -> toggleGroup(base, target.id)
+        }
+        return try {
+            MapVisibilityMutationResult.Success(patchVisibility(request))
+        } catch (e: GeoVaultApiFailure) {
+            MapVisibilityMutationResult.Failure(e)
+        }
+    }
 }

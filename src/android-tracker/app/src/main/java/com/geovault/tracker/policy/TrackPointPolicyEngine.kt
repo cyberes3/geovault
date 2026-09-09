@@ -1,5 +1,6 @@
 package com.geovault.tracker.policy
 
+import com.geovault.tracker.domain.TrackPoint
 import com.geovault.tracker.policy.filter.LocationFilter
 import com.geovault.tracker.policy.filter.LocationFilterConfig
 import com.geovault.tracker.policy.filter.FilterReason
@@ -29,7 +30,7 @@ enum class TrackPointEmissionDecision {
 
 data class TrackPointDecision(
     val accepted: Boolean,
-    val canonicalEvent: TrackPointEvent?,
+    val canonicalEvent: TrackPoint?,
     val emissionDecision: TrackPointEmissionDecision = if (accepted) {
         TrackPointEmissionDecision.COMMIT
     } else {
@@ -81,12 +82,12 @@ object TrackPointPolicyEngine {
     private val filters = ConcurrentHashMap<String, LocationFilter>()
 
     fun evaluate(
-        event: TrackPointEvent,
+        event: TrackPoint,
         nowMs: Long,
         nowElapsedRealtimeNanos: Long? = null,
         config: LocationFilterConfig,
     ): TrackPointDecision {
-        if (event.lat !in -90.0..90.0 || event.lon !in -180.0..180.0) {
+        if (event.latitude !in -90.0..90.0 || event.longitude !in -180.0..180.0) {
             return rejectWithBaseMetrics(
                 rejectReason = TrackPointRejectReason.INVALID_COORDINATES,
                 accuracyMeters = event.accuracyMeters,
@@ -95,7 +96,7 @@ object TrackPointPolicyEngine {
         }
 
         val normalizedTimestampMs = CanonicalTimeNormalizer.normalizeTimestampMs(
-            timestamp = event.timestampMs,
+            timestamp = event.timeMs,
             nowMs = nowMs,
             normalizeSeconds = config.normalizeSecondsTimestamps,
         )
@@ -124,7 +125,7 @@ object TrackPointPolicyEngine {
             }
         }
 
-        val streamKey = streamKey(event.source, event.trackId)
+        val streamKey = streamKey(event.provenance, event.trackerId)
         val filter = filterFor(streamKey, config)
 
         val previous = filter.lastAcceptedTimestampMs
@@ -139,8 +140,8 @@ object TrackPointPolicyEngine {
             val previousLatLon = filter.lastAcceptedLatLon
             if (previousLatLon != null &&
                 normalizedTimestampMs == previous &&
-                abs(event.lon - previousLatLon.second) < 1e-9 &&
-                abs(event.lat - previousLatLon.first) < 1e-9
+                abs(event.longitude - previousLatLon.second) < 1e-9 &&
+                abs(event.latitude - previousLatLon.first) < 1e-9
             ) {
                 return rejectWithBaseMetrics(
                     rejectReason = TrackPointRejectReason.DUPLICATE,
@@ -151,8 +152,8 @@ object TrackPointPolicyEngine {
         }
 
         val input = LocationInput(
-            latitude = event.lat,
-            longitude = event.lon,
+            latitude = event.latitude,
+            longitude = event.longitude,
             timestampMs = normalizedTimestampMs,
             elapsedRealtimeNanos = event.elapsedRealtimeNanos,
             accuracyMeters = event.accuracyMeters,
@@ -173,6 +174,11 @@ object TrackPointPolicyEngine {
         filters.remove(streamKey(source, trackId))
     }
 
+    fun resetSource(source: TrackPointSource) {
+        val prefix = "${source.name}:"
+        filters.keys.filter { it.startsWith(prefix) }.forEach { filters.remove(it) }
+    }
+
     fun resetAll() {
         filters.clear()
     }
@@ -190,15 +196,15 @@ object TrackPointPolicyEngine {
     fun seedAccepted(
         source: TrackPointSource,
         trackId: String,
-        event: TrackPointEvent,
+        event: TrackPoint,
         config: LocationFilterConfig,
     ) {
         val streamKey = streamKey(source, trackId)
         val filter = filterFor(streamKey, config)
         val input = LocationInput(
-            latitude = event.lat,
-            longitude = event.lon,
-            timestampMs = event.timestampMs,
+            latitude = event.latitude,
+            longitude = event.longitude,
+            timestampMs = event.timeMs,
             elapsedRealtimeNanos = event.elapsedRealtimeNanos,
             accuracyMeters = event.accuracyMeters,
             speedMps = event.gpsSpeedMps,
@@ -218,7 +224,7 @@ object TrackPointPolicyEngine {
     }
 
     private fun mapResultToDecision(
-        event: TrackPointEvent,
+        event: TrackPoint,
         normalizedTimestampMs: Long,
         result: LocationFilterResult,
         config: LocationFilterConfig,
@@ -232,8 +238,8 @@ object TrackPointPolicyEngine {
                 LocationFilterResult.Decision.Reject -> "rejected"
             },
             reason = result.reason.wireValue,
-            rawLatitude = event.lat,
-            rawLongitude = event.lon,
+            rawLatitude = event.latitude,
+            rawLongitude = event.longitude,
             committedLatitude = result.committedLatitude(event),
             committedLongitude = result.committedLongitude(event),
         )
@@ -274,8 +280,8 @@ object TrackPointPolicyEngine {
             }
 
             LocationFilterResult.Decision.Commit -> {
-                val adjustedLat = result.adjustedLatitude ?: event.lat
-                val adjustedLon = result.adjustedLongitude ?: event.lon
+                val adjustedLat = result.adjustedLatitude ?: event.latitude
+                val adjustedLon = result.adjustedLongitude ?: event.longitude
                 val quality = qualityFromMetrics(event.accuracyMeters, config)
                 val adjusted = result.adjustedLatitude != null && result.adjustedLongitude != null
                 val adjustmentReason = if (adjusted) {
@@ -286,9 +292,9 @@ object TrackPointPolicyEngine {
                 TrackPointDecision(
                     accepted = true,
                     canonicalEvent = event.copy(
-                        lat = adjustedLat,
-                        lon = adjustedLon,
-                        timestampMs = normalizedTimestampMs,
+                        latitude = adjustedLat,
+                        longitude = adjustedLon,
+                        timeMs = normalizedTimestampMs,
                         quality = quality,
                     ),
                     emissionDecision = TrackPointEmissionDecision.COMMIT,
@@ -336,18 +342,18 @@ object TrackPointPolicyEngine {
 
     private fun streamKey(source: TrackPointSource, trackId: String): String = "${source.name}:${trackId.trim()}"
 
-    private fun LocationFilterResult.committedLatitude(event: TrackPointEvent): Double? {
+    private fun LocationFilterResult.committedLatitude(event: TrackPoint): Double? {
         return when (decision) {
-            LocationFilterResult.Decision.Commit -> adjustedLatitude ?: event.lat
+            LocationFilterResult.Decision.Commit -> adjustedLatitude ?: event.latitude
             LocationFilterResult.Decision.SnapInternal -> adjustedLatitude
             LocationFilterResult.Decision.Hold,
             LocationFilterResult.Decision.Reject -> null
         }
     }
 
-    private fun LocationFilterResult.committedLongitude(event: TrackPointEvent): Double? {
+    private fun LocationFilterResult.committedLongitude(event: TrackPoint): Double? {
         return when (decision) {
-            LocationFilterResult.Decision.Commit -> adjustedLongitude ?: event.lon
+            LocationFilterResult.Decision.Commit -> adjustedLongitude ?: event.longitude
             LocationFilterResult.Decision.SnapInternal -> adjustedLongitude
             LocationFilterResult.Decision.Hold,
             LocationFilterResult.Decision.Reject -> null

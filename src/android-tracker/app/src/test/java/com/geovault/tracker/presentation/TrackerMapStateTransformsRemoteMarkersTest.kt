@@ -1,9 +1,10 @@
 package com.geovault.tracker.presentation
 
 import com.geovault.tracker.db.QueuedLocation
-import com.geovault.tracker.policy.TrackPointEvent
+import com.geovault.tracker.map.MapRenderMath
+import com.geovault.tracker.domain.TrackPoint
 import com.geovault.tracker.policy.TrackPointSource
-import com.geovault.tracker.services.TrackingRuntimeSnapshot
+import com.geovault.tracker.positioning.TrackingRuntimeSnapshot
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -12,7 +13,7 @@ class TrackerMapStateTransformsRemoteMarkersTest {
 
     @Test
     fun buildRenderState_addsRemoteMarkersOnlyForActiveStreamIds() {
-        val render = TrackerMapStateTransforms.buildRenderState(
+        val render = MapRenderMath.buildRenderState(
             mode = TrackerMapDisplayMode.ALL_QUEUE,
             trail = listOf(
                 QueuedLocation(
@@ -31,8 +32,7 @@ class TrackerMapStateTransformsRemoteMarkersTest {
                 "active" to remotePoint("active", 5.0, 6.0),
                 "inactive" to remotePoint("inactive", 7.0, 8.0)
             ),
-            activeStreamedTrackerIds = setOf("active"),
-            streamTargetIds = setOf("active"),
+            acceptedRemoteTrackerIds = setOf("active"),
         )
 
         val markerIds = render.points.map { it.id }
@@ -47,12 +47,11 @@ class TrackerMapStateTransformsRemoteMarkersTest {
 
     @Test
     fun buildRenderState_withNoActiveStreamIds_ignoresRemotePoints() {
-        val render = TrackerMapStateTransforms.buildRenderState(
+        val render = MapRenderMath.buildRenderState(
             mode = TrackerMapDisplayMode.ALL_QUEUE,
             trail = emptyList(),
             runtime = TrackingRuntimeSnapshot(),
             remoteLastPoints = mapOf("r1" to remotePoint("r1", 1.0, 2.0)),
-            activeStreamedTrackerIds = emptySet()
         )
 
         assertEquals(0, render.points.count { it.id.startsWith("remote-") })
@@ -60,10 +59,11 @@ class TrackerMapStateTransformsRemoteMarkersTest {
 
     @Test
     fun buildRenderState_allQueue_marksSelectedTrackerWithFullChevronVariant() {
-        val render = TrackerMapStateTransforms.buildRenderState(
+        val render = MapRenderMath.buildRenderState(
             mode = TrackerMapDisplayMode.ALL_QUEUE,
             trail = emptyList(),
             runtime = TrackingRuntimeSnapshot(),
+            remoteLastPoints = mapOf("t1" to remotePoint("t1", 10.001, 20.002)),
             allQueueTrailsByTracker = mapOf(
                 "t1" to listOf(
                     QueuedLocation(
@@ -98,10 +98,14 @@ class TrackerMapStateTransformsRemoteMarkersTest {
 
     @Test
     fun buildRenderState_allQueue_respectsTrackerRenderOrder() {
-        val render = TrackerMapStateTransforms.buildRenderState(
+        val render = MapRenderMath.buildRenderState(
             mode = TrackerMapDisplayMode.ALL_QUEUE,
             trail = emptyList(),
             runtime = TrackingRuntimeSnapshot(),
+            remoteLastPoints = mapOf(
+                "b" to remotePoint("b", 1.1, 1.1),
+                "a" to remotePoint("a", 2.1, 2.1),
+            ),
             allQueueTrailsByTracker = mapOf(
                 "b" to listOf(
                     QueuedLocation(trackerId = "b", time = 1L, latitude = 1.0, longitude = 1.0, altitude = null, speed = null, bearing = null, accuracy = null),
@@ -120,10 +124,11 @@ class TrackerMapStateTransformsRemoteMarkersTest {
 
     @Test
     fun buildRenderState_allQueue_usesTrackerDisplayNameForMarkerTitle() {
-        val render = TrackerMapStateTransforms.buildRenderState(
+        val render = MapRenderMath.buildRenderState(
             mode = TrackerMapDisplayMode.ALL_QUEUE,
             trail = emptyList(),
             runtime = TrackingRuntimeSnapshot(),
+            remoteLastPoints = mapOf("tracker-1" to remotePoint("tracker-1", 10.1, 20.1)),
             allQueueTrailsByTracker = mapOf(
                 "tracker-1" to listOf(
                     QueuedLocation(trackerId = "tracker-1", time = 1L, latitude = 10.0, longitude = 20.0, altitude = null, speed = null, bearing = null, accuracy = null),
@@ -139,13 +144,12 @@ class TrackerMapStateTransformsRemoteMarkersTest {
 
     @Test
     fun buildRenderState_remoteFallback_usesTrackerIdWhenDisplayNameMissing() {
-        val render = TrackerMapStateTransforms.buildRenderState(
+        val render = MapRenderMath.buildRenderState(
             mode = TrackerMapDisplayMode.ALL_QUEUE,
             trail = emptyList(),
             runtime = TrackingRuntimeSnapshot(),
             remoteLastPoints = mapOf("remote-a" to remotePoint("remote-a", 5.0, 6.0)),
-            activeStreamedTrackerIds = setOf("remote-a"),
-            streamTargetIds = setOf("remote-a"),
+            acceptedRemoteTrackerIds = setOf("remote-a"),
             trackerDisplayNameById = emptyMap(),
         )
 
@@ -155,7 +159,7 @@ class TrackerMapStateTransformsRemoteMarkersTest {
 
     @Test
     fun buildRenderState_allQueue_remoteMarkersEmitMatchingAccuracyPolygons() {
-        val render = TrackerMapStateTransforms.buildRenderState(
+        val render = MapRenderMath.buildRenderState(
             mode = TrackerMapDisplayMode.ALL_QUEUE,
             trail = emptyList(),
             runtime = TrackingRuntimeSnapshot(),
@@ -163,8 +167,7 @@ class TrackerMapStateTransformsRemoteMarkersTest {
                 "r1" to remotePoint("r1", 5.0, 6.0),
                 "r2" to remotePoint("r2", 7.0, 8.0, accuracyMeters = 8f),
             ),
-            activeStreamedTrackerIds = setOf("r1", "r2"),
-            streamTargetIds = setOf("r1", "r2"),
+            acceptedRemoteTrackerIds = setOf("r1", "r2"),
         )
 
         assertTrue(render.points.any { it.id == "remote-r1" })
@@ -188,13 +191,13 @@ class TrackerMapStateTransformsRemoteMarkersTest {
         lat: Double,
         lon: Double,
         accuracyMeters: Float = 4f,
-    ): TrackPointEvent {
-        return TrackPointEvent(
-            source = TrackPointSource.REMOTE_STREAM,
-            trackId = trackId,
-            lon = lon,
-            lat = lat,
-            timestampMs = 1234L,
+    ): TrackPoint {
+        return TrackPoint(
+            provenance = TrackPointSource.REMOTE_STREAM,
+            trackerId = trackId,
+            longitude = lon,
+            latitude = lat,
+            timeMs = 1234L,
             accuracyMeters = accuracyMeters,
         )
     }

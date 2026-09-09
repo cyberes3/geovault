@@ -5,6 +5,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+import com.geovault.tracker.map.MapSessionEngine
 class TrackerMapSelectionCardPolicyTest {
 
     private fun selectionCard(trackerId: String) = TrackerMapSelectionCard(
@@ -21,7 +22,7 @@ class TrackerMapSelectionCardPolicyTest {
     fun applySelectionCard_noExistingLock_showsCardWithoutLocking() {
         val state = TrackerMapUiState(selectionLockTrackerId = "")
 
-        val next = TrackerMapSelectionCardPolicy.applySelectionCard(state, selectionCard("tracker-1"))
+        val next = MapSessionEngine.applySelectionCard(state, selectionCard("tracker-1"))
 
         assertTrue(next.isBottomCardVisible)
         assertEquals("tracker-1", next.selectedMapTracker?.trackerId)
@@ -35,7 +36,7 @@ class TrackerMapSelectionCardPolicyTest {
             liveActiveFitEnabled = true,
         )
 
-        val next = TrackerMapSelectionCardPolicy.applySelectionCard(state, selectionCard("tracker-1"))
+        val next = MapSessionEngine.applySelectionCard(state, selectionCard("tracker-1"))
 
         assertEquals("tracker-1", next.selectionLockTrackerId)
         assertTrue(
@@ -55,7 +56,7 @@ class TrackerMapSelectionCardPolicyTest {
             liveActiveFitEnabled = true,
         )
 
-        val next = TrackerMapSelectionCardPolicy.applySelectionCard(state, selectionCard("tracker-2"))
+        val next = MapSessionEngine.applySelectionCard(state, selectionCard("tracker-2"))
 
         assertEquals("", next.selectionLockTrackerId)
         assertFalse(next.liveActiveFitEnabled)
@@ -72,7 +73,7 @@ class TrackerMapSelectionCardPolicyTest {
             liveActiveFitEnabled = true,
         )
 
-        val next = TrackerMapSelectionCardPolicy.applySelectionCard(state, selectionCard("tracker-2"))
+        val next = MapSessionEngine.applySelectionCard(state, selectionCard("tracker-2"))
 
         assertTrue(next.liveActiveFitEnabled)
     }
@@ -84,7 +85,7 @@ class TrackerMapSelectionCardPolicyTest {
             liveActiveFitEnabled = true,
         )
 
-        val next = TrackerMapSelectionCardPolicy.applySelectionCard(state, selectionCard("tracker-1"))
+        val next = MapSessionEngine.applySelectionCard(state, selectionCard("tracker-1"))
 
         assertEquals("tracker-1", next.selectionLockTrackerId)
         assertTrue(next.liveActiveFitEnabled)

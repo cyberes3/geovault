@@ -1,7 +1,7 @@
 package com.geovault.tracker.history
 
 import com.geovault.tracker.db.QueuedLocation
-import com.geovault.tracker.policy.TrackPointEvent
+import com.geovault.tracker.domain.TrackPoint
 import com.geovault.tracker.policy.TrackPointSource
 import java.util.Locale
 import kotlin.math.roundToLong
@@ -11,7 +11,6 @@ enum class TrackerHistoryProvenance {
     LOCAL_QUEUE,
     LOCAL_LIVE,
     REMOTE_STREAM,
-    RUNTIME_HEAD,
 }
 
 enum class TrackerHistorySourceKind {
@@ -19,7 +18,6 @@ enum class TrackerHistorySourceKind {
     LOCAL_QUEUE,
     LOCAL_LIVE,
     REMOTE_STREAM,
-    RUNTIME_HEAD,
     DEGRADED_LOCAL_ONLY,
 }
 
@@ -152,19 +150,19 @@ data class TrackerHistoryPoint(
             )
         }
 
-        fun fromTrackPointEvent(
-            event: TrackPointEvent,
+        fun fromTrackPoint(
+            event: TrackPoint,
             startTimestampMs: Long?,
         ): TrackerHistoryPoint {
-            val provenance = when (event.source) {
+            val provenance = when (event.provenance) {
                 TrackPointSource.LOCAL_GPS -> TrackerHistoryProvenance.LOCAL_LIVE
                 TrackPointSource.REMOTE_STREAM -> TrackerHistoryProvenance.REMOTE_STREAM
             }
             return TrackerHistoryPoint(
-                trackerId = event.trackId.trim(),
-                timestampMs = event.timestampMs,
-                latitude = event.lat,
-                longitude = event.lon,
+                trackerId = event.trackerId.trim(),
+                timestampMs = event.timeMs,
+                latitude = event.latitude,
+                longitude = event.longitude,
                 accuracy = event.accuracyMeters,
                 speed = event.gpsSpeedMps,
                 bearing = event.gpsBearingDeg,
@@ -208,11 +206,31 @@ data class TrackerHistorySnapshot(
     val renderWindowFilterSkipped: Boolean = false,
 )
 
-data class TrackerHistoryTransactionResult(
-    val snapshot: TrackerHistorySnapshot,
-    val committed: Boolean,
-    val reason: String,
-)
+sealed class TrackerHistoryTransactionResult {
+    abstract val snapshot: TrackerHistorySnapshot
+
+    data class Composed(override val snapshot: TrackerHistorySnapshot) : TrackerHistoryTransactionResult()
+    data class ForcedEmpty(override val snapshot: TrackerHistorySnapshot) : TrackerHistoryTransactionResult()
+    data class DeferredEmpty(override val snapshot: TrackerHistorySnapshot) : TrackerHistoryTransactionResult()
+    data class RejectedTrunk(
+        override val snapshot: TrackerHistorySnapshot,
+        val rejectReason: String,
+    ) : TrackerHistoryTransactionResult()
+}
+
+fun TrackerHistoryTransactionResult.kindName(): String {
+    return when (this) {
+        is TrackerHistoryTransactionResult.Composed -> "composed"
+        is TrackerHistoryTransactionResult.ForcedEmpty -> "forced_empty_commit"
+        is TrackerHistoryTransactionResult.DeferredEmpty -> "empty_snapshot_deferred"
+        is TrackerHistoryTransactionResult.RejectedTrunk -> rejectReason
+    }
+}
+
+fun TrackerHistoryTransactionResult.publishesSnapshot(): Boolean {
+    return this is TrackerHistoryTransactionResult.Composed ||
+        this is TrackerHistoryTransactionResult.ForcedEmpty
+}
 
 fun TrackerHistoryProvenance.toQueuedLocationProvider(): String {
     return when (this) {
@@ -220,6 +238,39 @@ fun TrackerHistoryProvenance.toQueuedLocationProvider(): String {
         TrackerHistoryProvenance.LOCAL_QUEUE,
         TrackerHistoryProvenance.LOCAL_LIVE -> "local_gps"
         TrackerHistoryProvenance.REMOTE_STREAM -> "remote_stream"
-        TrackerHistoryProvenance.RUNTIME_HEAD -> "local_gps_runtime"
     }
 }
+
+enum class TrackerHistoryRefreshCause {
+    TrackerSwitch,
+    ModeSwitch,
+    WindowChanged,
+    ColdStart,
+    Resume,
+    HistoryCleared,
+    UploadSuccess,
+    RosterChanged,
+    PeriodicRecording,
+    CosmeticTick,
+    LivePoint,
+}
+
+data class TrackerHistoryRefreshInput(
+    val cause: TrackerHistoryRefreshCause,
+    val nowMs: Long,
+    val lastTrunkFetchedAtMs: Long?,
+    /** When set, stale checks use this tracker's last trunk fetch instead of a global timestamp. */
+    val trackerIdForStaleCheck: String? = null,
+    val isRecording: Boolean = false,
+    val visibleRowsUploaded: Boolean = false,
+    val staleAfterMs: Long = DEFAULT_STALE_AFTER_MS,
+) {
+    companion object {
+        const val DEFAULT_STALE_AFTER_MS = 60_000L
+    }
+}
+
+data class TrackerHistoryRefreshDecision(
+    val shouldRefresh: Boolean,
+    val reason: String,
+)

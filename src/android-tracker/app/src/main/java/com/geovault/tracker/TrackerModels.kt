@@ -12,9 +12,9 @@ data class Tracker(
     val id: String,
     val name: String,
     val color: String?,
-    @IgnoredOnParcel val settings: Map<String, Any?>? = null,
+    @IgnoredOnParcel val settings: TrackerCatalogSettings? = null,
     val geometry: GeoJsonLineString? = null,
-    @IgnoredOnParcel val point_params: List<Map<String, Any?>>? = null,
+    @IgnoredOnParcel val point_params: List<JsonObject>? = null,
     @IgnoredOnParcel val geometry_status: TrackerGeometryStatus? = null,
     val last_point: List<Double>? = null,
     val bbox: List<Double>? = null,
@@ -36,6 +36,9 @@ data class Tracker(
 ) : Parcelable {
 
     fun isOwner(): Boolean = is_owner == true
+
+    val catalogSettings: TrackerCatalogSettings
+        get() = settings ?: TrackerCatalogSettings()
 }
 
 @Parcelize
@@ -82,7 +85,7 @@ data class TrackerSettingsRequest(
 /** Response from GET trackers/<id>/coordinates/ — latest 100 coordinates + point_params. */
 data class TrackerCoordinatesResponse(
     val coordinates: List<List<Double>> = emptyList(),
-    val point_params: List<Map<String, Any?>>? = null
+    val point_params: List<JsonObject>? = null
 )
 
 /** POST trackers/geometry/ request body. */

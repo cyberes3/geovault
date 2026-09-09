@@ -4,7 +4,7 @@ import com.geovault.tracker.policy.TrackPointDecisionMetrics
 import com.geovault.tracker.policy.TrackPointRejectReason
 import com.geovault.tracker.policy.filter.FilterReason
 import com.geovault.tracker.policy.filter.LocationFilterReasonPolicy
-import com.geovault.tracker.services.TrackingMotionMode
+import com.geovault.tracker.positioning.TrackingMotionMode
 
 class AutoTrackingMotionCoordinator(
     private val engine: AutoTrackingMotionEngine,

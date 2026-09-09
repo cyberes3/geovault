@@ -16,7 +16,7 @@ class MapVisibilityMutationCoordinatorTest {
         var patchedRequest: MapVisibilityRequest? = null
         val current = MapVisibilityResponse(hidden_track_ids = listOf("a"), hidden_group_ids = emptyList())
 
-        val result = MapVisibilityMutationCoordinator.toggle(
+        val result = MapVisibilityTogglePolicy.toggle(
             current = current,
             target = MapVisibilityToggleTarget(id = "b", type = MapVisibilityToggleEntityType.Tracker),
             loadVisibility = {
@@ -38,7 +38,7 @@ class MapVisibilityMutationCoordinatorTest {
     fun toggle_loadsWhenCurrentMissing() = runBlocking {
         var loadCallCount = 0
 
-        val result = MapVisibilityMutationCoordinator.toggle(
+        val result = MapVisibilityTogglePolicy.toggle(
             current = null,
             target = MapVisibilityToggleTarget(id = "g1", type = MapVisibilityToggleEntityType.Group),
             loadVisibility = {
@@ -60,7 +60,7 @@ class MapVisibilityMutationCoordinatorTest {
     @Test
     fun toggle_returnsFailureWhenLoadFails() = runBlocking {
         val network = GeoVaultApiFailure(httpCode = null, serverMessage = "network")
-        val result = MapVisibilityMutationCoordinator.toggle(
+        val result = MapVisibilityTogglePolicy.toggle(
             current = null,
             target = MapVisibilityToggleTarget(id = "t1", type = MapVisibilityToggleEntityType.Tracker),
             loadVisibility = { throw network },
@@ -73,7 +73,7 @@ class MapVisibilityMutationCoordinatorTest {
     @Test
     fun toggle_returnsFailureWhenPatchFails() = runBlocking {
         val unauthorized = GeoVaultApiFailure(httpCode = 401, serverMessage = "unauthorized")
-        val result = MapVisibilityMutationCoordinator.toggle(
+        val result = MapVisibilityTogglePolicy.toggle(
             current = MapVisibilityResponse(),
             target = MapVisibilityToggleTarget(id = "t1", type = MapVisibilityToggleEntityType.Tracker),
             loadVisibility = { MapVisibilityResponse() },

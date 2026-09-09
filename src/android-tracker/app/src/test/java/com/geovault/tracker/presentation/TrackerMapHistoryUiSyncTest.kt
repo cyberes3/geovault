@@ -1,6 +1,8 @@
 package com.geovault.tracker.presentation
 
+import com.geovault.tracker.map.MapTrailEngine
 import com.geovault.tracker.Tracker
+import com.geovault.tracker.TrackerCatalogSettings
 import com.geovault.tracker.TrackerGeometryStatus
 import com.geovault.tracker.history.TrackerHistoryKey
 import com.geovault.tracker.history.TrackerHistoryPoint
@@ -8,8 +10,8 @@ import com.geovault.tracker.history.TrackerHistoryProvenance
 import com.geovault.tracker.history.TrackerHistorySnapshot
 import com.geovault.tracker.history.TrackerHistoryWindow
 import com.geovault.tracker.db.QueuedLocation
-import com.geovault.tracker.services.RecordingRuntime
-import com.geovault.tracker.services.TrackingRuntimeSnapshot
+import com.geovault.tracker.positioning.RecordingRuntime
+import com.geovault.tracker.positioning.TrackingRuntimeSnapshot
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -37,7 +39,7 @@ class TrackerMapHistoryUiSyncTest {
             mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
             runtime = TrackingRuntimeSnapshot(),
         )
-        val ids = TrackerMapHistoryUiSync.historyTrackerIdsForRender(
+        val ids = MapTrailEngine.historyTrackerIdsForRender(
             state = state,
             plan = plan,
             visibleTrackerIds = setOf("a", "b"),
@@ -67,13 +69,13 @@ class TrackerMapHistoryUiSyncTest {
             degradedLocalOnly = false,
         )
         val trackers = listOf(
-            Tracker(id = "t1", name = "T1", color = null, settings = mapOf("recent_data_window" to "all")),
+            Tracker(id = "t1", name = "T1", color = null, settings = TrackerCatalogSettings(recentDataWindow = "all")),
         )
         val snapshots = mapOf(key to authoritative)
-        assertTrue(TrackerMapHistoryUiSync.hasAuthoritativeServerTrunk(snapshots, trackers, "t1"))
+        assertTrue(MapTrailEngine.hasAuthoritativeServerTrunk(snapshots, trackers, "t1"))
 
         val degraded = authoritative.copy(degradedLocalOnly = true)
-        assertFalse(TrackerMapHistoryUiSync.hasAuthoritativeServerTrunk(mapOf(key to degraded), trackers, "t1"))
+        assertFalse(MapTrailEngine.hasAuthoritativeServerTrunk(mapOf(key to degraded), trackers, "t1"))
     }
 
     @Test
@@ -83,14 +85,14 @@ class TrackerMapHistoryUiSyncTest {
             recentDataWindow = TrackerHistoryWindow.KEY_CURRENT_SESSION,
             statusWindow = TrackerHistoryWindow.KEY_ALL,
         )
-        assertFalse(TrackerMapHistoryUiSync.shouldSkipClientRenderWindowFilter(snapshot, tracker))
+        assertFalse(MapTrailEngine.shouldSkipClientRenderWindowFilter(snapshot, tracker))
 
         val sessionSnapshot = completeSnapshot(TrackerHistoryWindow.KEY_SESSION)
         val sessionTracker = trackerWithWindow(
             recentDataWindow = TrackerHistoryWindow.KEY_SESSION,
             statusWindow = TrackerHistoryWindow.KEY_ALL,
         )
-        assertFalse(TrackerMapHistoryUiSync.shouldSkipClientRenderWindowFilter(sessionSnapshot, sessionTracker))
+        assertFalse(MapTrailEngine.shouldSkipClientRenderWindowFilter(sessionSnapshot, sessionTracker))
     }
 
     @Test
@@ -100,16 +102,16 @@ class TrackerMapHistoryUiSyncTest {
             recentDataWindow = TrackerHistoryWindow.KEY_ALL,
             statusWindow = TrackerHistoryWindow.KEY_ALL,
         )
-        assertTrue(TrackerMapHistoryUiSync.shouldSkipClientRenderWindowFilter(snapshot, matching))
+        assertTrue(MapTrailEngine.shouldSkipClientRenderWindowFilter(snapshot, matching))
 
         val mismatched = trackerWithWindow(
             recentDataWindow = TrackerHistoryWindow.KEY_ALL,
             statusWindow = TrackerHistoryWindow.KEY_CURRENT_SESSION,
         )
-        assertFalse(TrackerMapHistoryUiSync.shouldSkipClientRenderWindowFilter(snapshot, mismatched))
+        assertFalse(MapTrailEngine.shouldSkipClientRenderWindowFilter(snapshot, mismatched))
 
-        val noStatus = Tracker(id = "t1", name = "T1", color = null, settings = mapOf("recent_data_window" to "all"))
-        assertTrue(TrackerMapHistoryUiSync.shouldSkipClientRenderWindowFilter(snapshot, noStatus))
+        val noStatus = Tracker(id = "t1", name = "T1", color = null, settings = TrackerCatalogSettings(recentDataWindow = "all"))
+        assertTrue(MapTrailEngine.shouldSkipClientRenderWindowFilter(snapshot, noStatus))
     }
 
     @Test
@@ -127,10 +129,10 @@ class TrackerMapHistoryUiSyncTest {
             degradedLocalOnly = false,
         )
         val tracker = trackerWithWindow(TrackerHistoryWindow.KEY_ALL, TrackerHistoryWindow.KEY_ALL)
-        assertFalse(TrackerMapHistoryUiSync.shouldSkipClientRenderWindowFilter(incomplete, tracker))
+        assertFalse(MapTrailEngine.shouldSkipClientRenderWindowFilter(incomplete, tracker))
 
         val degraded = incomplete.copy(complete = true, degradedLocalOnly = true)
-        assertFalse(TrackerMapHistoryUiSync.shouldSkipClientRenderWindowFilter(degraded, tracker))
+        assertFalse(MapTrailEngine.shouldSkipClientRenderWindowFilter(degraded, tracker))
     }
 
     @Test
@@ -143,9 +145,9 @@ class TrackerMapHistoryUiSyncTest {
         )
         assertEquals(
             9_000L,
-            TrackerMapHistoryUiSync.activeSessionStartMsForTracker(runtime, "self"),
+            MapTrailEngine.activeSessionStartMsForTracker(runtime, "self"),
         )
-        assertNull(TrackerMapHistoryUiSync.activeSessionStartMsForTracker(runtime, "shared"))
+        assertNull(MapTrailEngine.activeSessionStartMsForTracker(runtime, "shared"))
     }
 
     @Test
@@ -200,7 +202,7 @@ class TrackerMapHistoryUiSyncTest {
             displayedTrackerId = "t1",
             runtime = TrackingRuntimeSnapshot(selectedTrackerId = "other"),
         )
-        val trails = TrackerMapHistoryUiSync.trailsFromSnapshots(
+        val trails = MapTrailEngine.trailsFromSnapshots(
             state = state,
             plan = plan,
             snapshots = mapOf(key to snapshot),
@@ -212,6 +214,49 @@ class TrackerMapHistoryUiSyncTest {
         assertEquals(5.0, trails.trail.last().latitude, 0.0)
         assertEquals(6.0, trails.trail.last().longitude, 0.0)
         assertEquals(4_000L, trails.trail.last().time)
+    }
+
+    @Test
+    fun trailsFromSnapshots_exposesDegradedTrackerIds() {
+        val window = TrackerHistoryWindow(TrackerHistoryWindow.KEY_ALL)
+        val key = TrackerHistoryKey("t1", window)
+        val trunkPoint = trunkPoint()
+        val snapshot = TrackerHistorySnapshot(
+            key = key,
+            trunk = listOf(trunkPoint),
+            overlay = emptyList(),
+            points = listOf(trunkPoint),
+            committedAtMs = 1L,
+            generation = 1L,
+            complete = true,
+            degradedLocalOnly = true,
+        )
+        val plan = TrackerMapStreamingPlan(
+            mode = TrackerMapDisplayMode.SINGLE_SESSION,
+            selectedTrackerId = "t1",
+            displayedTrackerId = "t1",
+            displayedTrackerName = "T1",
+            resolvedGroupId = "",
+            groupTrackerIds = emptySet(),
+            visibleRosterTrackerIds = setOf("t1"),
+            locallyRecordedTrackerIds = emptySet(),
+            remoteSubscriptionIds = emptySet(),
+            acceptedRemoteTrackerIds = setOf("t1"),
+            localOverlayTrackerIds = emptySet(),
+            trailReloadPlan = TrackerMapTrailReloadPlan(source = TrackerMapTrailSource.SINGLE_SERVER),
+        )
+        val trails = MapTrailEngine.trailsFromSnapshots(
+            state = TrackerMapUiState(
+                mode = TrackerMapDisplayMode.SINGLE_SESSION,
+                displayedTrackerId = "t1",
+                runtime = TrackingRuntimeSnapshot(selectedTrackerId = "t1"),
+            ),
+            plan = plan,
+            snapshots = mapOf(key to snapshot),
+            trackers = listOf(Tracker(id = "t1", name = "T1", color = null)),
+            trailPointLimit = 10_000,
+        )
+        assertEquals(setOf("t1"), trails.degradedTrackerIds)
     }
 
     private fun completeSnapshot(windowKey: String): TrackerHistorySnapshot {
@@ -246,7 +291,7 @@ class TrackerMapHistoryUiSyncTest {
             id = "t1",
             name = "T1",
             color = null,
-            settings = mapOf("recent_data_window" to recentDataWindow),
+            settings = TrackerCatalogSettings(recentDataWindow = recentDataWindow),
             geometry_status = TrackerGeometryStatus(window = statusWindow),
         )
     }

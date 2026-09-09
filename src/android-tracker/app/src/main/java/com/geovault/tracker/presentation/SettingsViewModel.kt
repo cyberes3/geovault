@@ -12,6 +12,7 @@ import com.geovault.common.util.UnitUtils
 import com.geovault.tracker.R
 import com.geovault.tracker.di.TrackerAppServices
 import com.geovault.tracker.data.GroupManagementRepository
+import com.geovault.tracker.data.TrackerApiFailureMessages
 import com.geovault.tracker.data.TrackerManagementRepository
 import com.geovault.tracker.settings.TrackerSettings
 import com.geovault.tracker.settings.TrackerSettingsLoadState
@@ -23,7 +24,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 data class SettingsState(
-    val infoMessage: String? = null,
     val trackerLoadState: TrackerSettingsLoadState = TrackerSettingsLoadState.Loading,
     val trackerSettings: TrackerSettings = TrackerSettings(),
     val trackerRevision: Long = 0L,
@@ -102,9 +102,7 @@ class SettingsViewModel(
 
     fun setSignificantDataOnly(enabled: Boolean) {
         if (enabled && !_state.value.significantMotionSensorAvailable) {
-            _state.update {
-                it.copy(infoMessage = appContext.getString(R.string.motion_sensor_unavailable_toast))
-            }
+            emitHostMessage(appContext.getString(R.string.motion_sensor_unavailable_toast))
             trackerSettingsRepository.setSignificantDataOnly(false)
             return
         }
@@ -123,10 +121,6 @@ class SettingsViewModel(
         trackerSettingsRepository.setGroupModeFitOnlyActiveTrackers(enabled)
     }
 
-    fun clearMessage() {
-        _state.update { it.copy(infoMessage = null) }
-    }
-
     fun refreshHiddenTrackerItems() {
         viewModelScope.launch {
             _state.update { it.copy(isHiddenTrackerItemsLoading = true) }
@@ -134,6 +128,7 @@ class SettingsViewModel(
                 trackerManagementRepository.loadTrackers(forceRefresh = true)
             } catch (e: GeoVaultApiFailure) {
                 GeoVaultCaptureLog.w(TAG, "refreshHiddenTrackerItems: failed to load trackers", e)
+                emitHiddenItemFailure(e)
                 _state.update { it.copy(isHiddenTrackerItemsLoading = false) }
                 return@launch
             }
@@ -141,6 +136,7 @@ class SettingsViewModel(
                 groupManagementRepository.loadGroups(forceRefresh = true)
             } catch (e: GeoVaultApiFailure) {
                 GeoVaultCaptureLog.w(TAG, "refreshHiddenTrackerItems: failed to load groups", e)
+                emitHiddenItemFailure(e)
                 _state.update { it.copy(isHiddenTrackerItemsLoading = false) }
                 return@launch
             }
@@ -161,6 +157,7 @@ class SettingsViewModel(
                         trackerManagementRepository.loadTracker(item.id)
                     } catch (e: GeoVaultApiFailure) {
                         GeoVaultCaptureLog.w(TAG, "unhideTrackerItem: failed to load tracker ${item.id}", e)
+                        emitHiddenItemFailure(e)
                         return@launch
                     }
                     try {
@@ -173,6 +170,7 @@ class SettingsViewModel(
                         )
                     } catch (e: GeoVaultApiFailure) {
                         GeoVaultCaptureLog.w(TAG, "unhideTrackerItem: failed to update tracker ${item.id}", e)
+                        emitHiddenItemFailure(e)
                         return@launch
                     }
                 }
@@ -181,6 +179,7 @@ class SettingsViewModel(
                         groupManagementRepository.loadGroup(item.id)
                     } catch (e: GeoVaultApiFailure) {
                         GeoVaultCaptureLog.w(TAG, "unhideTrackerItem: failed to load group ${item.id}", e)
+                        emitHiddenItemFailure(e)
                         return@launch
                     }
                     try {
@@ -190,6 +189,7 @@ class SettingsViewModel(
                         )
                     } catch (e: GeoVaultApiFailure) {
                         GeoVaultCaptureLog.w(TAG, "unhideTrackerItem: failed to update group ${item.id}", e)
+                        emitHiddenItemFailure(e)
                         return@launch
                     }
                 }
@@ -212,9 +212,18 @@ class SettingsViewModel(
                 refreshHiddenTrackerItems()
             } catch (e: GeoVaultApiFailure) {
                 GeoVaultCaptureLog.w(TAG, "unhideAllTrackerItems: failed to clear hidden items", e)
+                emitHiddenItemFailure(e)
                 _state.update { it.copy(isHiddenTrackerItemsLoading = false) }
             }
         }
+    }
+
+    private fun emitHiddenItemFailure(failure: GeoVaultApiFailure) {
+        emitHostMessage(TrackerApiFailureMessages.format(appContext, failure))
+    }
+
+    private fun emitHostMessage(message: String) {
+        TrackerAppServices.from(getApplication()).uiEffects().emitMessage(message)
     }
 
     private fun refreshMeasurementDefaults() {

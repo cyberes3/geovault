@@ -2,6 +2,7 @@ package com.geovault.tracker.params
 
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.presentation.TrackerMapSelectionCard
+import com.geovault.tracker.toLooseMap
 
 data class TrackerParamsSeed(
     val displayName: String,
@@ -32,22 +33,45 @@ fun Tracker.toTrackerParamsRouteArgs(): TrackerParamsRouteArgs {
             lastUpdateMs = lastMs?.takeIf { it >= 0 },
             latitude = latitude,
             longitude = longitude,
-            initialParams = point_params?.lastOrNull(),
+            initialParams = point_params?.lastOrNull()?.toLooseMap(),
             isOwner = isOwner(),
         ),
     )
 }
 
-fun TrackerMapSelectionCard.toTrackerParamsRouteArgs(): TrackerParamsRouteArgs {
+fun TrackerMapSelectionCard.toTrackerParamsRouteArgs(
+    tracker: Tracker? = null,
+): TrackerParamsRouteArgs {
+    return paramsRouteArgs(
+        tracker = tracker,
+        trackerId = trackerId,
+        displayName = trackerName,
+        lastUpdateMs = lastUpdatedMs?.takeIf { it > 0 },
+        latitude = latitude,
+        longitude = longitude,
+        isOwner = isOwned,
+    )
+}
+
+fun paramsRouteArgs(
+    tracker: Tracker?,
+    trackerId: String,
+    displayName: String,
+    lastUpdateMs: Long?,
+    latitude: Double?,
+    longitude: Double?,
+    isOwner: Boolean,
+): TrackerParamsRouteArgs {
+    val catalog = tracker?.toTrackerParamsRouteArgs()?.seed
     return TrackerParamsRouteArgs(
         trackerId = trackerId,
         seed = TrackerParamsSeed(
-            displayName = trackerName.ifBlank { trackerId },
-            lastUpdateMs = lastUpdatedMs?.takeIf { it > 0 },
-            latitude = latitude,
-            longitude = longitude,
-            initialParams = null,
-            isOwner = isOwned,
+            displayName = displayName.ifBlank { catalog?.displayName.orEmpty() }.ifBlank { trackerId },
+            lastUpdateMs = lastUpdateMs ?: catalog?.lastUpdateMs,
+            latitude = latitude ?: catalog?.latitude,
+            longitude = longitude ?: catalog?.longitude,
+            initialParams = catalog?.initialParams,
+            isOwner = isOwner,
         ),
     )
 }

@@ -9,7 +9,6 @@ enum class TrackerSettingsLoadState {
 data class TrackerSettingsState(
     val loadState: TrackerSettingsLoadState,
     val settings: TrackerSettings,
-    val wasTrackingBeforeExit: Boolean,
     val schemaVersion: Int,
     val revision: Long
 ) {
@@ -21,7 +20,6 @@ data class TrackerSettingsState(
             return TrackerSettingsState(
                 loadState = TrackerSettingsLoadState.Loading,
                 settings = TrackerSettingsDefaults.baseline,
-                wasTrackingBeforeExit = false,
                 schemaVersion = TrackerSettingsDefaults.schemaVersion,
                 revision = 0L
             )

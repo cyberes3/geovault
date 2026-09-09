@@ -2,20 +2,22 @@ package com.geovault.tracker.positioning
 import com.geovault.tracker.positioning.PositioningRuntime
 import android.content.Intent
 import com.geovault.tracker.location.TrackingControlEvent
-import com.geovault.tracker.location.TrackingControlPlane
+import com.geovault.tracker.location.TrackingControlState
 import com.geovault.tracker.location.TrackingLifecycleState
 import com.geovault.tracker.positioning.PointEmissionTrouble
 import com.geovault.tracker.positioning.config.GpsRuntimeState
 import com.geovault.tracker.runtime.PositioningDiagnosticEvent
 import com.geovault.tracker.runtime.PositioningDiagnosticSnapshot
-import com.geovault.tracker.services.RecordingRuntimeReducer
-import com.geovault.tracker.services.RuntimeAccuracyHoldPolicy
-import com.geovault.tracker.services.RuntimeSnapshotProjectionInput
-import com.geovault.tracker.services.RuntimeSnapshotProjector
-import com.geovault.tracker.services.TrackingRuntimeSnapshot
-import com.geovault.tracker.services.TrackingRuntimeStateStore
-import com.geovault.tracker.services.TrackingStatusAccuracyInput
-import com.geovault.tracker.services.TrackingStatusAccuracyProjector
+import com.geovault.tracker.positioning.RecordingRuntimeReducer
+import com.geovault.tracker.positioning.RuntimeAccuracyHoldPolicy
+import com.geovault.tracker.positioning.RuntimeSnapshotProjectionInput
+import com.geovault.tracker.positioning.RuntimeSnapshotProjector
+import com.geovault.tracker.positioning.TrackingRuntimeSnapshot
+import com.geovault.tracker.runtime.RuntimePublisher
+import com.geovault.tracker.runtime.TrackerRuntimeStore
+import com.geovault.tracker.positioning.TrackingStatusAccuracyInput
+import com.geovault.tracker.positioning.TrackingStatusAccuracyProjector
+import com.geovault.tracker.positioning.motion.MotionState
 import com.geovault.tracker.tracking.TrackingServiceConstants
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -34,7 +36,7 @@ internal class RuntimeProjectionSubsystem(private val rt: PositioningRuntime) {
             }
             rt.projection.updateRuntimeSnapshot { it.copy(queuedPointsVisible = count) }
             withContext(Dispatchers.Main) {
-                rt.projection.syncRuntimeStateStore()
+                rt.projection.commit()
                 if (rt.state.startupForegroundPromoted) {
                     rt.deps.notificationPresenter.updateForegroundNotification(rt.state.runtimeSnapshot)
                 }
@@ -196,7 +198,7 @@ internal class RuntimeProjectionSubsystem(private val rt: PositioningRuntime) {
         )
     }
 
-    fun syncRuntimeStateStore(
+    fun commit(
         lifecycleStateOverride: TrackingLifecycleState? = null,
         failureReasonOverride: String? = null,
     ) {
@@ -249,7 +251,7 @@ internal class RuntimeProjectionSubsystem(private val rt: PositioningRuntime) {
                     autoTrackingEnabled = true,
                     activeMotionMode = activeMotionMode,
                     uiStatus = statusProjection.uiStatus,
-                    gpsPaused = recordingRuntime.pausedForMotion,
+                    gpsPaused = rt.motionOrchestrator.current() is MotionState.PausedStationary,
                     effectiveAccuracyThresholdMeters = effectiveAccuracyThreshold,
                     sessionVisibleBoundaryId = rt.state.sessionVisibleBoundaryId,
                     providerHealthReason = providerDecision.reason.telemetryValue,
@@ -260,7 +262,7 @@ internal class RuntimeProjectionSubsystem(private val rt: PositioningRuntime) {
                 )
             ).also { rt.state.runtimeSnapshot = it }
         }
-        TrackingRuntimeStateStore.update { next }
+        RuntimePublisher.commit(next)
         rt.projection.maybeLogPositioningDiagnosticSnapshot(next)
         if (rt.state.startupForegroundPromoted && rt.state.startupInProgress) {
             rt.serviceScope.launch(Dispatchers.Main) {
@@ -306,12 +308,30 @@ internal class RuntimeProjectionSubsystem(private val rt: PositioningRuntime) {
     }
 
     fun transitionControlState(event: TrackingControlEvent, failureReason: String? = null) {
-        rt.state.controlState = TrackingControlPlane.transition(
+        rt.state.controlState = nextControlState(
             current = rt.state.controlState,
             event = event,
-            failureReason = failureReason
+            failureReason = failureReason,
         )
-        rt.projection.syncRuntimeStateStore()
+        rt.projection.commit()
+    }
+
+    private fun nextControlState(
+        current: TrackingControlState,
+        event: TrackingControlEvent,
+        failureReason: String?,
+    ): TrackingControlState {
+        return when (event) {
+            TrackingControlEvent.StartRequested -> TrackingControlState(TrackingLifecycleState.STARTING, null)
+            TrackingControlEvent.StartSucceeded -> TrackingControlState(TrackingLifecycleState.RUNNING, null)
+            TrackingControlEvent.StartFailed -> TrackingControlState(TrackingLifecycleState.FAILED, failureReason)
+            TrackingControlEvent.PauseRequested -> TrackingControlState(TrackingLifecycleState.PAUSED, null)
+            TrackingControlEvent.ResumeRequested -> TrackingControlState(TrackingLifecycleState.RUNNING, null)
+            TrackingControlEvent.StopRequested -> TrackingControlState(TrackingLifecycleState.STOPPING, current.failureReason)
+            TrackingControlEvent.StopCompleted -> TrackingControlState(TrackingLifecycleState.STOPPED, null)
+            TrackingControlEvent.FatalFailure ->
+                TrackingControlState(TrackingLifecycleState.FAILED, failureReason ?: current.failureReason)
+        }
     }
 
     fun validateRuntimeInvariant(gpsProviderEnabled: Boolean) {

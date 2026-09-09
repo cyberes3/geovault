@@ -15,9 +15,9 @@ import com.geovault.tracker.positioning.config.GpsRuntimeState
 import com.geovault.tracker.positioning.ingest.FixIngestMode
 import com.geovault.tracker.positioning.ingest.TrackerLocationMotionContext
 import com.geovault.tracker.positioning.ingest.TrackerLocationPipelineInput
-import com.geovault.tracker.services.QueueUploadScope
-import com.geovault.tracker.services.RuntimeLocationGateInput
-import com.geovault.tracker.services.TrackingRuntimeOrchestrator
+import com.geovault.tracker.positioning.QueueUploadScope
+import com.geovault.tracker.positioning.RuntimeLocationGateInput
+import com.geovault.tracker.positioning.LocationUpdateGate
 import com.geovault.tracker.tracking.TrackingServiceConstants
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -53,7 +53,7 @@ internal class FixIngestSubsystem(private val rt: PositioningRuntime) {
             skipAdaptiveTrackingEffects = skipAdaptiveTrackingEffects,
         )
         if (
-            !TrackingRuntimeOrchestrator.shouldProcessLocationUpdate(
+            !LocationUpdateGate.shouldProcessLocationUpdate(
                 RuntimeLocationGateInput(
                     isTracking = rt.state.isTracking,
                     gpsState = rt.state.gpsRuntimeState,
@@ -78,7 +78,7 @@ internal class FixIngestSubsystem(private val rt: PositioningRuntime) {
         rt.projection.applyAccuracyHoldUpdate(
             incomingAccuracyMeters = if (location.hasAccuracy()) location.accuracy else null,
         )
-        rt.projection.syncRuntimeStateStore()
+        rt.projection.commit()
         val selectedTrackerId = rt.ports.selectedTrackerId()
         if (selectedTrackerId.isEmpty()) return
         var motionMode = runtimeContext.activeMotionMode
@@ -264,7 +264,7 @@ internal class FixIngestSubsystem(private val rt: PositioningRuntime) {
                 )
             )
         }
-        withContext(Dispatchers.Main) { rt.projection.syncRuntimeStateStore() }
+        withContext(Dispatchers.Main) { rt.projection.commit() }
         if (!result.accepted) {
             val rejectedForLock = result.rejectReason == TrackPointRejectReason.BAD_ACCURACY ||
                 result.rejectReason == TrackPointRejectReason.STALE
@@ -293,6 +293,7 @@ internal class FixIngestSubsystem(private val rt: PositioningRuntime) {
         if (!rt.utilities.isWaitingForProviderState()) {
             rt.collection.transitionGpsState(GpsRuntimeEvent.FIX_ACCEPTED, "fix_accepted")
         }
+        rt.motionOrchestrator.onFixIngested()
         if (result.pointPersisted) {
             rt.deps.pointFreshnessTracker.markLocalPointPersisted(nowMs)
             rt.deps.lowAccuracyFallbackCoordinator.onAcceptedFix()
@@ -409,7 +410,7 @@ internal class FixIngestSubsystem(private val rt: PositioningRuntime) {
         }
         rt.state.lastSpeedReferenceLocation = Location(location)
         withContext(Dispatchers.Main) {
-            rt.projection.syncRuntimeStateStore()
+            rt.projection.commit()
             rt.projection.updateNotificationFromDb(broadcastStats = false)
         }
         if (result.pointPersisted) {

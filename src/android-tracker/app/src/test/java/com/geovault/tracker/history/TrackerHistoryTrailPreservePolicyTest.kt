@@ -1,7 +1,7 @@
 package com.geovault.tracker.history
 
 import com.geovault.tracker.db.QueuedLocation
-import com.geovault.tracker.presentation.TrackerMapPointProvenancePolicy
+import com.geovault.tracker.map.MapTrailEngine
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -15,7 +15,7 @@ class TrackerHistoryTrailPreservePolicyTest {
             point("tracker-1", time = 14_000L, startTimestampMs = activeStart),
         )
 
-        val preserved = TrackerHistoryTrailPreservePolicy.preserveActiveSessionTrailWhenMappedEmpty(
+        val preserved = MapTrailEngine.preserveActiveSessionTrailWhenMappedEmpty(
             mappedTrail = emptyList(),
             stateTrail = stateTrail,
             trackerId = "tracker-1",
@@ -28,7 +28,7 @@ class TrackerHistoryTrailPreservePolicyTest {
     @Test
     fun preserveActiveSessionTrailWhenMappedEmpty_nonEmptyMappedUnchanged() {
         val mapped = listOf(point("tracker-1", time = 1_000L))
-        val preserved = TrackerHistoryTrailPreservePolicy.preserveActiveSessionTrailWhenMappedEmpty(
+        val preserved = MapTrailEngine.preserveActiveSessionTrailWhenMappedEmpty(
             mappedTrail = mapped,
             stateTrail = listOf(point("tracker-1", time = 2_000L)),
             trackerId = "tracker-1",
@@ -41,15 +41,15 @@ class TrackerHistoryTrailPreservePolicyTest {
     fun mergeActiveSessionCoverageIntoTrunk_carriesMissingActiveSessionLocalPoints() {
         val activeStart = 10_000L
         val server = listOf(
-            point("tracker-1", time = 11_000L, prov = TrackerMapPointProvenancePolicy.PROVENANCE_SERVER_GEOMETRY, startTimestampMs = activeStart),
-            point("tracker-1", time = 13_000L, prov = TrackerMapPointProvenancePolicy.PROVENANCE_SERVER_GEOMETRY, startTimestampMs = activeStart),
+            point("tracker-1", time = 11_000L, prov = MapTrailEngine.PROVENANCE_SERVER_GEOMETRY, startTimestampMs = activeStart),
+            point("tracker-1", time = 13_000L, prov = MapTrailEngine.PROVENANCE_SERVER_GEOMETRY, startTimestampMs = activeStart),
         )
         val current = listOf(
-            point("tracker-1", time = 12_000L, prov = TrackerMapPointProvenancePolicy.PROVENANCE_LOCAL_GPS, startTimestampMs = activeStart),
-            point("tracker-1", time = 14_000L, prov = TrackerMapPointProvenancePolicy.PROVENANCE_LOCAL_GPS, startTimestampMs = activeStart),
+            point("tracker-1", time = 12_000L, prov = MapTrailEngine.PROVENANCE_LOCAL_GPS, startTimestampMs = activeStart),
+            point("tracker-1", time = 14_000L, prov = MapTrailEngine.PROVENANCE_LOCAL_GPS, startTimestampMs = activeStart),
         )
 
-        val merged = TrackerHistoryTrailPreservePolicy.mergeActiveSessionCoverageIntoTrunk(
+        val merged = MapTrailEngine.mergeActiveSessionCoverageIntoTrunk(
             serverTrunk = server,
             currentTrail = current,
             trackerId = "tracker-1",
@@ -64,11 +64,11 @@ class TrackerHistoryTrailPreservePolicyTest {
     fun mergeActiveSessionCoverageIntoTrunk_emptyServer_preservesActiveLocalOnly() {
         val activeStart = 10_000L
         val activeLocal = listOf(
-            point("tracker-1", time = 12_000L, prov = TrackerMapPointProvenancePolicy.PROVENANCE_LOCAL_GPS, startTimestampMs = activeStart),
-            point("tracker-1", time = 14_000L, prov = TrackerMapPointProvenancePolicy.PROVENANCE_LOCAL_GPS, startTimestampMs = activeStart),
+            point("tracker-1", time = 12_000L, prov = MapTrailEngine.PROVENANCE_LOCAL_GPS, startTimestampMs = activeStart),
+            point("tracker-1", time = 14_000L, prov = MapTrailEngine.PROVENANCE_LOCAL_GPS, startTimestampMs = activeStart),
         )
 
-        val merged = TrackerHistoryTrailPreservePolicy.mergeActiveSessionCoverageIntoTrunk(
+        val merged = MapTrailEngine.mergeActiveSessionCoverageIntoTrunk(
             serverTrunk = emptyList(),
             currentTrail = activeLocal,
             trackerId = "tracker-1",
@@ -92,11 +92,11 @@ class TrackerHistoryTrailPreservePolicyTest {
             ),
         )
         val current = listOf(
-            point("tracker-1", time = 12_000L, prov = TrackerMapPointProvenancePolicy.PROVENANCE_LOCAL_GPS, startTimestampMs = activeStart),
-            point("tracker-1", time = 14_000L, prov = TrackerMapPointProvenancePolicy.PROVENANCE_LOCAL_GPS, startTimestampMs = activeStart),
+            point("tracker-1", time = 12_000L, prov = MapTrailEngine.PROVENANCE_LOCAL_GPS, startTimestampMs = activeStart),
+            point("tracker-1", time = 14_000L, prov = MapTrailEngine.PROVENANCE_LOCAL_GPS, startTimestampMs = activeStart),
         )
 
-        val merged = TrackerHistoryTrailPreservePolicy.mergeActiveSessionCoverageIntoTrunkBatch(
+        val merged = MapTrailEngine.mergeActiveSessionCoverageIntoTrunkBatch(
             batch = batch,
             currentTrail = current,
             activeSessionStartMs = activeStart,
@@ -109,11 +109,11 @@ class TrackerHistoryTrailPreservePolicyTest {
     private fun point(
         trackerId: String,
         time: Long,
-        prov: String = TrackerMapPointProvenancePolicy.PROVENANCE_LOCAL_GPS,
+        prov: String = MapTrailEngine.PROVENANCE_LOCAL_GPS,
         startTimestampMs: Long? = null,
     ): QueuedLocation {
         return QueuedLocation(
-            id = if (prov == TrackerMapPointProvenancePolicy.PROVENANCE_SERVER_GEOMETRY) -time else 0L,
+            id = if (prov == MapTrailEngine.PROVENANCE_SERVER_GEOMETRY) -time else 0L,
             trackerId = trackerId,
             time = time,
             latitude = time.toDouble() / 1000.0,

@@ -1,8 +1,11 @@
 package com.geovault.tracker.presentation
 
 import com.geovault.tracker.db.QueuedLocation
-import com.geovault.tracker.services.RecordingRuntime
-import com.geovault.tracker.services.TrackingRuntimeSnapshot
+import com.geovault.tracker.domain.TrackPoint
+import com.geovault.tracker.map.MapRenderMath
+import com.geovault.tracker.policy.TrackPointSource
+import com.geovault.tracker.positioning.RecordingRuntime
+import com.geovault.tracker.positioning.TrackingRuntimeSnapshot
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -13,25 +16,24 @@ class TrackerMapStateTransformsTest {
 
     @Test
     fun buildRenderState_fromSessionSnapshot_usesAcceptedGeometryOnly() {
-        val acceptedPoint = com.geovault.tracker.policy.TrackPointEvent(
-            source = com.geovault.tracker.policy.TrackPointSource.REMOTE_STREAM,
-            trackId = "accepted",
-            lon = 2.0,
-            lat = 1.0,
-            timestampMs = 10L,
+        val acceptedPoint = com.geovault.tracker.domain.TrackPoint(
+            provenance = com.geovault.tracker.policy.TrackPointSource.REMOTE_STREAM,
+            trackerId = "accepted",
+            longitude = 2.0,
+            latitude = 1.0,
+            timeMs = 10L,
         )
-        val rejectedPoint = com.geovault.tracker.policy.TrackPointEvent(
-            source = com.geovault.tracker.policy.TrackPointSource.REMOTE_STREAM,
-            trackId = "rejected",
-            lon = 4.0,
-            lat = 3.0,
-            timestampMs = 10L,
+        val rejectedPoint = com.geovault.tracker.domain.TrackPoint(
+            provenance = com.geovault.tracker.policy.TrackPointSource.REMOTE_STREAM,
+            trackerId = "rejected",
+            longitude = 4.0,
+            latitude = 3.0,
+            timeMs = 10L,
         )
         val session = TrackerMapSessionSnapshot(
             uiState = TrackerMapUiState(
                 mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
                 activeStreamedTrackerIds = setOf("accepted", "rejected"),
-                streamTargetIds = setOf("accepted", "rejected"),
             ),
             plan = TrackerMapStreamingPlan(
                 mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
@@ -60,7 +62,7 @@ class TrackerMapStateTransformsTest {
             ).filterKeys { it == "accepted" },
         )
 
-        val renderState = TrackerMapStateTransforms.buildRenderState(
+        val renderState = MapRenderMath.buildRenderState(
             session = session,
             cosmetics = TrackerMapRenderCosmetics(
                 trackerDisplayNameById = mapOf("accepted" to "Accepted"),
@@ -84,20 +86,19 @@ class TrackerMapStateTransformsTest {
                 accuracy = null,
             ),
         )
-        val st = TrackerMapStateTransforms.buildRenderState(
+        val st = MapRenderMath.buildRenderState(
             TrackerMapDisplayMode.GROUP_PLACEHOLDER,
             trail,
             TrackingRuntimeSnapshot(lastTrackedLatitude = 3.0, lastTrackedLongitude = 4.0),
             remoteLastPoints = mapOf(
-                "g1" to com.geovault.tracker.policy.TrackPointEvent(
-                    source = com.geovault.tracker.policy.TrackPointSource.REMOTE_STREAM,
-                    trackId = "g1",
-                    lon = 2.2,
-                    lat = 1.1,
-                    timestampMs = 1L
+                "g1" to com.geovault.tracker.domain.TrackPoint(
+                    provenance = com.geovault.tracker.policy.TrackPointSource.REMOTE_STREAM,
+                    trackerId = "g1",
+                    longitude = 2.2,
+                    latitude = 1.1,
+                    timeMs = 1L
                 )
             ),
-            activeStreamedTrackerIds = setOf("g1"),
             allQueueTrailsByTracker = mapOf(
                 "g1" to listOf(
                     QueuedLocation(trackerId = "g1", time = 1L, latitude = 1.0, longitude = 2.0, altitude = null, speed = null, bearing = null, accuracy = null),
@@ -134,10 +135,11 @@ class TrackerMapStateTransformsTest {
                 accuracy = null,
             ),
         )
-        val st = TrackerMapStateTransforms.buildRenderState(
+        val st = MapRenderMath.buildRenderState(
             TrackerMapDisplayMode.SINGLE_SESSION,
             trail,
             TrackingRuntimeSnapshot(selectedTrackerId = "t1", selectedTrackerName = "T1"),
+            remoteLastPoints = headsFromTrail(trail),
             displayedTrackerId = "t1",
         )
         assertEquals(1, st.lines.size)
@@ -155,7 +157,7 @@ class TrackerMapStateTransformsTest {
 
     @Test
     fun singleSession_noMarkerWhenResolverReturnsNull() {
-        val st = TrackerMapStateTransforms.buildRenderState(
+        val st = MapRenderMath.buildRenderState(
             mode = TrackerMapDisplayMode.SINGLE_SESSION,
             trail = emptyList(),
             runtime = TrackingRuntimeSnapshot(),
@@ -167,7 +169,7 @@ class TrackerMapStateTransformsTest {
 
     @Test
     fun emptyTrail_runtimeLastKnown_stillShowsMarker() {
-        val st = TrackerMapStateTransforms.buildRenderState(
+        val st = MapRenderMath.buildRenderState(
             TrackerMapDisplayMode.ALL_QUEUE,
             trail = emptyList(),
             runtime = TrackingRuntimeSnapshot(
@@ -181,7 +183,7 @@ class TrackerMapStateTransformsTest {
 
     @Test
     fun singleSession_emptyTrailUsesSelectedRuntimePointForMarker() {
-        val st = TrackerMapStateTransforms.buildRenderState(
+        val st = MapRenderMath.buildRenderState(
             mode = TrackerMapDisplayMode.SINGLE_SESSION,
             trail = emptyList(),
             runtime = TrackingRuntimeSnapshot(
@@ -190,6 +192,7 @@ class TrackerMapStateTransformsTest {
                 recordingRuntime = RecordingRuntime(sessionActive = true, selectedTrackerId = "local"),
                 lastTrackedLatitude = -33.0,
                 lastTrackedLongitude = 151.0,
+                lastTrackedTimestampMs = 1_000L,
             ),
             displayedTrackerId = "local",
         )
@@ -209,10 +212,11 @@ class TrackerMapStateTransformsTest {
             QueuedLocation(id = 2L, trackerId = "t1", time = 2L, latitude = 1.001, longitude = 1.001, altitude = null, speed = null, bearing = null, accuracy = null),
             QueuedLocation(id = 3L, trackerId = "t1", time = 3L, latitude = 1.002, longitude = 1.002, altitude = null, speed = null, bearing = null, accuracy = null),
         )
-        val render = TrackerMapStateTransforms.buildRenderState(
+        val render = MapRenderMath.buildRenderState(
             mode = TrackerMapDisplayMode.SINGLE_SESSION,
             trail = trail,
             runtime = TrackingRuntimeSnapshot(sessionVisibleBoundaryId = 2L),
+            remoteLastPoints = headsFromTrail(trail),
             displayedTrackerId = "t1",
         )
 
@@ -228,13 +232,14 @@ class TrackerMapStateTransformsTest {
             QueuedLocation(id = 0L, trackerId = "t1", time = 300L, latitude = 24.55, longitude = -81.78, altitude = null, speed = null, bearing = null, accuracy = null),
             QueuedLocation(id = 12L, trackerId = "t1", time = 320L, latitude = 24.56, longitude = -81.77, altitude = null, speed = null, bearing = null, accuracy = null),
         )
-        val render = TrackerMapStateTransforms.buildRenderState(
+        val render = MapRenderMath.buildRenderState(
             mode = TrackerMapDisplayMode.SINGLE_SESSION,
             trail = trail,
             runtime = TrackingRuntimeSnapshot(
                 sessionVisibleBoundaryId = 10L,
                 sessionStartTimeMs = 250L,
             ),
+            remoteLastPoints = headsFromTrail(trail),
             displayedTrackerId = "t1",
         )
 
@@ -248,10 +253,11 @@ class TrackerMapStateTransformsTest {
             QueuedLocation(id = 1L, trackerId = "t1", time = 1L, latitude = 1.0, longitude = 1.0, altitude = null, speed = null, bearing = null, accuracy = null),
             QueuedLocation(id = 3L, trackerId = "t1", time = 3L, latitude = 1.002, longitude = 1.002, altitude = null, speed = null, bearing = null, accuracy = null),
         )
-        val render = TrackerMapStateTransforms.buildRenderState(
+        val render = MapRenderMath.buildRenderState(
             mode = TrackerMapDisplayMode.ALL_QUEUE,
             trail = trail,
             runtime = TrackingRuntimeSnapshot(sessionVisibleBoundaryId = 2L),
+            remoteLastPoints = headsFromTrail(trail),
             allQueueTrailsByTracker = mapOf("t1" to trail),
         )
 
@@ -273,7 +279,7 @@ class TrackerMapStateTransformsTest {
                 accuracy = null,
             ),
         )
-        val b = TrackerMapStateTransforms.trailBounds(trail)
+        val b = MapRenderMath.trailBounds(trail)
         assertNotNull(b)
         assertEquals(5.0, b!!.latitudeNorth, 1e-9)
         assertEquals(5.0, b.latitudeSouth, 1e-9)
@@ -281,7 +287,7 @@ class TrackerMapStateTransformsTest {
 
     @Test
     fun trailBounds_empty_null() {
-        assertNull(TrackerMapStateTransforms.trailBounds(emptyList()))
+        assertNull(MapRenderMath.trailBounds(emptyList()))
     }
 
     @Test
@@ -308,7 +314,7 @@ class TrackerMapStateTransformsTest {
                 accuracy = null,
             ),
         )
-        val b = TrackerMapStateTransforms.trailBounds(trail)
+        val b = MapRenderMath.trailBounds(trail)
         assertNotNull(b)
         assertEquals(10.0, b!!.latitudeNorth, 1e-9)
         assertEquals(10.0, b.latitudeSouth, 1e-9)
@@ -328,12 +334,12 @@ class TrackerMapStateTransformsTest {
                 accuracy = null,
             ),
         )
-        assertNull(TrackerMapStateTransforms.trailBounds(trail))
+        assertNull(MapRenderMath.trailBounds(trail))
     }
 
     @Test
     fun allQueueMode_rendersPerTrackerLinesWithTrackerColors() {
-        val render = TrackerMapStateTransforms.buildRenderState(
+        val render = MapRenderMath.buildRenderState(
             mode = TrackerMapDisplayMode.ALL_QUEUE,
             trail = emptyList(),
             runtime = TrackingRuntimeSnapshot(),
@@ -356,7 +362,7 @@ class TrackerMapStateTransformsTest {
 
     @Test
     fun singleSession_usesDisplayedTrackerColorForChevronIconId() {
-        val render = TrackerMapStateTransforms.buildRenderState(
+        val render = MapRenderMath.buildRenderState(
             mode = TrackerMapDisplayMode.SINGLE_SESSION,
             trail = listOf(
                 QueuedLocation(
@@ -381,6 +387,9 @@ class TrackerMapStateTransformsTest {
                 )
             ),
             runtime = TrackingRuntimeSnapshot(selectedTrackerId = "selected"),
+            remoteLastPoints = mapOf(
+                "displayed" to remoteHead("displayed", latitude = 1.001, longitude = 2.002, timeMs = 2L),
+            ),
             displayedTrackerId = "displayed",
             trackerColorById = mapOf(
                 "displayed" to "#AA33CC",
@@ -395,7 +404,7 @@ class TrackerMapStateTransformsTest {
 
     @Test
     fun singleSession_whileTrackingRendersDisplayedRemoteTrail() {
-        val render = TrackerMapStateTransforms.buildRenderState(
+        val render = MapRenderMath.buildRenderState(
             mode = TrackerMapDisplayMode.SINGLE_SESSION,
             trail = listOf(
                 QueuedLocation(
@@ -425,6 +434,9 @@ class TrackerMapStateTransformsTest {
                 selectedTrackerId = "local",
                 selectedTrackerName = "Local Tracker",
             ),
+            remoteLastPoints = mapOf(
+                "remote" to remoteHead("remote", latitude = 1.001, longitude = 2.001, timeMs = 2L),
+            ),
             displayedTrackerId = "remote",
             displayedTrackerName = "Remote Tracker",
             trackerColorById = mapOf("remote" to "#123456"),
@@ -439,7 +451,7 @@ class TrackerMapStateTransformsTest {
 
     @Test
     fun singleSession_emitsAccuracyPolygonWhenAccuracyPresent() {
-        val render = TrackerMapStateTransforms.buildRenderState(
+        val render = MapRenderMath.buildRenderState(
             mode = TrackerMapDisplayMode.SINGLE_SESSION,
             trail = listOf(
                 QueuedLocation(
@@ -464,6 +476,9 @@ class TrackerMapStateTransformsTest {
                 )
             ),
             runtime = TrackingRuntimeSnapshot(),
+            remoteLastPoints = mapOf(
+                "t1" to remoteHead("t1", latitude = 1.001, longitude = 2.001, timeMs = 2L, accuracyMeters = 11f),
+            ),
             displayedTrackerId = "t1",
             trackerColorById = mapOf("t1" to "#3366CC"),
             fallbackAccuracyMeters = null,
@@ -482,7 +497,7 @@ class TrackerMapStateTransformsTest {
 
     @Test
     fun singleSession_runtimeOnlyMarkerUsesRuntimeAccuracyForAccuracyPolygon() {
-        val render = TrackerMapStateTransforms.buildRenderState(
+        val render = MapRenderMath.buildRenderState(
             mode = TrackerMapDisplayMode.SINGLE_SESSION,
             trail = emptyList(),
             runtime = TrackingRuntimeSnapshot(
@@ -490,6 +505,7 @@ class TrackerMapStateTransformsTest {
                 recordingRuntime = RecordingRuntime(sessionActive = true, selectedTrackerId = "t1"),
                 lastTrackedLatitude = 1.0,
                 lastTrackedLongitude = 2.0,
+                lastTrackedTimestampMs = 1_000L,
                 lastAccuracyMeters = 37f,
             ),
             displayedTrackerId = "t1",
@@ -508,10 +524,14 @@ class TrackerMapStateTransformsTest {
 
     @Test
     fun allQueue_emitsAccuracyPolygonsForAllVisibleTrackers() {
-        val render = TrackerMapStateTransforms.buildRenderState(
+        val render = MapRenderMath.buildRenderState(
             mode = TrackerMapDisplayMode.ALL_QUEUE,
             trail = emptyList(),
             runtime = TrackingRuntimeSnapshot(),
+            remoteLastPoints = mapOf(
+                "t1" to remoteHead("t1", latitude = 1.1, longitude = 1.1, timeMs = 2L, accuracyMeters = 10f),
+                "t2" to remoteHead("t2", latitude = 2.1, longitude = 2.1, timeMs = 2L, accuracyMeters = 20f),
+            ),
             allQueueTrailsByTracker = mapOf(
                 "t1" to listOf(
                     QueuedLocation(trackerId = "t1", time = 1L, latitude = 1.0, longitude = 1.0, altitude = null, speed = null, bearing = null, accuracy = 9f),
@@ -545,10 +565,14 @@ class TrackerMapStateTransformsTest {
 
     @Test
     fun allQueue_fallbackAllowedForSpecificTracker_onlyRendersThatTrackerPolygon() {
-        val render = TrackerMapStateTransforms.buildRenderState(
+        val render = MapRenderMath.buildRenderState(
             mode = TrackerMapDisplayMode.ALL_QUEUE,
             trail = emptyList(),
             runtime = TrackingRuntimeSnapshot(selectedTrackerId = "t2"),
+            remoteLastPoints = mapOf(
+                "t1" to remoteHead("t1", latitude = 1.1, longitude = 1.1, timeMs = 2L),
+                "t2" to remoteHead("t2", latitude = 2.1, longitude = 2.1, timeMs = 2L),
+            ),
             allQueueTrailsByTracker = mapOf(
                 "t1" to listOf(
                     QueuedLocation(trackerId = "t1", time = 1L, latitude = 1.0, longitude = 1.0, altitude = null, speed = null, bearing = null, accuracy = null),
@@ -570,8 +594,8 @@ class TrackerMapStateTransformsTest {
     @Test
     fun buildRenderState_singleSession_splitsLineOnLongTimeGapWithinSession() {
         val sessionStart = 1_000L
-        val gapMs = TrackerMapStateTransforms.MAX_TRACK_TIME_GAP_MS + 60_000L
-        val render = TrackerMapStateTransforms.buildRenderState(
+        val gapMs = MapRenderMath.MAX_TRACK_TIME_GAP_MS + 60_000L
+        val render = MapRenderMath.buildRenderState(
             mode = TrackerMapDisplayMode.SINGLE_SESSION,
             trail = listOf(
                 QueuedLocation(
@@ -631,7 +655,7 @@ class TrackerMapStateTransformsTest {
     @Test
     fun buildRenderState_singleSession_usesWiderTimeGapWhileRecording() {
         val sessionStart = 1_000L
-        val gapMs = TrackerMapStateTransforms.MAX_TRACK_TIME_GAP_MS + 60_000L
+        val gapMs = MapRenderMath.MAX_TRACK_TIME_GAP_MS + 60_000L
         val trail = listOf(
             QueuedLocation(
                 trackerId = "t1",
@@ -678,17 +702,17 @@ class TrackerMapStateTransformsTest {
                 startTimestampMs = sessionStart,
             ),
         )
-        val notRecording = TrackerMapStateTransforms.buildRenderState(
+        val notRecording = MapRenderMath.buildRenderState(
             mode = TrackerMapDisplayMode.SINGLE_SESSION,
             trail = trail,
             runtime = TrackingRuntimeSnapshot(),
             displayedTrackerId = "t1",
         )
-        val recording = TrackerMapStateTransforms.buildRenderState(
+        val recording = MapRenderMath.buildRenderState(
             mode = TrackerMapDisplayMode.SINGLE_SESSION,
             trail = trail,
             runtime = TrackingRuntimeSnapshot(
-                recordingRuntime = com.geovault.tracker.services.RecordingRuntime(
+                recordingRuntime = com.geovault.tracker.positioning.RecordingRuntime(
                     sessionActive = true,
                     selectedTrackerId = "t1",
                 ),
@@ -709,7 +733,7 @@ class TrackerMapStateTransformsTest {
         // happily merge them; only the session split prevents the cross-session "spike".
         val sessionA = 1_000L
         val sessionB = 2_000L
-        val render = TrackerMapStateTransforms.buildRenderState(
+        val render = MapRenderMath.buildRenderState(
             mode = TrackerMapDisplayMode.SINGLE_SESSION,
             trail = listOf(
                 QueuedLocation(
@@ -749,7 +773,7 @@ class TrackerMapStateTransformsTest {
 
     @Test
     fun buildRenderState_singleSession_markerUsesResolverNotStaleTrailTail() {
-        val render = TrackerMapStateTransforms.buildRenderState(
+        val render = MapRenderMath.buildRenderState(
             mode = TrackerMapDisplayMode.SINGLE_SESSION,
             trail = listOf(
                 QueuedLocation(
@@ -765,12 +789,12 @@ class TrackerMapStateTransformsTest {
             ),
             runtime = TrackingRuntimeSnapshot(),
             remoteLastPoints = mapOf(
-                "t1" to com.geovault.tracker.policy.TrackPointEvent(
-                    source = com.geovault.tracker.policy.TrackPointSource.REMOTE_STREAM,
-                    trackId = "t1",
-                    lon = 11.0,
-                    lat = 21.0,
-                    timestampMs = 2_000L,
+                "t1" to com.geovault.tracker.domain.TrackPoint(
+                    provenance = com.geovault.tracker.policy.TrackPointSource.REMOTE_STREAM,
+                    trackerId = "t1",
+                    longitude = 11.0,
+                    latitude = 21.0,
+                    timeMs = 2_000L,
                 ),
             ),
             acceptedRemoteTrackerIds = setOf("t1"),
@@ -784,40 +808,39 @@ class TrackerMapStateTransformsTest {
 
     @Test
     fun buildRenderState_singleSession_markerLastFixMatchesLatestSessionTail() {
-        // CHEVRON COHERENCE: the single-session marker uses TrackerMapLastPointResolver, which
-        // picks the trail tail when it is the freshest candidate. After a session change the
-        // marker must sit on the latest session tail, not the previous session.
         val sessionA = 1_000L
         val sessionB = 2_000L
-        val render = TrackerMapStateTransforms.buildRenderState(
-            mode = TrackerMapDisplayMode.SINGLE_SESSION,
-            trail = listOf(
-                QueuedLocation(
-                    trackerId = "t1", time = 10L,
-                    latitude = 40.0, longitude = -74.0,
-                    altitude = null, speed = null, bearing = null, accuracy = null,
-                    startTimestampMs = sessionA,
-                ),
-                QueuedLocation(
-                    trackerId = "t1", time = 20L,
-                    latitude = 40.0001, longitude = -74.0001,
-                    altitude = null, speed = null, bearing = null, accuracy = null,
-                    startTimestampMs = sessionA,
-                ),
-                QueuedLocation(
-                    trackerId = "t1", time = 30L,
-                    latitude = 41.0, longitude = -75.0,
-                    altitude = null, speed = null, bearing = null, accuracy = null,
-                    startTimestampMs = sessionB,
-                ),
-                QueuedLocation(
-                    trackerId = "t1", time = 40L,
-                    latitude = 41.0001, longitude = -75.0001,
-                    altitude = null, speed = null, bearing = null, accuracy = null,
-                    startTimestampMs = sessionB,
-                ),
+        val trail = listOf(
+            QueuedLocation(
+                trackerId = "t1", time = 10L,
+                latitude = 40.0, longitude = -74.0,
+                altitude = null, speed = null, bearing = null, accuracy = null,
+                startTimestampMs = sessionA,
             ),
+            QueuedLocation(
+                trackerId = "t1", time = 20L,
+                latitude = 40.0001, longitude = -74.0001,
+                altitude = null, speed = null, bearing = null, accuracy = null,
+                startTimestampMs = sessionA,
+            ),
+            QueuedLocation(
+                trackerId = "t1", time = 30L,
+                latitude = 41.0, longitude = -75.0,
+                altitude = null, speed = null, bearing = null, accuracy = null,
+                startTimestampMs = sessionB,
+            ),
+            QueuedLocation(
+                trackerId = "t1", time = 40L,
+                latitude = 41.0001, longitude = -75.0001,
+                altitude = null, speed = null, bearing = null, accuracy = null,
+                startTimestampMs = sessionB,
+            ),
+        )
+        val render = MapRenderMath.buildRenderState(
+            mode = TrackerMapDisplayMode.SINGLE_SESSION,
+            trail = trail,
             runtime = TrackingRuntimeSnapshot(),
+            remoteLastPoints = headsFromTrail(trail),
             displayedTrackerId = "t1",
         )
 
@@ -837,6 +860,36 @@ class TrackerMapStateTransformsTest {
         val northPoint = ring.first()
         val actualMeters = Math.toRadians(northPoint.first - centerLatitude) * 6_378_137.0
         assertEquals(expectedMeters, actualMeters, 0.05)
+    }
+
+    private fun remoteHead(
+        trackerId: String,
+        latitude: Double,
+        longitude: Double,
+        timeMs: Long,
+        accuracyMeters: Float? = null,
+    ): TrackPoint {
+        return TrackPoint(
+            provenance = TrackPointSource.REMOTE_STREAM,
+            trackerId = trackerId,
+            latitude = latitude,
+            longitude = longitude,
+            timeMs = timeMs,
+            accuracyMeters = accuracyMeters,
+        )
+    }
+
+    private fun headsFromTrail(trail: List<QueuedLocation>): Map<String, TrackPoint> {
+        val last = trail.lastOrNull() ?: return emptyMap()
+        return mapOf(
+            last.trackerId to remoteHead(
+                trackerId = last.trackerId,
+                latitude = last.latitude,
+                longitude = last.longitude,
+                timeMs = last.time,
+                accuracyMeters = last.accuracy,
+            ),
+        )
     }
 
 }

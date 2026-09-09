@@ -14,7 +14,7 @@ object StreamingTargetPolicy {
      * The only streaming exclusion is the locally-recorded tracker; its live GPS feed is the
      * source of truth on this device, so we never round-trip it through the websocket. Per-mode
      * targeting (e.g. SINGLE_SESSION on the selected tracker is history-only) is decided by
-     * [com.geovault.tracker.presentation.TrackerMapSessionProjector] before the request reaches
+     * [com.geovault.tracker.map.MapSessionEngine] before the request reaches
      * this policy — by the time we get here, `requestedTrackerIds` already encodes the intent.
      */
     fun remoteSubscriptionTargets(input: StreamingTargetPolicyInput): Set<String> {
@@ -23,7 +23,7 @@ object StreamingTargetPolicy {
     }
 
     /**
-     * Shared single-tracker decision used by both [com.geovault.tracker.presentation.TrackerMapSessionProjector]
+     * Shared single-tracker decision used by both [com.geovault.tracker.map.MapSessionEngine]
      * (SINGLE_SESSION mode) and `TrackerParamsStreamingController`: viewing the user's own
      * selected tracker is always history-only (backed by the local GPS feed / local Room queue),
      * never a remote websocket subscription — regardless of which surface is asking. Unifying

@@ -22,8 +22,8 @@ class LocationFilterPipelineRubberBandReplayTest {
     fun walkingProfile_holdsRepeatedForestAnchorInsteadOfCommittingStickySnapPoint() {
         val filter = LocationFilter(walkingConfig())
         val anchor = LocationInput(
-            latitude = 41.20204381,
-            longitude = -103.56599184,
+            latitude = 40.0,
+            longitude = -100.0,
             timestampMs = 1_000L,
             accuracyMeters = 12f,
             speedMps = 0.4f,
@@ -32,11 +32,11 @@ class LocationFilterPipelineRubberBandReplayTest {
         assertEquals(LocationFilterResult.Decision.Commit, filter.evaluate(anchor).decision)
 
         val replay = listOf(
-            Triple(21_000L, 41.2010899225 to -103.5640088375, 47.3f),
-            Triple(42_000L, 41.20036973313242 to -103.56561784411370, 8.2f),
-            Triple(205_000L, 41.201077525 to -103.56401074499999, 47.5f),
-            Triple(292_000L, 41.20107561666666 to -103.56401201666667, 48.9f),
-            Triple(500_000L, 41.20106799 to -103.56400692999999, 47.0f),
+            Triple(21_000L, 39.99904611250000 to -99.99801699750000, 47.3f),
+            Triple(42_000L, 39.99832592313242 to -99.99962600411371, 8.2f),
+            Triple(205_000L, 39.99903371500000 to -99.99801890500000, 47.5f),
+            Triple(292_000L, 39.99903180666666 to -99.99802017666667, 48.9f),
+            Triple(500_000L, 39.99902418000000 to -99.99801509000000, 47.0f),
         )
 
         val decisions = replay.map { (ts, latLon, accuracy) ->
@@ -70,8 +70,8 @@ class LocationFilterPipelineRubberBandReplayTest {
         val filter = LocationFilter(walkingConfig())
         filter.evaluate(
             LocationInput(
-                latitude = 41.20408572417497,
-                longitude = -103.56196492689251,
+                latitude = 40.00204191417497,
+                longitude = -99.99597308689252,
                 timestampMs = 1_000L,
                 accuracyMeters = 10.7f,
                 speedMps = 0.8f,
@@ -81,8 +81,8 @@ class LocationFilterPipelineRubberBandReplayTest {
 
         val jump = filter.evaluate(
             LocationInput(
-                latitude = 41.20344232928753,
-                longitude = -103.56101785565316,
+                latitude = 40.00139851928753,
+                longitude = -99.99502601565317,
                 timestampMs = 21_000L,
                 accuracyMeters = 8.2f,
                 speedMps = 10.0f,
@@ -176,7 +176,7 @@ class LocationFilterPipelineRubberBandReplayTest {
     fun slowWalkSlightlyForward_isAcceptedUnaltered() {
         val filter = LocationFilter(LocationFilterConfig.Default)
         var ts = 1_700_000_000_000L
-        var lat = 24.7097
+        var lat = 10.0
         var rejections = 0
         repeat(20) {
             lat += 0.000005
@@ -184,7 +184,7 @@ class LocationFilterPipelineRubberBandReplayTest {
             val r = filter.evaluate(
                 LocationInput(
                     latitude = lat,
-                    longitude = -81.1011,
+                    longitude = -20.0,
                     timestampMs = ts,
                     accuracyMeters = 6f,
                     speedMps = 0.6f,
@@ -266,33 +266,33 @@ class LocationFilterPipelineRubberBandReplayTest {
             )
 
         private val WALK_CLUSTER: List<Pair<Double, Double>> = listOf(
-            25.94418901587643 to -78.75547621486452,
-            25.94412333679199 to -78.75571835937500,
-            25.94425875854492 to -78.75576413574218,
-            25.94412333679199 to -78.75569547119140,
-            25.94436938476563 to -78.75563443603515,
-            25.94408137512207 to -78.75573361816406,
-            25.94422633361816 to -78.75600827636718,
-            25.94429690551758 to -78.75605405273437,
-            25.94434077453613 to -78.75601590576171,
-            25.94465167236328 to -78.75576413574218,
-            25.94487292480469 to -78.75580991210937,
-            25.94512278747559 to -78.75574124755859,
-            25.94531542968750 to -78.75566495361328,
-            25.94556147766113 to -78.75564206542968,
-            25.94488055419922 to -78.75577939453125,
-            25.94564349365234 to -78.75550473632812,
-            25.94528300476074 to -78.75564206542968,
-            25.94562442016602 to -78.75545133056640,
-            25.94557864379883 to -78.75574124755859,
-            25.94577891540527 to -78.75551236572265,
-            25.94440371704102 to -78.75578702392578,
-            25.94545848083496 to -78.75571072998046,
-            25.94507128906250 to -78.75570310058593,
-            25.94459254455566 to -78.75565732421875,
-            25.94427783203125 to -78.75590146484375,
-            25.94415003967285 to -78.75568784179687,
-            25.94419161169024 to -78.75546823309632,
+            10.00000000000000 to -20.00000000000000,
+            9.99993432091556 to -20.00024214451048,
+            10.00006974266849 to -20.00028792087767,
+            9.99993432091556 to -20.00021925632689,
+            10.00018036888920 to -20.00015822117064,
+            9.99989235924564 to -20.00025740329954,
+            10.00003731774173 to -20.00053206150267,
+            10.00010788964115 to -20.00057783786986,
+            10.00015175865970 to -20.00053969089720,
+            10.00046265648685 to -20.00028792087767,
+            10.00068390892826 to -20.00033369724486,
+            10.00093377159916 to -20.00026503269407,
+            10.00112641381107 to -20.00018873874876,
+            10.00137246178470 to -20.00016585056517,
+            10.00069153832279 to -20.00030317966673,
+            10.00145447777591 to -20.00002852146361,
+            10.00109398888431 to -20.00016585056517,
+            10.00143540428959 to -19.99997511570189,
+            10.00138962792240 to -20.00026503269407,
+            10.00158989952884 to -20.00003615085814,
+            10.00021470116459 to -20.00031080906126,
+            10.00126946495853 to -20.00023451511595,
+            10.00088227318607 to -20.00022688572142,
+            10.00040352867923 to -20.00018110935423,
+            10.00008881615482 to -20.00042524997923,
+            9.99996102379642 to -20.00021162693236,
+            10.00000259581381 to -19.99999201823181,
         )
 
         private val DRIVING_BURST_DELTAS: List<Pair<Double, Double>> = listOf(

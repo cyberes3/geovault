@@ -3,6 +3,7 @@ package com.geovault.tracker.map
 import com.geovault.tracker.presentation.TrackerMapCameraDirective
 import com.geovault.tracker.presentation.TrackerMapCameraDirectiveInput
 import com.geovault.tracker.presentation.TrackerMapFitTrailMode
+import com.geovault.tracker.presentation.TrackerMapUserLocationInput
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
@@ -31,13 +32,13 @@ class TrackerMapCameraCoordinatorTest {
 
     @Test
     fun resolveFromLockState_identicalResolutionsReuseTheSameDirective() {
-        val coordinator = TrackerMapCameraCoordinator()
+        val engine = MapRenderEngine()
 
-        coordinator.resolveFromLockState(selectionLockInput())
-        val first = coordinator.directive.value
+        engine.resolveFromLockState(selectionLockInput())
+        val first = engine.cameraDirective.value
 
-        coordinator.resolveFromLockState(selectionLockInput())
-        val second = coordinator.directive.value
+        engine.resolveFromLockState(selectionLockInput())
+        val second = engine.cameraDirective.value
 
         assertEquals(
             "Two back-to-back resolutions that resolve identically must not mint a new directive/id.",
@@ -49,87 +50,87 @@ class TrackerMapCameraCoordinatorTest {
 
     @Test
     fun resolveFromLockState_changedResolutionMintsANewDirective() {
-        val coordinator = TrackerMapCameraCoordinator()
+        val engine = MapRenderEngine()
 
-        coordinator.resolveFromLockState(selectionLockInput(lat = 1.0, lon = 2.0))
-        val first = coordinator.directive.value
+        engine.resolveFromLockState(selectionLockInput(lat = 1.0, lon = 2.0))
+        val first = engine.cameraDirective.value
 
-        coordinator.resolveFromLockState(selectionLockInput(lat = 3.0, lon = 4.0))
-        val second = coordinator.directive.value
+        engine.resolveFromLockState(selectionLockInput(lat = 3.0, lon = 4.0))
+        val second = engine.cameraDirective.value
 
         assertNotEquals(first.id, second.id)
     }
 
     @Test
     fun onUserGestureStarted_directiveMintedBeforeReportsStaleGenerationAfterward() {
-        val coordinator = TrackerMapCameraCoordinator()
+        val engine = MapRenderEngine()
 
-        coordinator.resolveFromLockState(selectionLockInput())
-        val mintedDirective = coordinator.directive.value
+        engine.resolveFromLockState(selectionLockInput())
+        val mintedDirective = engine.cameraDirective.value
         val generationAtMintTime = mintedDirective.generation
 
-        coordinator.onUserGestureStarted()
+        engine.onUserGestureStarted()
 
         assertNotEquals(
             "A directive's stamped generation must go stale once a user gesture bumps the coordinator's generation.",
             generationAtMintTime,
-            coordinator.generation,
+            engine.cameraGeneration,
         )
-        assertNotEquals(mintedDirective.generation, coordinator.generation)
+        assertNotEquals(mintedDirective.generation, engine.cameraGeneration)
     }
 
     @Test
     fun onUserGestureStarted_bumpsGenerationEvenWithNoPriorDirective() {
-        val coordinator = TrackerMapCameraCoordinator()
-        val generationBefore = coordinator.generation
+        val engine = MapRenderEngine()
+        val generationBefore = engine.cameraGeneration
 
-        coordinator.onUserGestureStarted()
+        engine.onUserGestureStarted()
 
-        assertNotEquals(generationBefore, coordinator.generation)
+        assertNotEquals(generationBefore, engine.cameraGeneration)
     }
 
     @Test
     fun requestExplicitFit_carriesTheRequestedAnimatedMode() {
-        val coordinator = TrackerMapCameraCoordinator()
+        val engine = MapRenderEngine()
 
-        coordinator.requestExplicitFit(sampleBounds, TrackerMapFitTrailMode.Animated)
+        engine.requestExplicitFit(sampleBounds, TrackerMapFitTrailMode.Animated)
 
-        val directive = coordinator.directive.value
+        val directive = engine.cameraDirective.value
         assertTrue(directive is TrackerMapCameraDirective.FitBounds)
         assertEquals(TrackerMapFitTrailMode.Animated, (directive as TrackerMapCameraDirective.FitBounds).mode)
     }
 
     @Test
     fun requestExplicitFit_carriesTheRequestedInstantMode() {
-        val coordinator = TrackerMapCameraCoordinator()
+        val engine = MapRenderEngine()
 
-        coordinator.requestExplicitFit(sampleBounds, TrackerMapFitTrailMode.Instant)
+        engine.requestExplicitFit(sampleBounds, TrackerMapFitTrailMode.Instant)
 
-        val directive = coordinator.directive.value
+        val directive = engine.cameraDirective.value
         assertTrue(directive is TrackerMapCameraDirective.FitBounds)
         assertEquals(TrackerMapFitTrailMode.Instant, (directive as TrackerMapCameraDirective.FitBounds).mode)
     }
 
     @Test
     fun requestExplicitFit_nullBoundsIsANoOp() {
-        val coordinator = TrackerMapCameraCoordinator()
-        coordinator.resolveFromLockState(selectionLockInput())
-        val before = coordinator.directive.value
+        val engine = MapRenderEngine()
+        engine.resolveFromLockState(selectionLockInput())
+        val before = engine.cameraDirective.value
 
-        coordinator.requestExplicitFit(null, TrackerMapFitTrailMode.Animated)
+        engine.requestExplicitFit(null, TrackerMapFitTrailMode.Animated)
 
-        assertEquals(before, coordinator.directive.value)
+        assertEquals(before, engine.cameraDirective.value)
     }
 
     @Test
     fun resetLastResolution_forcesNextResolveToMintEvenWhenResolutionUnchanged() {
-        val coordinator = TrackerMapCameraCoordinator()
-        coordinator.resolveFromLockState(selectionLockInput())
-        val first = coordinator.directive.value
+        val engine = MapRenderEngine()
+        engine.resolveFromLockState(selectionLockInput())
+        val first = engine.cameraDirective.value
 
-        coordinator.resetLastResolution()
-        coordinator.resolveFromLockState(selectionLockInput())
-        val second = coordinator.directive.value
+        engine.resetLastResolution()
+        engine.resolveFromLockState(selectionLockInput())
+        val second = engine.cameraDirective.value
 
         assertNotEquals(
             "resetLastResolution must force a fresh mint even for an identical resolution.",
@@ -140,7 +141,7 @@ class TrackerMapCameraCoordinatorTest {
 
     @Test
     fun resetLastResolution_forcesMintEvenWhenBothResolutionsAreNone() {
-        val coordinator = TrackerMapCameraCoordinator()
+        val engine = MapRenderEngine()
         val noneInput = TrackerMapCameraDirectiveInput(
             followLockEnabled = false,
             gpsCollecting = false,
@@ -152,12 +153,12 @@ class TrackerMapCameraCoordinatorTest {
             liveActiveFitEnabled = false,
             bounds = null,
         )
-        coordinator.resolveFromLockState(noneInput)
-        val first = coordinator.directive.value
+        engine.resolveFromLockState(noneInput)
+        val first = engine.cameraDirective.value
 
-        coordinator.resetLastResolution()
-        coordinator.resolveFromLockState(noneInput)
-        val second = coordinator.directive.value
+        engine.resetLastResolution()
+        engine.resolveFromLockState(noneInput)
+        val second = engine.cameraDirective.value
 
         assertNotEquals(
             "A reset viewport re-resolving to None must still mint a fresh directive so the " +
@@ -169,14 +170,14 @@ class TrackerMapCameraCoordinatorTest {
 
     @Test
     fun requestExplicitFit_resetsLastResolutionSoNextResolveAlwaysMints() {
-        val coordinator = TrackerMapCameraCoordinator()
-        coordinator.resolveFromLockState(selectionLockInput())
+        val engine = MapRenderEngine()
+        engine.resolveFromLockState(selectionLockInput())
 
-        coordinator.requestExplicitFit(sampleBounds, TrackerMapFitTrailMode.Instant)
-        val afterExplicitFit = coordinator.directive.value
+        engine.requestExplicitFit(sampleBounds, TrackerMapFitTrailMode.Instant)
+        val afterExplicitFit = engine.cameraDirective.value
 
-        coordinator.resolveFromLockState(selectionLockInput())
-        val afterReResolve = coordinator.directive.value
+        engine.resolveFromLockState(selectionLockInput())
+        val afterReResolve = engine.cameraDirective.value
 
         assertNotEquals(
             "An explicit fit must not let a subsequent identical precedence resolution dedupe away.",
@@ -187,30 +188,30 @@ class TrackerMapCameraCoordinatorTest {
 
     @Test
     fun generationFlow_reflectsGestureBumpsLive() {
-        val coordinator = TrackerMapCameraCoordinator()
-        val before = coordinator.generationFlow.value
+        val engine = MapRenderEngine()
+        val before = engine.cameraGenerationFlow.value
 
-        coordinator.onUserGestureStarted()
+        engine.onUserGestureStarted()
 
-        assertNotEquals(before, coordinator.generationFlow.value)
-        assertEquals(coordinator.generation, coordinator.generationFlow.value)
+        assertNotEquals(before, engine.cameraGenerationFlow.value)
+        assertEquals(engine.cameraGeneration, engine.cameraGenerationFlow.value)
     }
 
     @Test
     fun onUserOwnedZoom_bumpsGenerationWithoutClearingUserOwnsZoom() {
-        val coordinator = TrackerMapCameraCoordinator()
-        val before = coordinator.generation
+        val engine = MapRenderEngine()
+        val before = engine.cameraGeneration
 
-        coordinator.onUserOwnedZoom()
+        engine.onUserOwnedZoom()
 
-        assertTrue(coordinator.userOwnsZoom)
-        assertNotEquals(before, coordinator.generation)
+        assertTrue(engine.userOwnsZoom)
+        assertNotEquals(before, engine.cameraGeneration)
     }
 
     @Test
     fun onUserOwnedZoom_afterLiveFit_remintsCenterOnPoint() {
-        val coordinator = TrackerMapCameraCoordinator()
-        coordinator.resolveFromLockState(
+        val engine = MapRenderEngine()
+        engine.resolveFromLockState(
             TrackerMapCameraDirectiveInput(
                 followLockEnabled = false,
                 gpsCollecting = false,
@@ -224,10 +225,10 @@ class TrackerMapCameraCoordinatorTest {
                 userOwnsZoom = false,
             )
         )
-        assertTrue(coordinator.directive.value is TrackerMapCameraDirective.FitBounds)
+        assertTrue(engine.cameraDirective.value is TrackerMapCameraDirective.FitBounds)
 
-        coordinator.onUserOwnedZoom()
-        coordinator.resolveFromLockState(
+        engine.onUserOwnedZoom()
+        engine.resolveFromLockState(
             TrackerMapCameraDirectiveInput(
                 followLockEnabled = false,
                 gpsCollecting = false,
@@ -238,11 +239,11 @@ class TrackerMapCameraCoordinatorTest {
                 selectionLockLon = null,
                 liveActiveFitEnabled = true,
                 bounds = sampleBounds,
-                userOwnsZoom = coordinator.userOwnsZoom,
+                userOwnsZoom = engine.userOwnsZoom,
             )
         )
 
-        val directive = coordinator.directive.value
+        val directive = engine.cameraDirective.value
         assertTrue(directive is TrackerMapCameraDirective.CenterOnPoint)
         val center = directive as TrackerMapCameraDirective.CenterOnPoint
         assertEquals(TrackerMapCameraDirective.Reason.LiveActiveFit, center.reason)
@@ -252,15 +253,15 @@ class TrackerMapCameraCoordinatorTest {
 
     @Test
     fun followLock_withPuckTarget_mintsCenterOnPuck() {
-        val coordinator = TrackerMapCameraCoordinator()
-        coordinator.setFollowPuck(12.0, 34.0)
+        val engine = MapRenderEngine()
+        engine.setFollowPuck(12.0, 34.0)
         val followTarget = com.geovault.tracker.presentation.TrackerMapFollowLockTarget.resolve(
             followLockEnabled = true,
-            puckLatitude = coordinator.followPuckLatitude(),
-            puckLongitude = coordinator.followPuckLongitude(),
+            puckLatitude = engine.followPuckLatitude(),
+            puckLongitude = engine.followPuckLongitude(),
             liveHead = null,
         )
-        coordinator.resolveFromLockState(
+        engine.resolveFromLockState(
             TrackerMapCameraDirectiveInput(
                 followLockEnabled = true,
                 gpsCollecting = true,
@@ -274,7 +275,7 @@ class TrackerMapCameraCoordinatorTest {
             )
         )
 
-        val directive = coordinator.directive.value
+        val directive = engine.cameraDirective.value
         assertTrue(directive is TrackerMapCameraDirective.CenterOnPoint)
         val center = directive as TrackerMapCameraDirective.CenterOnPoint
         assertEquals(TrackerMapCameraDirective.Reason.FollowLock, center.reason)
@@ -283,10 +284,103 @@ class TrackerMapCameraCoordinatorTest {
     }
 
     @Test
+    fun requestExplicitFit_unionsGpsHomeAnchorIntoBounds() {
+        val engine = MapRenderEngine()
+        engine.setGpsHomeAnchor(10.0, -70.0)
+
+        engine.requestExplicitFit(sampleBounds, TrackerMapFitTrailMode.Animated)
+
+        val fit = engine.cameraDirective.value as TrackerMapCameraDirective.FitBounds
+        assertTrue(fit.bounds.contains(LatLng(10.0, -70.0)))
+        assertTrue(fit.bounds.contains(LatLng(25.0, -80.0)))
+        assertTrue(fit.bounds.contains(LatLng(26.0, -79.0)))
+    }
+
+    @Test
+    fun resolveFromLockState_liveActiveFitUnionsFollowPuckWhenPuckEnabled() {
+        val engine = MapRenderEngine()
+        engine.updateLocationSurface(
+            TrackerMapUserLocationInput(
+                isMapActive = true,
+                hasLocationPermission = true,
+                isMapReady = true,
+                userLocationRequestedThisSession = true,
+            )
+        )
+        engine.setFollowPuck(10.0, -70.0)
+        engine.resolveFromLockState(
+            TrackerMapCameraDirectiveInput(
+                followLockEnabled = false,
+                gpsCollecting = false,
+                followTargetLat = null,
+                followTargetLon = null,
+                selectionLockEnabled = false,
+                selectionLockLat = null,
+                selectionLockLon = null,
+                liveActiveFitEnabled = true,
+                bounds = sampleBounds,
+            )
+        )
+
+        val fit = engine.cameraDirective.value as TrackerMapCameraDirective.FitBounds
+        assertTrue(fit.bounds.contains(LatLng(10.0, -70.0)))
+        assertTrue(fit.bounds.contains(LatLng(25.0, -80.0)))
+    }
+
+    @Test
+    fun resolveFromLockState_liveActiveFitDoesNotUnionPuckWhenPuckDisabled() {
+        val engine = MapRenderEngine()
+        engine.setFollowPuck(10.0, -70.0)
+        engine.resolveFromLockState(
+            TrackerMapCameraDirectiveInput(
+                followLockEnabled = false,
+                gpsCollecting = false,
+                followTargetLat = null,
+                followTargetLon = null,
+                selectionLockEnabled = false,
+                selectionLockLat = null,
+                selectionLockLon = null,
+                liveActiveFitEnabled = true,
+                bounds = sampleBounds,
+            )
+        )
+
+        val fit = engine.cameraDirective.value as TrackerMapCameraDirective.FitBounds
+        assertEquals(sampleBounds, fit.bounds)
+    }
+
+    @Test
+    fun updateLocationSurface_puckDisableClearsHomeAnchorSoExplicitFitStaysTrailOnly() {
+        val engine = MapRenderEngine()
+        engine.updateLocationSurface(
+            TrackerMapUserLocationInput(
+                isMapActive = true,
+                hasLocationPermission = true,
+                isMapReady = true,
+                userLocationRequestedThisSession = true,
+            )
+        )
+        engine.setGpsHomeAnchor(10.0, -70.0)
+        engine.updateLocationSurface(
+            TrackerMapUserLocationInput(
+                isMapActive = true,
+                hasLocationPermission = true,
+                isMapReady = true,
+                userLocationRequestedThisSession = false,
+            )
+        )
+
+        engine.requestExplicitFit(sampleBounds, TrackerMapFitTrailMode.Instant)
+
+        val fit = engine.cameraDirective.value as TrackerMapCameraDirective.FitBounds
+        assertEquals(sampleBounds, fit.bounds)
+    }
+
+    @Test
     fun onUserGestureStarted_clearsUserOwnsZoom() {
-        val coordinator = TrackerMapCameraCoordinator()
-        coordinator.onUserOwnedZoom()
-        coordinator.onUserGestureStarted()
-        assertEquals(false, coordinator.userOwnsZoom)
+        val engine = MapRenderEngine()
+        engine.onUserOwnedZoom()
+        engine.onUserGestureStarted()
+        assertEquals(false, engine.userOwnsZoom)
     }
 }

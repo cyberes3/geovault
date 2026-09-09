@@ -2,7 +2,7 @@ package com.geovault.tracker.positioning
 
 import com.geovault.tracker.location.RecoveryAnchorState
 import com.geovault.tracker.location.RecoveryAnchorStore
-import com.geovault.tracker.services.TrackingMotionMode
+import com.geovault.tracker.positioning.TrackingMotionMode
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull

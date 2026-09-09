@@ -1,7 +1,8 @@
 package com.geovault.tracker.history
 
 import com.geovault.tracker.Tracker
-import com.geovault.tracker.services.RecordingRuntime
+import com.geovault.tracker.TrackerCatalogSettings
+import com.geovault.tracker.positioning.RecordingRuntime
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -141,7 +142,7 @@ class TrackerHistorySessionBoundaryTest {
         color = "#0000ff",
         created_at = null,
         updated_at = null,
-        settings = mapOf("recent_data_window" to "current_session"),
+        settings = TrackerCatalogSettings(recentDataWindow = "current_session"),
         geometry = null,
         point_params = null,
         geometry_status = null,
@@ -151,7 +152,7 @@ class TrackerHistorySessionBoundaryTest {
     )
 
     private fun recordingRuntime(trackerId: String, sessionStartMs: Long) =
-        com.geovault.tracker.services.TrackingRuntimeSnapshot(
+        com.geovault.tracker.positioning.TrackingRuntimeSnapshot(
             recordingRuntime = RecordingRuntime(
                 sessionActive = true,
                 selectedTrackerId = trackerId,

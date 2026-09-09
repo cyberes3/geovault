@@ -1,0 +1,57 @@
+package com.geovault.tracker.positioning.ingest
+
+import com.geovault.tracker.domain.TrackPoint
+import com.geovault.tracker.policy.TrackPointRejectReason
+import com.geovault.tracker.policy.TrackPointSource
+import com.geovault.tracker.policy.filter.LocationFilterConfig
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class LocalTrackPointStateCoordinatorTraceTest {
+
+    @Test
+    fun evaluate_recordsRecentAcceptedAndRejectedDecisions() {
+        val coordinator = LocalTrackPointStateCoordinator()
+        val config = LocationFilterConfig.Default.copy(
+            trackingAccuracyThresholdMeters = 25.0,
+            normalizeSecondsTimestamps = false,
+        )
+
+        val accepted = coordinator.evaluate(
+            trackId = "tracker-1",
+            event = event(time = 100_000L, accuracy = 5f),
+            nowMs = 100_000L,
+            nowElapsedRealtimeNanos = 100_000_000L,
+            config = config,
+        )
+        val rejected = coordinator.evaluate(
+            trackId = "tracker-1",
+            event = event(time = 101_000L, accuracy = 80f),
+            nowMs = 101_000L,
+            nowElapsedRealtimeNanos = 101_000_000L,
+            config = config,
+        )
+
+        assertTrue(accepted.accepted)
+        assertFalse(rejected.accepted)
+        assertEquals(TrackPointRejectReason.BAD_ACCURACY, rejected.rejectReason)
+        val trace = coordinator.recentDecisionTrace()
+        assertEquals(2, trace.size)
+        assertEquals(listOf(true, false), trace.map { it.decision.accepted })
+        assertEquals("tracker-1", trace.last().trackId)
+    }
+
+    private fun event(time: Long, accuracy: Float): TrackPoint {
+        return TrackPoint(
+            provenance = TrackPointSource.LOCAL_GPS,
+            trackerId = "tracker-1",
+            longitude = -96.29 + (time / 1_000_000.0),
+            latitude = 54.93 + (time / 1_000_000.0),
+            timeMs = time,
+            accuracyMeters = accuracy,
+            elapsedRealtimeNanos = time * 1_000L,
+        )
+    }
+}

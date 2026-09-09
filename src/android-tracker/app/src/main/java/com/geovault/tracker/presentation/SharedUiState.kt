@@ -6,6 +6,7 @@ import com.geovault.tracker.AvailableToAddResponse
 import com.geovault.tracker.Group
 import com.geovault.tracker.MapVisibilityResponse
 import com.geovault.tracker.Tracker
+import com.geovault.tracker.data.PendingTransaction
 
 enum class SharedSubTab {
     SHARED,
@@ -42,16 +43,39 @@ data class SharedUiState(
     val publicQuery: String = "",
     val isLoading: Boolean = false,
     val hasCompletedInitialLoad: Boolean = false,
-    val pendingOps: Map<String, SharedMutationPhase> = emptyMap(),
-    val optimisticTrackerAdds: Map<String, Tracker> = emptyMap(),
-    val optimisticTrackerRemovals: Set<String> = emptySet(),
-    val optimisticDiscoverOnMapRemovals: Set<String> = emptySet(),
-    val retainedIncomingTrackers: Map<String, AvailableToAddItem> = emptyMap(),
-    val retainedIncomingGroups: Map<String, AvailableToAddGroup> = emptyMap(),
-    val retainedPublicTrackers: Map<String, AvailableToAddItem> = emptyMap(),
-    val retainedPublicGroups: Map<String, AvailableToAddGroup> = emptyMap(),
+    val mutations: List<PendingTransaction> = emptyList(),
     val selectedTrackerId: String = "",
 ) {
+    val pendingTrackerAdds: Map<String, Tracker>
+        get() = mutations.mapNotNull { tx ->
+            val id = tx.addedTrackerId ?: return@mapNotNull null
+            val tracker = tx.addedTracker ?: return@mapNotNull null
+            id to tracker
+        }.toMap()
+
+    val pendingTrackerRemovals: Set<String>
+        get() = mutations.mapNotNull { it.removalTrackerId }.toSet()
+
+    val queuedIncomingTrackers: Map<String, AvailableToAddItem>
+        get() = mutations.mapNotNull { tx ->
+            tx.incomingTracker?.let { it.id to it }
+        }.toMap()
+
+    val queuedIncomingGroups: Map<String, AvailableToAddGroup>
+        get() = mutations.mapNotNull { tx ->
+            tx.incomingGroup?.let { it.id to it }
+        }.toMap()
+
+    val queuedPublicTrackers: Map<String, AvailableToAddItem>
+        get() = mutations.mapNotNull { tx ->
+            tx.publicTracker?.let { it.id to it }
+        }.toMap()
+
+    val queuedPublicGroups: Map<String, AvailableToAddGroup>
+        get() = mutations.mapNotNull { tx ->
+            tx.publicGroup?.let { it.id to it }
+        }.toMap()
+
     private val discoveryBuckets: SharedDiscoveryBuckets
         get() = SharedDiscoveryPolicy.derive(
             availableToAdd = availableToAdd,
@@ -99,41 +123,40 @@ data class SharedUiState(
             discoverIncomingQuery = discoverIncomingQuery,
             publicQuery = publicQuery,
             sharedListQuery = sharedListQuery,
-            optimisticTrackerAdds = optimisticTrackerAdds,
-            optimisticTrackerRemovals = optimisticTrackerRemovals,
-            optimisticDiscoverOnMapRemovals = optimisticDiscoverOnMapRemovals,
-            retainedIncomingTrackers = retainedIncomingTrackers.values.toList(),
-            retainedIncomingGroups = retainedIncomingGroups.values.toList(),
-            retainedPublicTrackers = retainedPublicTrackers.values.toList(),
-            retainedPublicGroups = retainedPublicGroups.values.toList(),
+            pendingTrackerAdds = pendingTrackerAdds,
+            pendingTrackerRemovals = pendingTrackerRemovals,
+            queuedIncomingTrackers = queuedIncomingTrackers.values.toList(),
+            queuedIncomingGroups = queuedIncomingGroups.values.toList(),
+            queuedPublicTrackers = queuedPublicTrackers.values.toList(),
+            queuedPublicGroups = queuedPublicGroups.values.toList(),
         )
 
     val sharedListRows: List<SharedListRowModel>
         get() = filteredSections.sharedItems.toSharedListRows(selectedTrackerId = selectedTrackerId)
 
     val pendingAddActionKeys: Set<String>
-        get() = pendingOps.filterValues { it == SharedMutationPhase.PENDING_ADD }.keys
+        get() = mutations.filter { it.phase == SharedMutationPhase.PENDING_ADD.name }.map { it.occupancyKey }.toSet()
 
     val pendingRemoveActionKeys: Set<String>
-        get() = pendingOps.filterValues { it == SharedMutationPhase.PENDING_REMOVE }.keys
+        get() = mutations.filter { it.phase == SharedMutationPhase.PENDING_REMOVE.name }.map { it.occupancyKey }.toSet()
 
     val hasInlineMutation: Boolean
-        get() = pendingOps.isNotEmpty()
+        get() = mutations.isNotEmpty()
 
     val effectiveSubscribedTrackerIds: Set<String>
         get() = trackers.map { it.id }.toSet()
-            .plus(optimisticTrackerAdds.keys)
-            .minus(optimisticTrackerRemovals)
+            .plus(pendingTrackerAdds.keys)
+            .minus(pendingTrackerRemovals)
 
     fun isIncomingTrackerAdded(trackerId: String): Boolean =
-        retainedIncomingTrackers.containsKey(trackerId)
+        queuedIncomingTrackers.containsKey(trackerId)
 
     fun isIncomingGroupAdded(groupId: String): Boolean =
-        retainedIncomingGroups.containsKey(groupId)
+        queuedIncomingGroups.containsKey(groupId)
 
     fun isPublicTrackerAdded(trackerId: String): Boolean =
-        retainedPublicTrackers.containsKey(trackerId)
+        queuedPublicTrackers.containsKey(trackerId)
 
     fun isPublicGroupAdded(groupId: String): Boolean =
-        retainedPublicGroups.containsKey(groupId)
+        queuedPublicGroups.containsKey(groupId)
 }

@@ -40,7 +40,7 @@ object TrackerPointTimestamps {
 
     fun lastPointParamsMs(tracker: Tracker): Long? {
         val params = tracker.point_params?.lastOrNull() ?: return null
-        return params.entries
+        return params.entrySet()
             .asSequence()
             .filter { it.key.contains("timestamp", ignoreCase = true) }
             .mapNotNull { normalizeEpochMs(it.value) }
@@ -51,6 +51,11 @@ object TrackerPointTimestamps {
         val raw = when (value) {
             is Number -> value.toLong()
             is String -> value.toLongOrNull()
+            is com.google.gson.JsonPrimitive -> when {
+                value.isNumber -> value.asLong
+                value.isString -> value.asString.toLongOrNull()
+                else -> null
+            }
             else -> null
         } ?: return null
         return if (raw < 1_000_000_000_000L) raw * 1000L else raw

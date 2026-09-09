@@ -1,6 +1,8 @@
 package com.geovault.tracker.presentation
 
 import com.geovault.tracker.Tracker
+import com.geovault.tracker.data.GroupManagementRepository
+import com.geovault.tracker.data.TrackerManagementRepository
 
 enum class SharedTrackerTransitionAction {
     Subscribe,
@@ -16,12 +18,32 @@ enum class SharedGroupTransitionAction {
 data class SharedTrackerTransitionCommand(
     val trackerId: String,
     val action: SharedTrackerTransitionAction
-)
+) {
+    suspend fun applyTo(trackerRepository: TrackerManagementRepository) {
+        when (action) {
+            SharedTrackerTransitionAction.Subscribe ->
+                trackerRepository.subscribeTracker(trackerId)
+            SharedTrackerTransitionAction.Unsubscribe ->
+                trackerRepository.unsubscribeTracker(trackerId)
+            SharedTrackerTransitionAction.LeaveShare ->
+                trackerRepository.leaveShareWithMe(trackerId)
+        }
+    }
+}
 
 data class SharedGroupTransitionCommand(
     val groupId: String,
     val action: SharedGroupTransitionAction
-)
+) {
+    suspend fun applyTo(groupRepository: GroupManagementRepository) {
+        when (action) {
+            SharedGroupTransitionAction.AcceptShare ->
+                groupRepository.acceptGroupShare(groupId)
+            SharedGroupTransitionAction.LeaveGroup ->
+                groupRepository.leaveGroup(groupId)
+        }
+    }
+}
 
 object SharedOwnershipTransitionPolicy {
 

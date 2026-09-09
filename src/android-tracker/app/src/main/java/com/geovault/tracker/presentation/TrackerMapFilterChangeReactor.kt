@@ -58,11 +58,7 @@ class TrackerMapFilterChangeReactor {
     }
 
     private fun readWindow(tracker: Tracker): String? {
-        val raw = tracker.settings?.get("recent_data_window") ?: return null
-        return when (raw) {
-            is String -> raw
-            else -> raw.toString()
-        }
+        return tracker.catalogSettings.recentDataWindow
     }
 
     sealed class FilterChange {

@@ -1,6 +1,5 @@
 package com.geovault.tracker
 
-import com.geovault.tracker.location.TrackingLifecycleState
 import com.geovault.tracker.streaming.StreamingConfig
 
 internal enum class StreamingSessionReuseDecision {
@@ -35,18 +34,10 @@ internal class StreamingSessionGuard(
     }
 
     /**
-     * Refreshes staleness. The app-level pong (see
-     * [com.geovault.tracker.LiveTrackStreamingService.handlePongReceived]) is the *authoritative*
-     * source -- it alone proves the connection is alive even for a perfectly healthy but
-     * currently-idle tracker, so it must never be starved by point traffic. An incoming
-     * `track_updated` point (see
-     * [com.geovault.tracker.LiveTrackStreamingService.publishRemotePoint]) is only a secondary,
-     * defense-in-depth signal: it proves liveness incidentally whenever *any* subscribed tracker
-     * reports in, guarding against the pong path alone ever silently regressing server-side. This
-     * is deliberately NOT the primary staleness signal -- keying off point recency alone would
-     * conflate "the tracker being watched hasn't reported in a while" (normal for sparse/
-     * stationary trackers) with "the connection itself is dead" (the only thing this guard should
-     * ever act on).
+     * Refreshes staleness from the app-level pong only. That reply proves the connection is
+     * alive even for a perfectly healthy but currently-idle tracker. Incoming `track_updated`
+     * points must not call this -- keying off point recency would conflate a quiet tracker with
+     * a dead socket.
      */
     fun markLivenessReceived() {
         lastActivityElapsedMs = elapsedRealtimeMs()
@@ -60,7 +51,7 @@ internal class StreamingSessionGuard(
         requestedTrackerIds: Set<String>,
         currentTrackerIds: Set<String>,
         hasSocket: Boolean,
-        lifecycleState: TrackingLifecycleState,
+        running: Boolean,
     ): StreamingSessionAssessment {
         // ROSTER-DELTA-HOT-UPDATE: the underlying-connection health checks (socket presence,
         // RUNNING, freshness) are evaluated *before* the tracker-set comparison. A roster change
@@ -69,7 +60,7 @@ internal class StreamingSessionGuard(
         // is missing, not yet RUNNING, or already stale, a real reconnect is needed regardless of
         // whether the tracker set also happens to differ.
         if (!hasSocket) return StreamingSessionAssessment(StreamingSessionReuseDecision.NO_SOCKET)
-        if (lifecycleState != TrackingLifecycleState.RUNNING) {
+        if (!running) {
             return StreamingSessionAssessment(StreamingSessionReuseDecision.NOT_RUNNING)
         }
         if (lastActivityElapsedMs <= 0L) {

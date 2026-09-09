@@ -1,5 +1,6 @@
 package com.geovault.tracker.presentation
 
+import com.geovault.tracker.map.MapTrailEngine
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -8,7 +9,7 @@ class TrackerMapTrailReloadCoordinatorTest {
 
     @Test
     fun resolvePlan_singleSessionStopped_withActiveTracker_loadsSingleFromServer() {
-        val plan = TrackerMapTrailReloadCoordinator.resolvePlan(
+        val plan = MapTrailEngine.resolveReloadPlan(
             TrackerMapTrailReloadInput(
                 mode = TrackerMapDisplayMode.SINGLE_SESSION,
                 runtimeRunning = false,
@@ -26,7 +27,7 @@ class TrackerMapTrailReloadCoordinatorTest {
 
     @Test
     fun resolvePlan_singleSessionRunningForDifferentDisplayedTracker_loadsDisplayedFromServer() {
-        val plan = TrackerMapTrailReloadCoordinator.resolvePlan(
+        val plan = MapTrailEngine.resolveReloadPlan(
             TrackerMapTrailReloadInput(
                 mode = TrackerMapDisplayMode.SINGLE_SESSION,
                 runtimeRunning = true,
@@ -44,7 +45,7 @@ class TrackerMapTrailReloadCoordinatorTest {
 
     @Test
     fun resolvePlan_singleSessionRunningForSelectedTracker_loadsServerWithLocalOverlay() {
-        val plan = TrackerMapTrailReloadCoordinator.resolvePlan(
+        val plan = MapTrailEngine.resolveReloadPlan(
             TrackerMapTrailReloadInput(
                 mode = TrackerMapDisplayMode.SINGLE_SESSION,
                 runtimeRunning = true,
@@ -68,7 +69,7 @@ class TrackerMapTrailReloadCoordinatorTest {
         // history; it is not a substitute, and the previous "exclude selected/locallyRecorded
         // from server history" rule left the user's own trail blank in roster mode whenever the
         // queue did not contain enough recent points.
-        val plan = TrackerMapTrailReloadCoordinator.resolvePlan(
+        val plan = MapTrailEngine.resolveReloadPlan(
             TrackerMapTrailReloadInput(
                 mode = TrackerMapDisplayMode.ALL_QUEUE,
                 runtimeRunning = true,
@@ -89,7 +90,7 @@ class TrackerMapTrailReloadCoordinatorTest {
     fun resolvePlan_allQueueNotRunning_includesSelectedInServerHistory() {
         // GROUP / ALL-QUEUE TRAIL HISTORY: same rationale as above for the not-running case;
         // the user expects to see their own trail alongside the rest of the roster.
-        val plan = TrackerMapTrailReloadCoordinator.resolvePlan(
+        val plan = MapTrailEngine.resolveReloadPlan(
             TrackerMapTrailReloadInput(
                 mode = TrackerMapDisplayMode.ALL_QUEUE,
                 runtimeRunning = false,
@@ -110,7 +111,7 @@ class TrackerMapTrailReloadCoordinatorTest {
         // GROUP TRAIL HISTORY: in group mode the user explicitly chose a multi-tracker view that
         // may include their own tracker. Server history must include the selected tracker so the
         // user actually sees their own trail on the group map.
-        val plan = TrackerMapTrailReloadCoordinator.resolvePlan(
+        val plan = MapTrailEngine.resolveReloadPlan(
             TrackerMapTrailReloadInput(
                 mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
                 runtimeRunning = false,
@@ -132,7 +133,7 @@ class TrackerMapTrailReloadCoordinatorTest {
 
     @Test
     fun resolvePlan_groupModeRunning_overlayOnlyWhenActiveInGroup() {
-        val notMemberPlan = TrackerMapTrailReloadCoordinator.resolvePlan(
+        val notMemberPlan = MapTrailEngine.resolveReloadPlan(
             TrackerMapTrailReloadInput(
                 mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
                 runtimeRunning = true,

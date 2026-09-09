@@ -2,7 +2,6 @@ package com.geovault.tracker.settings
 
 data class TrackerSettingsRecord(
     val settings: TrackerSettings,
-    val wasTrackingBeforeExit: Boolean,
     val schemaVersion: Int
 )
 

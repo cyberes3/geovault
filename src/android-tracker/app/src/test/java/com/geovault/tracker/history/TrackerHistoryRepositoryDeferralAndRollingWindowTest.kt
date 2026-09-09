@@ -48,20 +48,18 @@ class TrackerHistoryRepositoryDeferralAndRollingWindowTest {
             activeSessionStartMs = previousSessionStart,
             nowMs = previousSessionStart,
         )
-        assertTrue(initial.committed)
+        assertTrue(initial is TrackerHistoryTransactionResult.Composed)
         assertEquals(1, initial.snapshot.points.size)
 
         repeat(TrackerHistoryDeferralWatchdog.FORCE_COMMIT_AFTER) { attempt ->
             val result = repository.composeAndPublish(key, activeSessionStartMs = newSessionStart, nowMs = newSessionStart)
-            assertFalse("attempt $attempt should defer, not commit", result.committed)
-            assertEquals("empty_snapshot_deferred", result.reason)
+            assertTrue("attempt $attempt should defer, not commit", result is TrackerHistoryTransactionResult.DeferredEmpty)
             // Deferred: the repository's published snapshot must still be the stale-but-present one.
             assertEquals(1, repository.snapshotFor(key)!!.points.size)
         }
 
         val forced = repository.composeAndPublish(key, activeSessionStartMs = newSessionStart, nowMs = newSessionStart)
-        assertTrue(forced.committed)
-        assertEquals("forced_empty_commit", forced.reason)
+        assertTrue(forced is TrackerHistoryTransactionResult.ForcedEmpty)
         assertTrue(forced.snapshot.points.isEmpty())
         assertTrue(repository.snapshotFor(key)!!.points.isEmpty())
     }
@@ -88,16 +86,14 @@ class TrackerHistoryRepositoryDeferralAndRollingWindowTest {
             activeSessionStartMs = newSessionStart,
             nowMs = newSessionStart + 1_000L,
         )
-        assertTrue(revived.committed)
-        assertEquals("composed", revived.reason)
+        assertTrue(revived is TrackerHistoryTransactionResult.Composed)
 
         // Deferring again afterward (a third session with no points yet) should require a fresh
         // full run of consecutive deferrals, not resume from where it left off before the
         // genuine commit.
         val thirdSessionStart = newSessionStart + 500_000L
         val deferredAgain = repository.composeAndPublish(key, activeSessionStartMs = thirdSessionStart, nowMs = thirdSessionStart)
-        assertFalse(deferredAgain.committed)
-        assertEquals("empty_snapshot_deferred", deferredAgain.reason)
+        assertTrue(deferredAgain is TrackerHistoryTransactionResult.DeferredEmpty)
     }
 
     @Test

@@ -4,11 +4,12 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+import com.geovault.tracker.map.MapRenderMath
 class TrackerMapLiveActiveFitPolicyTest {
 
     @Test
     fun visibility_singleSessionNoTrailPoints_hidden() {
-        val result = TrackerMapLiveActiveFitPolicy.resolveVisibility(
+        val result = MapRenderMath.resolveLiveActiveFitVisibility(
             LiveActiveFitInput(
                 mode = TrackerMapDisplayMode.SINGLE_SESSION,
                 followLockArmed = true,
@@ -23,7 +24,7 @@ class TrackerMapLiveActiveFitPolicyTest {
 
     @Test
     fun visibility_singleSessionWithTrailPointsAndMultipleTrackers_shown() {
-        val result = TrackerMapLiveActiveFitPolicy.resolveVisibility(
+        val result = MapRenderMath.resolveLiveActiveFitVisibility(
             LiveActiveFitInput(
                 mode = TrackerMapDisplayMode.SINGLE_SESSION,
                 followLockArmed = true,
@@ -45,7 +46,7 @@ class TrackerMapLiveActiveFitPolicyTest {
         // count here -- SINGLE_SESSION bounds/point-routing never render or union it (see
         // MapScreen.kt's hasMultipleTrackersOnMap comment), so gating on it would make the
         // toggle a no-op.
-        val result = TrackerMapLiveActiveFitPolicy.resolveVisibility(
+        val result = MapRenderMath.resolveLiveActiveFitVisibility(
             LiveActiveFitInput(
                 mode = TrackerMapDisplayMode.SINGLE_SESSION,
                 followLockArmed = true,
@@ -60,7 +61,7 @@ class TrackerMapLiveActiveFitPolicyTest {
 
     @Test
     fun visibility_singleSessionDefaultTracker_hidden() {
-        val result = TrackerMapLiveActiveFitPolicy.resolveVisibility(
+        val result = MapRenderMath.resolveLiveActiveFitVisibility(
             LiveActiveFitInput(
                 mode = TrackerMapDisplayMode.SINGLE_SESSION,
                 followLockArmed = true,
@@ -75,7 +76,7 @@ class TrackerMapLiveActiveFitPolicyTest {
 
     @Test
     fun visibility_allQueueWithFollowArmed_hiddenBecauseLockFabOwnsLiveFit() {
-        val result = TrackerMapLiveActiveFitPolicy.resolveVisibility(
+        val result = MapRenderMath.resolveLiveActiveFitVisibility(
             LiveActiveFitInput(
                 mode = TrackerMapDisplayMode.ALL_QUEUE,
                 followLockArmed = true,
@@ -90,7 +91,7 @@ class TrackerMapLiveActiveFitPolicyTest {
 
     @Test
     fun visibility_groupWithFollowArmed_hiddenBecauseLockFabOwnsLiveFit() {
-        val result = TrackerMapLiveActiveFitPolicy.resolveVisibility(
+        val result = MapRenderMath.resolveLiveActiveFitVisibility(
             LiveActiveFitInput(
                 mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
                 followLockArmed = true,
@@ -110,7 +111,7 @@ class TrackerMapLiveActiveFitPolicyTest {
         // even if liveActiveFitEnabled itself is still true -- callers must not rely on this FAB
         // alone to ever clear a stuck toggle (see MapScreen.kt's hasMultipleTrackersOnMap
         // LaunchedEffect, which auto-clears it instead).
-        val result = TrackerMapLiveActiveFitPolicy.resolveVisibility(
+        val result = MapRenderMath.resolveLiveActiveFitVisibility(
             LiveActiveFitInput(
                 mode = TrackerMapDisplayMode.SINGLE_SESSION,
                 followLockArmed = false,
@@ -126,20 +127,20 @@ class TrackerMapLiveActiveFitPolicyTest {
 
     @Test
     fun resolveLockArmed_returnsSingleTrackerLockedAsIs() {
-        assertTrue(TrackerMapLiveActiveFitPolicy.resolveLockArmed(singleTrackerLocked = true))
-        assertFalse(TrackerMapLiveActiveFitPolicy.resolveLockArmed(singleTrackerLocked = false))
+        assertTrue(MapRenderMath.resolveLiveActiveFitLockArmed(singleTrackerLocked = true))
+        assertFalse(MapRenderMath.resolveLiveActiveFitLockArmed(singleTrackerLocked = false))
     }
 
     @Test
     fun composesWithSelectionLock_trueOnlyInSingleSession() {
         assertTrue(
-            TrackerMapLiveActiveFitPolicy.composesWithSelectionLock(TrackerMapDisplayMode.SINGLE_SESSION)
+            MapRenderMath.composesWithSelectionLock(TrackerMapDisplayMode.SINGLE_SESSION)
         )
         assertFalse(
-            TrackerMapLiveActiveFitPolicy.composesWithSelectionLock(TrackerMapDisplayMode.ALL_QUEUE)
+            MapRenderMath.composesWithSelectionLock(TrackerMapDisplayMode.ALL_QUEUE)
         )
         assertFalse(
-            TrackerMapLiveActiveFitPolicy.composesWithSelectionLock(TrackerMapDisplayMode.GROUP_PLACEHOLDER)
+            MapRenderMath.composesWithSelectionLock(TrackerMapDisplayMode.GROUP_PLACEHOLDER)
         )
     }
 }

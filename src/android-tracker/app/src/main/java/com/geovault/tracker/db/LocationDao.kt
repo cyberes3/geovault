@@ -10,9 +10,6 @@ interface LocationDao {
     @Insert
     fun insert(location: QueuedLocation): Long
 
-    @Insert
-    fun insertAll(locations: List<QueuedLocation>)
-
     @Query("SELECT * FROM queued_locations ORDER BY time ASC")
     fun getAll(): List<QueuedLocation>
 
@@ -97,6 +94,18 @@ interface LocationDao {
             ")"
     )
     fun deleteOldestCountForTracker(trackerId: String, count: Int): Int
+
+    @Query(
+        "DELETE FROM queued_locations WHERE id IN (" +
+            "SELECT id FROM queued_locations WHERE tracker_id = :trackerId AND id NOT IN (:excludeIds) ORDER BY time ASC LIMIT :count" +
+            ")"
+    )
+    fun deleteOldestCountForTrackerExcluding(trackerId: String, count: Int, excludeIds: List<Long>): Int
+
+    @Query(
+        "DELETE FROM queued_locations WHERE tracker_id = :trackerId AND time < :cutoffTimeMs AND id NOT IN (:excludeIds)"
+    )
+    fun deleteOlderThanForTrackerExcluding(trackerId: String, cutoffTimeMs: Long, excludeIds: List<Long>): Int
 
     @Query("UPDATE queued_locations SET dist = :distanceMeters WHERE id = :id")
     fun updateDistanceById(id: Long, distanceMeters: Float)

@@ -4,7 +4,7 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
-import com.geovault.tracker.SelectedTrackerPrefs
+import com.geovault.tracker.data.CatalogSelectionController
 
 @Database(entities = [QueuedLocation::class], version = 5, exportSchema = true)
 abstract class AppDatabase : RoomDatabase() {
@@ -22,7 +22,7 @@ abstract class AppDatabase : RoomDatabase() {
 
         private fun buildDatabase(context: Context): AppDatabase {
             val appContext = context.applicationContext
-            val selectedTrackerId = SelectedTrackerPrefs.selectedTrackerId(appContext)
+            val selectedTrackerId = CatalogSelectionController.persistedTrackerId(appContext)
                 .takeIf { it.isNotBlank() }
             return Room.databaseBuilder(
                 appContext,

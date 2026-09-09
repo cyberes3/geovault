@@ -1,5 +1,6 @@
 package com.geovault.tracker.policy
 
+import com.geovault.tracker.domain.TrackPoint
 import com.geovault.tracker.policy.filter.LocationFilterConfig
 import com.geovault.tracker.policy.filter.LocationFilterPolicy
 import org.junit.After
@@ -32,12 +33,12 @@ class TrackPointPolicyEngineInvariantTest {
     fun evaluate_rejectsStaleAgainstFreshnessTtl() {
         val nowMs = 1_000_000L
         val decision = TrackPointPolicyEngine.evaluate(
-            event = TrackPointEvent(
-                source = TrackPointSource.LOCAL_GPS,
-                trackId = "stale-track",
-                lon = 10.0,
-                lat = 10.0,
-                timestampMs = nowMs - 200_000L,
+            event = TrackPoint(
+                provenance = TrackPointSource.LOCAL_GPS,
+                trackerId = "stale-track",
+                longitude = 10.0,
+                latitude = 10.0,
+                timeMs = nowMs - 200_000L,
                 accuracyMeters = 4f,
             ),
             nowMs = nowMs,
@@ -57,12 +58,12 @@ class TrackPointPolicyEngineInvariantTest {
     fun evaluate_rejectsFutureSkew() {
         val nowMs = 1_000_000L
         val decision = TrackPointPolicyEngine.evaluate(
-            event = TrackPointEvent(
-                source = TrackPointSource.LOCAL_GPS,
-                trackId = "skew-track",
-                lon = 10.0,
-                lat = 10.0,
-                timestampMs = nowMs + 5L * 60L * 1000L,
+            event = TrackPoint(
+                provenance = TrackPointSource.LOCAL_GPS,
+                trackerId = "skew-track",
+                longitude = 10.0,
+                latitude = 10.0,
+                timeMs = nowMs + 5L * 60L * 1000L,
                 accuracyMeters = 4f,
             ),
             nowMs = nowMs,
@@ -79,12 +80,12 @@ class TrackPointPolicyEngineInvariantTest {
     @Test
     fun evaluate_invalidCoordinates_rejected() {
         val decision = TrackPointPolicyEngine.evaluate(
-            event = TrackPointEvent(
-                source = TrackPointSource.LOCAL_GPS,
-                trackId = "bad-coords",
-                lon = 999.0,
-                lat = 10.0,
-                timestampMs = 1_000L,
+            event = TrackPoint(
+                provenance = TrackPointSource.LOCAL_GPS,
+                trackerId = "bad-coords",
+                longitude = 999.0,
+                latitude = 10.0,
+                timeMs = 1_000L,
                 accuracyMeters = 4f,
             ),
             nowMs = 1_000L,
@@ -110,12 +111,12 @@ class TrackPointPolicyEngineInvariantTest {
         // stationary classifier's bufferCount>=3 gate.
         repeat(3) { i ->
             TrackPointPolicyEngine.evaluate(
-                event = TrackPointEvent(
-                    source = TrackPointSource.LOCAL_GPS,
-                    trackId = track,
-                    lon = 10.0,
-                    lat = 10.0,
-                    timestampMs = 1_000L + i * 1_000L,
+                event = TrackPoint(
+                    provenance = TrackPointSource.LOCAL_GPS,
+                    trackerId = track,
+                    longitude = 10.0,
+                    latitude = 10.0,
+                    timeMs = 1_000L + i * 1_000L,
                     accuracyMeters = 50f,
                 ),
                 nowMs = 1_000L + i * 1_000L,
@@ -123,12 +124,12 @@ class TrackPointPolicyEngineInvariantTest {
             )
         }
         val decision = TrackPointPolicyEngine.evaluate(
-            event = TrackPointEvent(
-                source = TrackPointSource.LOCAL_GPS,
-                trackId = track,
-                lon = 10.00001,
-                lat = 10.00001,
-                timestampMs = 5_000L,
+            event = TrackPoint(
+                provenance = TrackPointSource.LOCAL_GPS,
+                trackerId = track,
+                longitude = 10.00001,
+                latitude = 10.00001,
+                timeMs = 5_000L,
                 accuracyMeters = 50f,
             ),
             nowMs = 5_000L,
@@ -149,24 +150,24 @@ class TrackPointPolicyEngineInvariantTest {
             freshnessTtlMs = 0L,
         )
         TrackPointPolicyEngine.evaluate(
-            event = TrackPointEvent(
-                source = TrackPointSource.LOCAL_GPS,
-                trackId = track,
-                lon = 10.0,
-                lat = 10.0,
-                timestampMs = 5_000L,
+            event = TrackPoint(
+                provenance = TrackPointSource.LOCAL_GPS,
+                trackerId = track,
+                longitude = 10.0,
+                latitude = 10.0,
+                timeMs = 5_000L,
                 accuracyMeters = 5f,
             ),
             nowMs = 5_000L,
             config = config,
         )
         val outOfOrder = TrackPointPolicyEngine.evaluate(
-            event = TrackPointEvent(
-                source = TrackPointSource.LOCAL_GPS,
-                trackId = track,
-                lon = 10.0001,
-                lat = 10.0001,
-                timestampMs = 4_000L,
+            event = TrackPoint(
+                provenance = TrackPointSource.LOCAL_GPS,
+                trackerId = track,
+                longitude = 10.0001,
+                latitude = 10.0001,
+                timeMs = 4_000L,
                 accuracyMeters = 5f,
             ),
             nowMs = 5_000L,
@@ -184,24 +185,24 @@ class TrackPointPolicyEngineInvariantTest {
             freshnessTtlMs = 0L,
         )
         TrackPointPolicyEngine.evaluate(
-            event = TrackPointEvent(
-                source = TrackPointSource.LOCAL_GPS,
-                trackId = track,
-                lon = 10.0,
-                lat = 10.0,
-                timestampMs = 5_000L,
+            event = TrackPoint(
+                provenance = TrackPointSource.LOCAL_GPS,
+                trackerId = track,
+                longitude = 10.0,
+                latitude = 10.0,
+                timeMs = 5_000L,
                 accuracyMeters = 5f,
             ),
             nowMs = 5_000L,
             config = config,
         )
         val duplicate = TrackPointPolicyEngine.evaluate(
-            event = TrackPointEvent(
-                source = TrackPointSource.LOCAL_GPS,
-                trackId = track,
-                lon = 10.0,
-                lat = 10.0,
-                timestampMs = 5_000L,
+            event = TrackPoint(
+                provenance = TrackPointSource.LOCAL_GPS,
+                trackerId = track,
+                longitude = 10.0,
+                latitude = 10.0,
+                timeMs = 5_000L,
                 accuracyMeters = 5f,
             ),
             nowMs = 5_000L,
@@ -219,12 +220,12 @@ class TrackPointPolicyEngineInvariantTest {
             freshnessTtlMs = 0L,
         )
         TrackPointPolicyEngine.evaluate(
-            event = TrackPointEvent(
-                source = TrackPointSource.LOCAL_GPS,
-                trackId = track,
-                lon = 10.0,
-                lat = 10.0,
-                timestampMs = 1_000L,
+            event = TrackPoint(
+                provenance = TrackPointSource.LOCAL_GPS,
+                trackerId = track,
+                longitude = 10.0,
+                latitude = 10.0,
+                timeMs = 1_000L,
                 accuracyMeters = 5f,
                 gpsSpeedMps = 12f,
             ),
@@ -232,12 +233,12 @@ class TrackPointPolicyEngineInvariantTest {
             config = config,
         )
         val decision = TrackPointPolicyEngine.evaluate(
-            event = TrackPointEvent(
-                source = TrackPointSource.LOCAL_GPS,
-                trackId = track,
-                lon = 10.0001,
-                lat = 10.0001,
-                timestampMs = 2_000L,
+            event = TrackPoint(
+                provenance = TrackPointSource.LOCAL_GPS,
+                trackerId = track,
+                longitude = 10.0001,
+                latitude = 10.0001,
+                timeMs = 2_000L,
                 accuracyMeters = 5f,
                 gpsSpeedMps = 12f,
             ),
@@ -259,12 +260,12 @@ class TrackPointPolicyEngineInvariantTest {
             freshnessTtlMs = 0L,
         )
         TrackPointPolicyEngine.evaluate(
-            event = TrackPointEvent(
-                source = TrackPointSource.LOCAL_GPS,
-                trackId = track,
-                lon = 10.0,
-                lat = 10.0,
-                timestampMs = 5_000L,
+            event = TrackPoint(
+                provenance = TrackPointSource.LOCAL_GPS,
+                trackerId = track,
+                longitude = 10.0,
+                latitude = 10.0,
+                timeMs = 5_000L,
                 accuracyMeters = 5f,
             ),
             nowMs = 5_000L,
@@ -272,12 +273,12 @@ class TrackPointPolicyEngineInvariantTest {
         )
         TrackPointPolicyEngine.resetStream(TrackPointSource.LOCAL_GPS, track)
         val acceptedAfterReset = TrackPointPolicyEngine.evaluate(
-            event = TrackPointEvent(
-                source = TrackPointSource.LOCAL_GPS,
-                trackId = track,
-                lon = 10.0,
-                lat = 10.0,
-                timestampMs = 4_000L,
+            event = TrackPoint(
+                provenance = TrackPointSource.LOCAL_GPS,
+                trackerId = track,
+                longitude = 10.0,
+                latitude = 10.0,
+                timeMs = 4_000L,
                 accuracyMeters = 5f,
             ),
             nowMs = 5_000L,

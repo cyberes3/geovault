@@ -91,15 +91,16 @@ fun GeoVaultMapScaffold(
     modifier: Modifier = Modifier,
     drawerState: GeoVaultMapDrawerState = rememberGeoVaultMapDrawerState(),
     drawerDragEnabled: Boolean = true,
+    showDrawer: Boolean = true,
     drawerTitle: String? = null,
     drawerTitleCentered: Boolean = false,
     drawerTitleChip: GeoVaultMapDrawerTitleChip? = null,
     onDrawerClose: (() -> Unit)? = null,
     drawerCloseContentDescription: String = "Close",
     drawerCloseTooltip: String? = null,
-    drawerSearch: GeoVaultMapDrawerSearchState,
-    drawerHeader: @Composable GeoVaultMapDrawerHeaderScope.() -> Unit,
-    drawerBody: @Composable ColumnScope.() -> Unit,
+    drawerSearch: GeoVaultMapDrawerSearchState? = null,
+    drawerHeader: @Composable GeoVaultMapDrawerHeaderScope.() -> Unit = {},
+    drawerBody: @Composable ColumnScope.() -> Unit = {},
     topStart: (@Composable BoxScope.() -> Unit)? = null,
     topEnd: (@Composable BoxScope.() -> Unit)? = null,
     bottomStart: (@Composable BoxScope.() -> Unit)? = null,
@@ -155,19 +156,21 @@ fun GeoVaultMapScaffold(
                     }
                 }
 
-                DrawerLayer(
-                    drawerState = drawerState,
-                    drawerDragEnabled = drawerDragEnabled,
-                    drawerTitle = drawerTitle,
-                    drawerTitleCentered = drawerTitleCentered,
-                    drawerTitleChip = drawerTitleChip,
-                    onDrawerClose = onDrawerClose,
-                    drawerCloseContentDescription = drawerCloseContentDescription,
-                    drawerCloseTooltip = drawerCloseTooltip,
-                    drawerSearch = drawerSearch,
-                    drawerHeader = drawerHeader,
-                    drawerBody = drawerBody,
-                )
+                if (showDrawer && drawerSearch != null) {
+                    DrawerLayer(
+                        drawerState = drawerState,
+                        drawerDragEnabled = drawerDragEnabled,
+                        drawerTitle = drawerTitle,
+                        drawerTitleCentered = drawerTitleCentered,
+                        drawerTitleChip = drawerTitleChip,
+                        onDrawerClose = onDrawerClose,
+                        drawerCloseContentDescription = drawerCloseContentDescription,
+                        drawerCloseTooltip = drawerCloseTooltip,
+                        drawerSearch = drawerSearch,
+                        drawerHeader = drawerHeader,
+                        drawerBody = drawerBody,
+                    )
+                }
 
                 if (bottomStart != null) {
                     Box(modifier = Modifier.align(Alignment.BottomStart), content = bottomStart)

@@ -1,6 +1,6 @@
 package com.geovault.tracker.location
 
-import com.geovault.tracker.services.TrackingMotionMode
+import com.geovault.tracker.positioning.TrackingMotionMode
 import kotlin.math.exp
 import kotlin.math.max
 

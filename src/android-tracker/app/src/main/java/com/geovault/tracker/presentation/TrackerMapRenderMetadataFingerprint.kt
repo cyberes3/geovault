@@ -59,14 +59,7 @@ data class TrackerMapRenderMetadataFingerprint(
         }
 
         private fun readHidden(tracker: Tracker): String {
-            val raw = tracker.settings?.get("hidden") ?: return "0"
-            val normalized = when (raw) {
-                is Boolean -> raw
-                is Number -> raw.toInt() != 0
-                is String -> raw.equals("true", ignoreCase = true) || raw == "1"
-                else -> false
-            }
-            return if (normalized) "1" else "0"
+            return if (tracker.catalogSettings.hidden) "1" else "0"
         }
     }
 }

@@ -11,7 +11,7 @@ class BootReceiverTest {
         assertFalse(
             BootReceiver.shouldStartTrackingOnBoot(
                 startOnBoot = false,
-                wasTrackingBeforeExit = false,
+                shouldBeRunning = false,
                 userUnlocked = true,
                 hasRequiredPermissions = true,
                 gpsProviderEnabled = true,
@@ -21,7 +21,7 @@ class BootReceiverTest {
         assertFalse(
             BootReceiver.shouldStartTrackingOnBoot(
                 startOnBoot = true,
-                wasTrackingBeforeExit = false,
+                shouldBeRunning = false,
                 userUnlocked = true,
                 hasRequiredPermissions = false,
                 gpsProviderEnabled = true,
@@ -31,7 +31,7 @@ class BootReceiverTest {
         assertFalse(
             BootReceiver.shouldStartTrackingOnBoot(
                 startOnBoot = true,
-                wasTrackingBeforeExit = false,
+                shouldBeRunning = false,
                 userUnlocked = true,
                 hasRequiredPermissions = true,
                 gpsProviderEnabled = false,
@@ -41,7 +41,7 @@ class BootReceiverTest {
         assertFalse(
             BootReceiver.shouldStartTrackingOnBoot(
                 startOnBoot = true,
-                wasTrackingBeforeExit = false,
+                shouldBeRunning = false,
                 userUnlocked = true,
                 hasRequiredPermissions = true,
                 gpsProviderEnabled = true,
@@ -51,7 +51,7 @@ class BootReceiverTest {
         assertTrue(
             BootReceiver.shouldStartTrackingOnBoot(
                 startOnBoot = true,
-                wasTrackingBeforeExit = false,
+                shouldBeRunning = false,
                 userUnlocked = true,
                 hasRequiredPermissions = true,
                 gpsProviderEnabled = true,
@@ -65,7 +65,7 @@ class BootReceiverTest {
         assertTrue(
             BootReceiver.shouldStartTrackingOnBoot(
                 startOnBoot = false,
-                wasTrackingBeforeExit = true,
+                shouldBeRunning = true,
                 userUnlocked = true,
                 hasRequiredPermissions = true,
                 gpsProviderEnabled = true,
@@ -79,7 +79,7 @@ class BootReceiverTest {
         assertFalse(
             BootReceiver.shouldStartTrackingOnBoot(
                 startOnBoot = true,
-                wasTrackingBeforeExit = true,
+                shouldBeRunning = true,
                 userUnlocked = false,
                 hasRequiredPermissions = true,
                 gpsProviderEnabled = true,

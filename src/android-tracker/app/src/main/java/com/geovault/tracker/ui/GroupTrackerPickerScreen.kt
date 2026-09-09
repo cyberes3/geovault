@@ -85,7 +85,7 @@ fun GroupTrackerPickerScreen(
     selectedTrackerIds: Set<String>,
     modifier: Modifier = Modifier,
     isLoading: Boolean = false,
-    addingTrackerIds: Set<String> = emptySet(),
+    occupiedMembershipIds: Set<String> = emptySet(),
     onRefreshTrackers: () -> Unit = {},
     onSelectionChanged: (Set<String>) -> Unit,
     onAddTracker: (String) -> Unit = {},
@@ -120,7 +120,7 @@ fun GroupTrackerPickerScreen(
         selectedTrackerIds = selectedTrackerIds,
         tabs = localizedTabs,
         isLoading = isLoading,
-        addingTrackerIds = addingTrackerIds,
+        occupiedMembershipIds = occupiedMembershipIds,
         doneButtonLabel = doneButtonLabel,
         onRemoveTracker = { id -> onSelectionChanged(selectedTrackerIds - id) },
         onAddTracker = onAddTracker,
@@ -142,7 +142,7 @@ private fun PickerTabContent(
     tabs: List<GeoVaultTab<PickerPhase>>,
     onRemoveTracker: (String) -> Unit,
     isLoading: Boolean,
-    addingTrackerIds: Set<String>,
+    occupiedMembershipIds: Set<String>,
     onAddTracker: (String) -> Unit,
     onIneligibleTrackerTap: (Tracker) -> Unit,
     onRefresh: () -> Unit,
@@ -194,15 +194,15 @@ private fun PickerTabContent(
     val cardBorderColor = geoVaultCardBorderColor()
 
     var addTabRecentlyAddedIds by remember(groupId) { mutableStateOf(emptySet<String>()) }
-    var prevAddingTrackerIds by remember(groupId) { mutableStateOf(emptySet<String>()) }
+    var prevOccupiedMembershipIds by remember(groupId) { mutableStateOf(emptySet<String>()) }
 
-    LaunchedEffect(addingTrackerIds, selectedTrackerIds) {
-        val completed = prevAddingTrackerIds - addingTrackerIds
+    LaunchedEffect(occupiedMembershipIds, selectedTrackerIds) {
+        val completed = prevOccupiedMembershipIds - occupiedMembershipIds
         val newlySuccessful = completed.filter { it in selectedTrackerIds }.toSet()
         if (newlySuccessful.isNotEmpty()) {
             addTabRecentlyAddedIds = addTabRecentlyAddedIds + newlySuccessful
         }
-        prevAddingTrackerIds = addingTrackerIds
+        prevOccupiedMembershipIds = occupiedMembershipIds
     }
 
     LaunchedEffect(selectedTrackerIds) {
@@ -360,7 +360,7 @@ private fun PickerTabContent(
                                     verticalArrangement = Arrangement.spacedBy(6.dp),
                                 ) {
                                     items(filteredItems, key = { it.trackerId }) { item ->
-                                        val isAdding = item.trackerId in addingTrackerIds
+                                        val isAdding = item.trackerId in occupiedMembershipIds
                                         val showAsAddedWithTrash =
                                             item.trackerId in addTabRecentlyAddedIds &&
                                                 item.trackerId in selectedTrackerIds

@@ -6,6 +6,7 @@ import org.junit.Test
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.geometry.LatLngBounds
 
+import com.geovault.tracker.map.MapRenderMath
 class TrackerMapCameraDirectivePolicyTest {
 
     private val sampleBounds: LatLngBounds = LatLngBounds.Builder()
@@ -15,7 +16,7 @@ class TrackerMapCameraDirectivePolicyTest {
 
     @Test
     fun resolve_selectionLockBeatsFollowLock() {
-        val resolution = TrackerMapCameraDirectivePolicy.resolve(
+        val resolution = MapRenderMath.resolveCameraDirective(
             TrackerMapCameraDirectiveInput(
                 followLockEnabled = true,
                 gpsCollecting = true,
@@ -37,7 +38,7 @@ class TrackerMapCameraDirectivePolicyTest {
 
     @Test
     fun resolve_followLockBeatsLiveActiveFitWhenGpsCollecting() {
-        val resolution = TrackerMapCameraDirectivePolicy.resolve(
+        val resolution = MapRenderMath.resolveCameraDirective(
             TrackerMapCameraDirectiveInput(
                 followLockEnabled = true,
                 gpsCollecting = true,
@@ -61,7 +62,7 @@ class TrackerMapCameraDirectivePolicyTest {
         // underneath it (live active fit, InitialFit) while GPS isn't actively producing a fix --
         // that fallthrough used to let a full-extent/other fit win while the follow-lock FAB
         // still showed armed.
-        val resolution = TrackerMapCameraDirectivePolicy.resolve(
+        val resolution = MapRenderMath.resolveCameraDirective(
             TrackerMapCameraDirectiveInput(
                 followLockEnabled = true,
                 gpsCollecting = false,
@@ -81,7 +82,7 @@ class TrackerMapCameraDirectivePolicyTest {
 
     @Test
     fun resolve_followLockHoldsCameraWhenTargetCoordinatesMissing() {
-        val resolution = TrackerMapCameraDirectivePolicy.resolve(
+        val resolution = MapRenderMath.resolveCameraDirective(
             TrackerMapCameraDirectiveInput(
                 followLockEnabled = true,
                 gpsCollecting = true,
@@ -105,7 +106,7 @@ class TrackerMapCameraDirectivePolicyTest {
         // mutually exclusive by construction), but the precedence order documented on
         // TrackerMapCameraDirectivePolicy places selection+live-fit above follow lock, so the
         // resolver must honor that even if this invariant were ever violated upstream.
-        val resolution = TrackerMapCameraDirectivePolicy.resolve(
+        val resolution = MapRenderMath.resolveCameraDirective(
             TrackerMapCameraDirectiveInput(
                 followLockEnabled = true,
                 gpsCollecting = true,
@@ -125,7 +126,7 @@ class TrackerMapCameraDirectivePolicyTest {
 
     @Test
     fun resolve_liveActiveFitBeatsInitialFit() {
-        val resolution = TrackerMapCameraDirectivePolicy.resolve(
+        val resolution = MapRenderMath.resolveCameraDirective(
             TrackerMapCameraDirectiveInput(
                 followLockEnabled = false,
                 gpsCollecting = false,
@@ -144,7 +145,7 @@ class TrackerMapCameraDirectivePolicyTest {
 
     @Test
     fun resolve_initialFitWhenOnlyBoundsAvailable() {
-        val resolution = TrackerMapCameraDirectivePolicy.resolve(
+        val resolution = MapRenderMath.resolveCameraDirective(
             TrackerMapCameraDirectiveInput(
                 followLockEnabled = false,
                 gpsCollecting = false,
@@ -163,7 +164,7 @@ class TrackerMapCameraDirectivePolicyTest {
 
     @Test
     fun resolve_noOpWhenAllInputsBlank() {
-        val resolution = TrackerMapCameraDirectivePolicy.resolve(
+        val resolution = MapRenderMath.resolveCameraDirective(
             TrackerMapCameraDirectiveInput(
                 followLockEnabled = false,
                 gpsCollecting = false,
@@ -185,7 +186,7 @@ class TrackerMapCameraDirectivePolicyTest {
         // A claimed selection lock must never fall through to a bounds-based directive
         // underneath it -- that's exactly what let a full-extent fit win the race the instant a
         // stream starts, before the tracker's first point has resolved a coordinate.
-        val resolution = TrackerMapCameraDirectivePolicy.resolve(
+        val resolution = MapRenderMath.resolveCameraDirective(
             TrackerMapCameraDirectiveInput(
                 followLockEnabled = false,
                 gpsCollecting = false,
@@ -209,7 +210,7 @@ class TrackerMapCameraDirectivePolicyTest {
         // locked tracker" combo the secondary FAB exists for (TrackerMapLiveActiveFitPolicy only
         // shows that FAB while already locked) -- it must produce a bounds fit, not freeze the
         // camera on a single point and ignore the live-fit request.
-        val resolution = TrackerMapCameraDirectivePolicy.resolve(
+        val resolution = MapRenderMath.resolveCameraDirective(
             TrackerMapCameraDirectiveInput(
                 followLockEnabled = false,
                 gpsCollecting = false,
@@ -231,7 +232,7 @@ class TrackerMapCameraDirectivePolicyTest {
     fun resolve_bothEnabledFallsBackToSelectionLockWhenBoundsUnresolved() {
         // Bounds haven't resolved yet (e.g. the instant live active fit is toggled on before a
         // trail exists) but the locked point has -- center on it rather than going fully idle.
-        val resolution = TrackerMapCameraDirectivePolicy.resolve(
+        val resolution = MapRenderMath.resolveCameraDirective(
             TrackerMapCameraDirectiveInput(
                 followLockEnabled = false,
                 gpsCollecting = false,
@@ -252,7 +253,7 @@ class TrackerMapCameraDirectivePolicyTest {
 
     @Test
     fun resolve_bothEnabledHoldsCameraWhenNeitherCoordinatesNorBoundsResolved() {
-        val resolution = TrackerMapCameraDirectivePolicy.resolve(
+        val resolution = MapRenderMath.resolveCameraDirective(
             TrackerMapCameraDirectiveInput(
                 followLockEnabled = false,
                 gpsCollecting = false,
@@ -271,7 +272,7 @@ class TrackerMapCameraDirectivePolicyTest {
 
     @Test
     fun resolve_liveActiveFitAfterUserZoom_centersAtCurrentZoom() {
-        val resolution = TrackerMapCameraDirectivePolicy.resolve(
+        val resolution = MapRenderMath.resolveCameraDirective(
             TrackerMapCameraDirectiveInput(
                 followLockEnabled = false,
                 gpsCollecting = false,
@@ -294,7 +295,7 @@ class TrackerMapCameraDirectivePolicyTest {
 
     @Test
     fun resolve_liveActiveFitAfterUserZoom_usesBoundsCenterWhenNoFollowTarget() {
-        val resolution = TrackerMapCameraDirectivePolicy.resolve(
+        val resolution = MapRenderMath.resolveCameraDirective(
             TrackerMapCameraDirectiveInput(
                 followLockEnabled = false,
                 gpsCollecting = false,

@@ -1,5 +1,6 @@
 package com.geovault.tracker.presentation
 
+import com.geovault.tracker.map.MapSessionEngine
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -8,7 +9,7 @@ class TrackerMapReopenOrchestratorInvariantsTest {
 
     @Test
     fun resolve_trackingWithoutSelected_reportsInvariantViolation() {
-        val outcome = TrackerMapReopenOrchestrator().resolve(
+        val outcome = MapSessionEngine.resolveReopen(
             TrackerMapResumeInput(
                 trackingRunning = true,
                 mapReady = true,
@@ -31,7 +32,7 @@ class TrackerMapReopenOrchestratorInvariantsTest {
 
     @Test
     fun resolve_trackingWithPointsAndDestructiveDecision_reportsInvariantViolation() {
-        val outcome = TrackerMapReopenOrchestrator().resolve(
+        val outcome = MapSessionEngine.resolveReopen(
             TrackerMapResumeInput(
                 trackingRunning = true,
                 mapReady = true,
@@ -54,7 +55,7 @@ class TrackerMapReopenOrchestratorInvariantsTest {
 
     @Test
     fun resolve_nonTrackingSingleLoad_hasIdempotentLoadInvariantSatisfied() {
-        val outcome = TrackerMapReopenOrchestrator().resolve(
+        val outcome = MapSessionEngine.resolveReopen(
             TrackerMapResumeInput(
                 trackingRunning = false,
                 mapReady = true,

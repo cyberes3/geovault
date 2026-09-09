@@ -29,18 +29,6 @@ data class QueuedLocation(
         require(trackerId.isNotBlank()) { "QueuedLocation.trackerId must not be blank" }
     }
 
-    fun toLocation(): Location {
-        val loc = Location(prov ?: "geovault")
-        loc.time = time
-        loc.latitude = latitude
-        loc.longitude = longitude
-        if (altitude != null) loc.altitude = altitude
-        if (speed != null) loc.speed = speed
-        if (bearing != null) loc.bearing = bearing
-        if (accuracy != null) loc.accuracy = accuracy
-        return loc
-    }
-
     companion object {
         private const val EXTRAS_KEY_SATELLITES = "satellites"
 

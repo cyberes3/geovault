@@ -2,6 +2,7 @@ package com.geovault.tracker.policy
 
 import com.geovault.common.logging.CaptureLogThrottle
 import com.geovault.common.logging.GeoVaultCaptureLog
+import com.geovault.tracker.domain.TrackPoint
 import java.util.ArrayDeque
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
@@ -45,13 +46,13 @@ object TrackPointBus {
     private const val WARNING_INTERVAL_MS = 30_000L
 
     private val emitScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-    private val orderedEmitQueue = Channel<TrackPointEvent>(
+    private val orderedEmitQueue = Channel<TrackPoint>(
         capacity = ORDERED_QUEUE_CAPACITY,
         onBufferOverflow = BufferOverflow.DROP_OLDEST,
     )
     private val localDeliveryPaused = AtomicBoolean(false)
     private val deferredEmitCount = AtomicLong(0L)
-    private val pausedLocalEvents = ArrayDeque<TrackPointEvent>()
+    private val pausedLocalEvents = ArrayDeque<TrackPoint>()
     private val droppedPausedLocalEvents = AtomicLong(0L)
     private val lastEnqueueFailureWarningAtMs = AtomicLong(0L)
     private val lastPausedDropWarningAtMs = AtomicLong(0L)
@@ -70,7 +71,7 @@ object TrackPointBus {
     private val droppedQueueOverflowEvents = AtomicLong(0L)
     private val lastQueueOverflowWarningAtMs = AtomicLong(0L)
 
-    private val eventsFlow = MutableSharedFlow<TrackPointEvent>(
+    private val eventsFlow = MutableSharedFlow<TrackPoint>(
         replay = REPLAY_EVENTS,
         extraBufferCapacity = EXTRA_BUFFER_EVENTS,
         onBufferOverflow = BufferOverflow.SUSPEND
@@ -85,13 +86,13 @@ object TrackPointBus {
         }
     }
 
-    val events: SharedFlow<TrackPointEvent> = eventsFlow.asSharedFlow()
-    val localGpsEvents: Flow<TrackPointEvent> = events.filter { it.source == TrackPointSource.LOCAL_GPS }
-    val remoteStreamEvents: Flow<TrackPointEvent> = events.filter { it.source == TrackPointSource.REMOTE_STREAM }
+    val events: SharedFlow<TrackPoint> = eventsFlow.asSharedFlow()
+    val localGpsEvents: Flow<TrackPoint> = events.filter { it.provenance == TrackPointSource.LOCAL_GPS }
+    val remoteStreamEvents: Flow<TrackPoint> = events.filter { it.provenance == TrackPointSource.REMOTE_STREAM }
 
-    fun publish(event: TrackPointEvent) {
+    fun publish(event: TrackPoint) {
         val orderedEvent = event.withOrderingKey()
-        if (orderedEvent.source == TrackPointSource.LOCAL_GPS && localDeliveryPaused.get()) {
+        if (orderedEvent.provenance == TrackPointSource.LOCAL_GPS && localDeliveryPaused.get()) {
             synchronized(pausedLocalEvents) {
                 if (pausedLocalEvents.size >= PAUSED_BUFFER_CAPACITY) {
                     pausedLocalEvents.removeFirst()
@@ -105,8 +106,8 @@ object TrackPointBus {
                 if (CaptureLogThrottle.shouldLogInterval("bus_buffer_local", 30_000L)) {
                     GeoVaultCaptureLog.d(
                         TAG,
-                        "map_update bus_buffer_local track=${orderedEvent.trackId.trim()} " +
-                            "ts=${orderedEvent.timestampMs} buffered=${pausedLocalEvents.size}"
+                        "map_update bus_buffer_local track=${orderedEvent.trackerId.trim()} " +
+                            "ts=${orderedEvent.timeMs} buffered=${pausedLocalEvents.size}"
                     )
                 }
             }
@@ -116,15 +117,15 @@ object TrackPointBus {
         if (sendResult.isSuccess) {
             GeoVaultCaptureLog.v(
                 TAG,
-                "map_update bus_enqueued source=${orderedEvent.source} track=${orderedEvent.trackId.trim()} " +
-                    "ts=${orderedEvent.timestampMs} order=${orderedEvent.orderingKey}"
+                "map_update bus_enqueued source=${orderedEvent.provenance} track=${orderedEvent.trackerId.trim()} " +
+                    "ts=${orderedEvent.timeMs} order=${orderedEvent.orderingKey}"
             )
             val outstanding = publishedToQueueCount.incrementAndGet() - consumedFromQueueCount.get()
             if (outstanding > ORDERED_QUEUE_CAPACITY) {
                 val dropped = droppedQueueOverflowEvents.incrementAndGet()
                 warnRateLimited(
                     lastQueueOverflowWarningAtMs,
-                    "Dropped ${orderedEvent.source} event track=${orderedEvent.trackId.trim()} due to ordered " +
+                    "Dropped ${orderedEvent.provenance} event track=${orderedEvent.trackerId.trim()} due to ordered " +
                         "queue overflow (DROP_OLDEST); detected=$dropped outstanding=$outstanding capacity=$ORDERED_QUEUE_CAPACITY"
                 )
             }
@@ -188,7 +189,7 @@ object TrackPointBus {
         publishedToQueueCount.set(0L)
         consumedFromQueueCount.set(0L)
         droppedQueueOverflowEvents.set(0L)
-        RemoteTrackPointAdmissionPipeline.resetForTests()
+        AdmissionPipeline.resetForTests()
         synchronized(pausedLocalEvents) {
             pausedLocalEvents.clear()
         }
@@ -198,16 +199,16 @@ object TrackPointBus {
         }
     }
 
-    private fun TrackPointEvent.withOrderingKey(): TrackPointEvent {
+    private fun TrackPoint.withOrderingKey(): TrackPoint {
         if (orderingKey > 0L) return this
-        return copy(orderingKey = timestampMs)
+        return copy(orderingKey = timeMs)
     }
 
-    private fun recordEnqueueFailure(event: TrackPointEvent) {
+    private fun recordEnqueueFailure(event: TrackPoint) {
         val deferred = deferredEmitCount.incrementAndGet()
         warnRateLimited(
             lastEnqueueFailureWarningAtMs,
-            "Failed to enqueue ${event.source} event track=${event.trackId.trim()} deferred=$deferred"
+            "Failed to enqueue ${event.provenance} event track=${event.trackerId.trim()} deferred=$deferred"
         )
     }
 

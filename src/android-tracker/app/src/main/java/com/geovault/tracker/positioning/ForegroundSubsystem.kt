@@ -4,14 +4,13 @@ import android.app.ForegroundServiceStartNotAllowedException
 import android.app.KeyguardManager
 import android.app.NotificationManager
 import android.content.Context
-import android.content.Intent
 import android.os.UserManager
-import android.widget.Toast
 import com.geovault.common.logging.GeoVaultCaptureLog
-import com.geovault.tracker.TrackingRecoveryCoordinator
+import com.geovault.tracker.di.TrackerAppServices
+import com.geovault.tracker.runtime.TrackerRuntimeCommands
+import com.geovault.tracker.runtime.TrackerRuntimeEngine
 import com.geovault.tracker.location.TrackingControlEvent
 import com.geovault.tracker.policy.TrackPointBus
-import com.geovault.tracker.runtime.RuntimeServiceEventType
 import com.geovault.tracker.tracking.TrackingServiceConstants
 import com.geovault.tracker.tracking.TrackingServiceIntents
 import kotlinx.coroutines.Dispatchers
@@ -24,21 +23,11 @@ internal class ForegroundSubsystem(private val rt: PositioningRuntime) {
         TrackPointBus.resumeLocalDelivery()
         rt.projection.transitionControlState(TrackingControlEvent.StartFailed, failureReason = message)
         rt.lifecycle.transitionToStoppedState(failureReason = message)
-        rt.deps.settingsRepository.clearWasTrackingBeforeExit()
-        TrackingRecoveryCoordinator.markIntentionalStop(rt.ports.service.applicationContext, reason = "startup_failed")
-        rt.deps.runtimeEventPublisher.publish(
-            type = RuntimeServiceEventType.STARTUP_FAILED,
-            reason = reason,
-            trigger = TrackingServiceIntents.mapRuntimeTrigger(trigger)
+        TrackerRuntimeEngine.get(rt.ports.service.applicationContext).handle(
+            TrackerRuntimeCommands.ServiceStopped(reason = "startup_failed"),
         )
         rt.serviceScope.launch(Dispatchers.Main) {
-            rt.ports.service.sendBroadcast(
-                Intent(TrackingServiceIntents.ACTION_TRACKING_ERROR).apply {
-                    setPackage(rt.ports.service.packageName)
-                    putExtra(TrackingServiceIntents.EXTRA_TRACKING_ERROR_MESSAGE, message)
-                }
-            )
-            Toast.makeText(rt.ports.service, message, Toast.LENGTH_LONG).show()
+            emitHostMessage(message)
         }
         rt.foreground.stopSelfSafelyAfterStartup(reason = "startup_failed")
     }
@@ -46,13 +35,7 @@ internal class ForegroundSubsystem(private val rt: PositioningRuntime) {
     fun failActiveTrackingAndStop(message: String) {
         rt.projection.transitionControlState(TrackingControlEvent.FatalFailure, failureReason = message)
         rt.serviceScope.launch(Dispatchers.Main) {
-            rt.ports.service.sendBroadcast(
-                Intent(TrackingServiceIntents.ACTION_TRACKING_ERROR).apply {
-                    setPackage(rt.ports.service.packageName)
-                    putExtra(TrackingServiceIntents.EXTRA_TRACKING_ERROR_MESSAGE, message)
-                }
-            )
-            Toast.makeText(rt.ports.service, message, Toast.LENGTH_LONG).show()
+            emitHostMessage(message)
         }
         rt.lifecycle.stopTracking(reason = "fatal_failure", failureReason = message)
     }
@@ -83,9 +66,8 @@ internal class ForegroundSubsystem(private val rt: PositioningRuntime) {
                 GeoVaultCaptureLog.e(TrackingServiceConstants.TAG, "Foreground promotion failed for trigger=$trigger", e)
             }
             if (path == TrackingServiceIntents.StartupCommandPath.StartTracking) {
-                TrackingRecoveryCoordinator.markIntentionalStop(
-                    rt.ports.service.applicationContext,
-                    reason = "fgs_start_failed_$trigger"
+                TrackerRuntimeEngine.get(rt.ports.service.applicationContext).handle(
+                    TrackerRuntimeCommands.ServiceStopped(reason = "fgs_start_failed_$trigger"),
                 )
             } else {
                 rt.deps.runtimeTelemetry.decision(
@@ -93,7 +75,7 @@ internal class ForegroundSubsystem(private val rt: PositioningRuntime) {
                     "trigger=$trigger path=$path action=${action ?: "none"} " +
                         "error=${e.javaClass.simpleName}:${e.message ?: "none"}"
                 )
-                TrackingRecoveryCoordinator.ensureWatchdogScheduled(rt.ports.service.applicationContext)
+                TrackerRuntimeEngine.get(rt.ports.service.applicationContext).scheduleWatchdog()
             }
             rt.foreground.logNotificationSurfaceDiagnostics(
                 trigger = trigger,
@@ -109,7 +91,7 @@ internal class ForegroundSubsystem(private val rt: PositioningRuntime) {
         if (rt.lifecycle.isTrackingActiveOrStarting()) {
             rt.lifecycle.transitionToStoppedState(failureReason = reason)
         } else {
-            SessionResetCoordinator(rt).applyForStop()
+            rt.lifecycle.resetForStop()
         }
         rt.lifecycle.cleanupServiceResources(reason = reason)
         rt.lifecycle.stopServiceInstance(reason = reason)
@@ -142,4 +124,7 @@ internal class ForegroundSubsystem(private val rt: PositioningRuntime) {
         )
     }
 
+    private fun emitHostMessage(message: String) {
+        TrackerAppServices.from(rt.ports.service.application).uiEffects().emitMessage(message)
+    }
 }

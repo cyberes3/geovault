@@ -1,15 +1,14 @@
 package com.geovault.tracker.presentation
 
+import com.geovault.tracker.map.MapSessionEngine
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class TrackerMapResumePolicyTest {
 
-    private val resolver = TrackerMapResolveResumeUseCase()
-
     @Test
     fun longBackgroundGap_nonTrackingSingleWithTrail_doesNotReloadHistory() {
-        val decision = resolver.resolve(
+        val decision = MapSessionEngine.resolveResume(
             TrackerMapResumeInput(
                 trackingRunning = false,
                 mapReady = true,
@@ -28,7 +27,7 @@ class TrackerMapResumePolicyTest {
 
     @Test
     fun trackingWithPointsSameTracker_returnsNoOp() {
-        val decision = resolver.resolve(
+        val decision = MapSessionEngine.resolveResume(
             TrackerMapResumeInput(
                 trackingRunning = true,
                 mapReady = true,
@@ -47,7 +46,7 @@ class TrackerMapResumePolicyTest {
 
     @Test
     fun groupContext_prefersActiveStreams() {
-        val decision = resolver.resolve(
+        val decision = MapSessionEngine.resolveResume(
             TrackerMapResumeInput(
                 trackingRunning = false,
                 mapReady = true,
@@ -72,7 +71,7 @@ class TrackerMapResumePolicyTest {
         // tracker; previously the policy stripped the selected id out of every group resume,
         // producing MultiContextNoStreaming and silently dropping the user's own tracker from
         // the group stream on every resume tick.
-        val decision = resolver.resolve(
+        val decision = MapSessionEngine.resolveResume(
             TrackerMapResumeInput(
                 trackingRunning = false,
                 mapReady = true,
@@ -94,7 +93,7 @@ class TrackerMapResumePolicyTest {
         // STREAMING EXCLUSION (resume): when the user is NOT recording, the selected tracker is
         // just another tracker. ALL_QUEUE on resume must NOT pre-strip it; the projector will
         // exclude only the locally-recorded tracker at the next reconcile if recording starts.
-        val decision = resolver.resolve(
+        val decision = MapSessionEngine.resolveResume(
             TrackerMapResumeInput(
                 trackingRunning = false,
                 mapReady = true,

@@ -1,9 +1,10 @@
 package com.geovault.tracker.presentation
 
-import com.geovault.tracker.policy.TrackPointEvent
+import com.geovault.tracker.map.MapSessionEngine
+import com.geovault.tracker.domain.TrackPoint
 import com.geovault.tracker.policy.TrackPointSource
-import com.geovault.tracker.services.RecordingRuntime
-import com.geovault.tracker.services.TrackingRuntimeSnapshot
+import com.geovault.tracker.positioning.RecordingRuntime
+import com.geovault.tracker.positioning.TrackingRuntimeSnapshot
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -110,7 +111,7 @@ class TrackerMapPointRouterTest {
         runtimeRunning: Boolean,
         groupTrackerIds: Set<String> = emptySet(),
     ): TrackerMapStreamingPlan {
-        return TrackerMapSessionProjector.project(
+        return MapSessionEngine.project(
             TrackerMapSessionIntent(
                 mode = mode,
                 runtime = TrackingRuntimeSnapshot(
@@ -119,8 +120,8 @@ class TrackerMapPointRouterTest {
                         sessionActive = runtimeRunning,
                         selectedTrackerId = selectedTrackerId,
                     ),
-                    selectedTrackerId = selectedTrackerId,
                 ),
+                selectedTrackerId = selectedTrackerId,
                 displayedTrackerId = displayedTrackerId,
                 displayedTrackerName = "",
                 rosterTrackerIds = emptySet(),
@@ -130,13 +131,13 @@ class TrackerMapPointRouterTest {
         )
     }
 
-    private fun event(source: TrackPointSource, trackId: String): TrackPointEvent {
-        return TrackPointEvent(
-            source = source,
-            trackId = trackId,
-            lon = 10.0,
-            lat = 20.0,
-            timestampMs = 1000L,
+    private fun event(source: TrackPointSource, trackId: String): TrackPoint {
+        return TrackPoint(
+            provenance = source,
+            trackerId = trackId,
+            longitude = 10.0,
+            latitude = 20.0,
+            timeMs = 1000L,
         )
     }
 }

@@ -13,11 +13,13 @@ import com.geovault.tracker.location.PausedFreshnessPointFactory
 import com.geovault.tracker.location.PausedFreshnessPolicy
 import com.geovault.tracker.location.SyncFailureClass
 import com.geovault.tracker.positioning.config.GpsRuntimeState
+import com.geovault.tracker.positioning.motion.PauseIntent
+import com.geovault.tracker.positioning.motion.ResumeIntent
 import com.geovault.tracker.positioning.ingest.FixIngestMode
 import com.geovault.tracker.positioning.ingest.TrackerLocationMotionContext
 import com.geovault.tracker.positioning.ingest.TrackerLocationPipelineInput
-import com.geovault.tracker.services.QueueUploadScope
-import com.geovault.tracker.services.TrackingMotionMode
+import com.geovault.tracker.positioning.QueueUploadScope
+import com.geovault.tracker.positioning.TrackingMotionMode
 import com.geovault.tracker.settings.TrackerSettings
 import com.geovault.tracker.tracking.TrackingServiceConstants
 import kotlinx.coroutines.Dispatchers
@@ -72,7 +74,7 @@ internal class PausedFreshnessSubsystem(private val rt: PositioningRuntime) {
             return true
         }
         rt.recovery.pausedFreshness.markPausedFreshnessProbeStarted(nowMs = rt.deps.clock.wallTimeMs())
-        rt.collection.resumeGps(reason = "stationary_ping_resume")
+        rt.motionOrchestrator.resume(ResumeIntent.FreshnessProbe)
         return true
     }
 
@@ -106,7 +108,7 @@ internal class PausedFreshnessSubsystem(private val rt: PositioningRuntime) {
                 }
                 PausedFreshnessDecisionReason.NO_ANCHOR -> {
                     rt.recovery.pausedFreshness.clearPausedFreshnessProbe(reason = decision.reason.telemetryValue)
-                    rt.collection.pauseGpsInternal(force = true)
+                    rt.motionOrchestrator.pause(PauseIntent.FreshnessForce)
                     return true
                 }
                 PausedFreshnessDecisionReason.POOR_ACCURACY -> {
@@ -126,14 +128,14 @@ internal class PausedFreshnessSubsystem(private val rt: PositioningRuntime) {
                                 "reason=poor_accuracy localAgeMs=${rt.deps.pointFreshnessTracker.localPointAgeMs(nowMs) ?: -1L}"
                             )
                         } else {
-                            rt.collection.pauseGpsInternal(force = true)
+                            rt.motionOrchestrator.pause(PauseIntent.FreshnessForce)
                         }
                     }
                     return true
                 }
                 PausedFreshnessDecisionReason.TOO_SOON -> {
                     rt.recovery.pausedFreshness.clearPausedFreshnessProbe(reason = "too_soon")
-                    rt.collection.pauseGpsInternal(force = true)
+                    rt.motionOrchestrator.pause(PauseIntent.FreshnessForce)
                     return true
                 }
                 PausedFreshnessDecisionReason.EMIT -> return false
@@ -142,7 +144,7 @@ internal class PausedFreshnessSubsystem(private val rt: PositioningRuntime) {
 
         val anchor = anchorLocation ?: run {
             rt.recovery.pausedFreshness.clearPausedFreshnessProbe(reason = "emit_without_anchor")
-            rt.collection.pauseGpsInternal(force = true)
+            rt.motionOrchestrator.pause(PauseIntent.FreshnessForce)
             return true
         }
         val freshnessLocation = PausedFreshnessPointFactory.buildAnchoredFreshnessLocation(
@@ -162,7 +164,7 @@ internal class PausedFreshnessSubsystem(private val rt: PositioningRuntime) {
         )
         if (!persisted) {
             rt.recovery.pausedFreshness.clearPausedFreshnessProbe(reason = "persist_rejected")
-            rt.collection.pauseGpsInternal(force = true)
+            rt.motionOrchestrator.pause(PauseIntent.FreshnessForce)
             return true
         }
         rt.deps.stationaryFreshnessCoordinator.markFreshnessPointPersisted(nowMs)
@@ -177,7 +179,7 @@ internal class PausedFreshnessSubsystem(private val rt: PositioningRuntime) {
             )
         )
         rt.recovery.pausedFreshness.clearPausedFreshnessProbe(reason = "emitted")
-        rt.collection.pauseGpsInternal(force = true)
+        rt.motionOrchestrator.pause(PauseIntent.FreshnessForce)
         rt.deps.runtimeTelemetry.event(
             "paused_freshness_repaused",
             "intervalMs=${rt.contextBuilder.currentPositioningRuntimeContext(settings).stationaryProbeIntervalMs}"
@@ -331,7 +333,7 @@ internal class PausedFreshnessSubsystem(private val rt: PositioningRuntime) {
             quality = rt.utilities.resolveTrackPointQuality(acceptedLocation, finalPropsJson),
         )
         withContext(Dispatchers.Main) {
-            rt.projection.syncRuntimeStateStore()
+            rt.projection.commit()
             rt.projection.updateNotificationFromDb(broadcastStats = false)
         }
         rt.serviceScope.launch(Dispatchers.IO) {

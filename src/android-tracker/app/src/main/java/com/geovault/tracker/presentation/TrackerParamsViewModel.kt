@@ -11,9 +11,11 @@ import com.geovault.common.net.GeoVaultApiFailure
 import com.geovault.common.sort.NaturalSort
 import com.geovault.tracker.R
 import com.geovault.tracker.Tracker
+import com.geovault.tracker.toLooseMap
 import com.geovault.tracker.data.TrackerApiFailureMessages
-import com.geovault.tracker.data.TrackerDetailRepository
+import com.geovault.tracker.data.TrackerManagementRepository
 import com.geovault.tracker.di.TrackerAppServices
+import com.geovault.tracker.presentation.ParamsProjector
 import com.geovault.tracker.params.TrackerParamGridRow
 import com.geovault.tracker.params.TrackerParamValueFormatter
 import com.geovault.tracker.params.TrackerParamsBodyKind
@@ -21,9 +23,9 @@ import com.geovault.tracker.params.TrackerParamsContentReducer
 import com.geovault.tracker.params.TrackerParamsRouteArgs
 import com.geovault.tracker.policy.TrackPointBus
 import com.geovault.tracker.policy.TrackerParamsPointAcceptancePolicy
-import com.geovault.tracker.services.TrackingMotionMode
-import com.geovault.tracker.services.TrackingRuntimeStateStore
-import com.geovault.tracker.services.TrackingRuntimeSnapshot
+import com.geovault.tracker.positioning.TrackingMotionMode
+import com.geovault.tracker.runtime.TrackerRuntimeStore
+import com.geovault.tracker.positioning.TrackingRuntimeSnapshot
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -50,13 +52,16 @@ data class TrackerParamsScreenUiState(
 class TrackerParamsViewModel(
     application: Application,
     private val args: TrackerParamsRouteArgs,
-    private val detailRepository: TrackerDetailRepository,
+    private val trackerRepository: TrackerManagementRepository,
 ) : AndroidViewModel(application) {
 
     private val formatter = TrackerParamValueFormatter(application)
+    private val appServices = TrackerAppServices.from(application)
     private val streamingController = TrackerParamsStreamingController(
-        TrackerAppServices.from(application).liveStreamSubscriptionRepository(),
+        appServices.liveStreamSubscriptionRepository(),
     )
+    private val catalogStateStore = appServices.catalogStateStore()
+    private val selectionController = appServices.catalogSelectionController()
 
     private val _uiState = MutableStateFlow(buildInitialUiState())
     val uiState: StateFlow<TrackerParamsScreenUiState> = _uiState.asStateFlow()
@@ -70,7 +75,19 @@ class TrackerParamsViewModel(
 
     init {
         viewModelScope.launch {
-            TrackingRuntimeStateStore.state.collect { runtime ->
+            TrackerRuntimeStore.state.collect { document ->
+                val runtime = document.recording
+                _uiState.update {
+                    it.copy(motionModeText = motionModeLabel(runtime, args.trackerId))
+                }
+                if (screenStarted) {
+                    refreshParamsStreamingLease(runtime)
+                }
+            }
+        }
+        viewModelScope.launch {
+            catalogStateStore.state.collect {
+                val runtime = TrackerRuntimeStore.value.recording
                 _uiState.update {
                     it.copy(motionModeText = motionModeLabel(runtime, args.trackerId))
                 }
@@ -84,23 +101,23 @@ class TrackerParamsViewModel(
 
     fun onScreenStarted() {
         screenStarted = true
-        refreshParamsStreamingLease(TrackingRuntimeStateStore.state.value)
+        refreshParamsStreamingLease(TrackerRuntimeStore.value.recording)
         if (pointStreamJob?.isActive == true) return
         pointStreamJob = viewModelScope.launch {
             TrackPointBus.events.collect { event ->
-                val runtime = TrackingRuntimeStateStore.state.value
+                val runtime = TrackerRuntimeStore.value.recording
                 if (
                     TrackerParamsPointAcceptancePolicy.shouldAcceptForParams(
                         event = event,
                         trackerId = args.trackerId,
                         trackingRunning = runtime.localRecordingActive,
-                        selectedTrackerId = runtime.selectedTrackerId,
+                        selectedTrackerId = selectedTrackerId(),
                     )
                 ) {
                     applyPointPayload(
-                        timestampMs = event.timestampMs,
-                        lat = event.lat,
-                        lon = event.lon,
+                        timestampMs = event.timeMs,
+                        lat = event.latitude,
+                        lon = event.longitude,
                         paramsMap = parsePropsJson(event.propsJson),
                     )
                 }
@@ -120,7 +137,7 @@ class TrackerParamsViewModel(
         streamingController.onScreenStarted(
             trackerId = args.trackerId,
             trackerName = streamTrackerName,
-            selectedTrackerId = runtime.selectedTrackerId,
+            selectedTrackerId = selectedTrackerId(),
             trackingRunning = runtime.localRecordingActive,
         )
     }
@@ -128,8 +145,8 @@ class TrackerParamsViewModel(
     fun loadTrackerData(refresh: Boolean = false) {
         viewModelScope.launch {
             val app = getApplication<Application>()
-            val runtime = TrackingRuntimeStateStore.state.value
-            val localLive = isLocalTrackingMode(runtime, runtime.selectedTrackerId, args.trackerId)
+            val runtime = TrackerRuntimeStore.value.recording
+            val localLive = TrackerRuntimeStore.value.locallyRecordedTrackerId == args.trackerId
             if (refresh) {
                 _uiState.update { it.copy(isRefreshing = true, errorMessage = null) }
             } else if (!localLive) {
@@ -143,11 +160,11 @@ class TrackerParamsViewModel(
                 return@launch
             }
             try {
-                val tracker = detailRepository.loadTrackerMetadata(args.trackerId, forceRefresh = refresh)
+                val tracker = trackerRepository.loadTracker(args.trackerId)
                 applyFromTracker(tracker)
                 viewModelScope.launch {
                     try {
-                        detailRepository.refreshTrackers()
+                        trackerRepository.loadTrackers(forceRefresh = true)
                     } catch (_: GeoVaultApiFailure) {
                     }
                 }
@@ -245,9 +262,13 @@ class TrackerParamsViewModel(
     }
 
     private fun applyFromTracker(tracker: Tracker) {
-        val lastTs = tracker.lastTimestampMs()
-        val pos = tracker.lastPositionOrNull()
-        val latestParams = tracker.point_params?.lastOrNull().orEmpty()
+        val projection = ParamsProjector.project(tracker)
+        val live = projection.livePoint
+        val lastTs = live?.timeMs ?: tracker.lastTimestampMs()
+        val pos = live?.let {
+            Wgs84Point(latitude = it.latitude, longitude = it.longitude)
+        } ?: tracker.lastPositionOrNull()
+        val latestParams = tracker.point_params?.lastOrNull()?.toLooseMap().orEmpty()
         val shouldApplyPoint = synchronized(this) {
             if (lastTs != null && lastTs > 0L) {
                 if (lastTs < lastAppliedTimestampMs) {
@@ -305,8 +326,8 @@ class TrackerParamsViewModel(
 
     private fun motionModeLabel(runtime: TrackingRuntimeSnapshot, trackerId: String): String? {
         val isLocalTracking = runtime.localRecordingActive &&
-            runtime.selectedTrackerId.isNotEmpty() &&
-            trackerId == runtime.selectedTrackerId
+            selectedTrackerId().isNotEmpty() &&
+            trackerId == selectedTrackerId()
         if (!isLocalTracking || !runtime.autoTrackingEnabled) return null
         val modeRes = when (runtime.activeMotionMode) {
             TrackingMotionMode.WALKING -> R.string.settings_tracker_profile_walking
@@ -333,6 +354,12 @@ class TrackerParamsViewModel(
         }
     }
 
+    private fun selectedTrackerId(): String {
+        val fromStore = catalogStateStore.state.value.selectedTrackerId.trim()
+        if (fromStore.isNotEmpty()) return fromStore
+        return selectionController.selectedTrackerId(getApplication())
+    }
+
     override fun onCleared() {
         onScreenStopped()
         super.onCleared()
@@ -343,21 +370,11 @@ class TrackerParamsViewModel(
             object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
                 override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                    val repo = TrackerAppServices.from(application).trackerDetailRepository()
+                    val repo = TrackerAppServices.from(application).trackerManagementRepository()
                     return TrackerParamsViewModel(application, args, repo) as T
                 }
             }
     }
-}
-
-private fun isLocalTrackingMode(
-    runtime: TrackingRuntimeSnapshot,
-    selectedTrackerId: String,
-    trackerId: String,
-): Boolean {
-    return runtime.localRecordingActive &&
-        selectedTrackerId.isNotEmpty() &&
-        trackerId == selectedTrackerId
 }
 
 private fun Tracker.lastTimestampMs(): Long? {

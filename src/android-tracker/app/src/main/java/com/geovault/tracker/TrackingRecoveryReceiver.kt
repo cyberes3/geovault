@@ -3,12 +3,14 @@ package com.geovault.tracker
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.location.LocationManager
 import com.geovault.common.logging.GeoVaultCaptureLog
 import com.geovault.tracker.di.TrackerAppServices
-import com.geovault.tracker.runtime.TrackingRuntimeController
-import com.geovault.tracker.startup.RecoveryStartupPolicy
-import com.geovault.tracker.startup.RecoveryStartupSnapshot
-import com.geovault.tracker.startup.RecoveryTickOutcome
+import com.geovault.tracker.location.TrackingPermissionGate
+import com.geovault.tracker.runtime.RecoveryInput
+import com.geovault.tracker.runtime.RecoverySource
+import com.geovault.tracker.runtime.TrackerRuntimeEngine
+import com.geovault.tracker.runtime.TrackerRuntimeStore
 
 class TrackingRecoveryReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent?) {
@@ -18,36 +20,28 @@ class TrackingRecoveryReceiver : BroadcastReceiver() {
             GeoVaultCaptureLog.e(TAG, "Recovery receiver ignored because application context was not Application")
             return
         }
-        val settingsState = TrackerAppServices.from(app).trackerSettingsRepository().getState()
-        val controller = TrackingRuntimeController.get(app)
-        val outcome = RecoveryStartupPolicy.evaluate(
-            RecoveryStartupSnapshot(
-                action = action,
+        val services = TrackerAppServices.from(app)
+        val settingsState = services.trackerSettingsRepository().getState()
+        val engine = TrackerRuntimeEngine.get(app)
+        val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
+        val result = engine.handleWatchdogTick(
+            RecoveryInput(
+                source = RecoverySource.WatchdogTick,
+                shouldBeRunning = TrackerRuntimeStore.value.shouldBeRunning,
+                restartTrackingIfKilled = true,
+                startOnBoot = settingsState.settings.startOnBoot,
+                serviceRunning = engine.isRunning(),
                 settingsLoadState = settingsState.loadState,
-                wasTrackingBeforeExit = settingsState.wasTrackingBeforeExit
-            )
+                userUnlocked = true,
+                hasRequiredPermissions = TrackingPermissionGate.hasRequiredPermissionsForTracking(context),
+                gpsProviderEnabled = locationManager != null &&
+                    locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER),
+                selectedTrackerId = services.catalogSelectionController().selectedTrackerId(context),
+                lastHeartbeatAtMs = TrackerRuntimeStore.value.orchestration.lastHeartbeatAtMs,
+                nowMs = System.currentTimeMillis(),
+            ),
         )
-        when (outcome) {
-            is RecoveryTickOutcome.Handle -> {
-                val strict = controller.evaluateStrictPrerequisites()
-                GeoVaultCaptureLog.d(
-                    TAG,
-                    "Recovery handle action=$action wasTrackingBeforeExit=${settingsState.wasTrackingBeforeExit} strictReady=${strict.isReady}"
-                )
-                val result = controller.handleWatchdogTick(outcome.request)
-                GeoVaultCaptureLog.i(
-                    TAG,
-                    "Runtime recovery decision action=${result.action} reason=${result.reason} gate=${result.startGateDecision}"
-                )
-            }
-            is RecoveryTickOutcome.Defer -> {
-                GeoVaultCaptureLog.w(TAG, "Recovery deferred action=$action reason=${outcome.reason} delayMs=${outcome.delayMs}")
-                controller.ensureWatchdogScheduledIn(outcome.delayMs, reason = outcome.reason)
-            }
-            is RecoveryTickOutcome.Stop -> {
-                GeoVaultCaptureLog.w(TAG, "Recovery stopped action=$action reason=${outcome.reason}")
-            }
-        }
+        GeoVaultCaptureLog.i(TAG, "Runtime recovery action=$action reason=${result.reason} gate=${result.startGateDecision}")
     }
 
     companion object {

@@ -29,8 +29,8 @@ Intents (trunk/overlay/clear) → SourceStore → Assembler (+ window filter) �
 - `TrackerHistorySessionBoundary` may clear/recompose on **recording start/stop** only.
 - **Do not** call `Clear` or `repository.reset()` from map reload, streaming reconcile, or map surface open.
 - User clear history and logout use `Clear` / `clearSelectedTrackerCaches` as today.
-- Map render adds runtime head overlay in `map.MapTrailDisplaySubsystem`; it does not re-filter windows.
+- Map render adds the local GPS tip from `LiveHeadStore` / runtime overlay; it does not re-filter windows.
 
 ## Map integration
 
-[`TrackerMapRuntime`](../map/TrackerMapRuntime.kt) owns reload and display subsystems that dispatch intents and read `TrackerHistoryRepository.snapshots`.
+[`TrackerMapRuntime`](../map/TrackerMapRuntime.kt) owns `MapTrailEngine`, which reads `TrackerHistoryRepository.snapshots` and local-queue overlay. Catalog/user refresh write trunks through `HistoryTrunkIngestor`.

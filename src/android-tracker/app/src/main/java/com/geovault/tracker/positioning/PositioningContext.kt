@@ -8,7 +8,7 @@ import com.geovault.tracker.positioning.config.PositioningElasticityConfig
 import com.geovault.tracker.positioning.config.PositioningFastLockConfig
 import com.geovault.tracker.positioning.config.PositioningPolicyConfig
 import com.geovault.tracker.positioning.config.PositioningPresets
-import com.geovault.tracker.services.TrackingMotionMode
+import com.geovault.tracker.positioning.TrackingMotionMode
 import com.geovault.tracker.settings.TrackerSettings
 
 data class PositioningContext(

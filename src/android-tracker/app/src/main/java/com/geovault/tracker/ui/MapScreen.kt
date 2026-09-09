@@ -62,10 +62,9 @@ import com.geovault.common.maps.core.GeoVaultMapPaddingDp
 import com.geovault.common.maps.core.GeoVaultMapPhase
 import com.geovault.common.maps.core.MapLibreManager
 import com.geovault.common.maps.core.animateCameraToFitLatLngBounds
+import com.geovault.common.maps.core.animateCameraToHomeFit
 import com.geovault.common.maps.core.geoVaultCenterCameraWithMinimumZoom
 import com.geovault.common.maps.core.geoVaultCenterCameraPreserveZoom
-import com.geovault.common.maps.core.geoVaultLatLngBoundsUnion
-import com.geovault.common.maps.core.latLngOrNull
 import com.geovault.common.maps.core.moveCameraToFitLatLngBounds
 import com.geovault.common.maps.core.geoVaultResetCameraBearingAndTilt
 import com.geovault.common.maps.location.geoVaultMapHasFineOrCoarseLocation
@@ -80,7 +79,6 @@ import com.geovault.common.maps.ui.GeoVaultMapBottomActionPanel
 import com.geovault.common.maps.ui.GeoVaultMapFabColumn
 import com.geovault.common.maps.ui.GeoVaultMapInitialFrameShield
 import com.geovault.common.maps.ui.GeoVaultMapLocationPrimeEffect
-import com.geovault.common.maps.ui.location.rememberGeoVaultMapLocationSessionDecision
 import com.geovault.common.maps.ui.GeoVaultMapFabIcon
 import com.geovault.common.maps.ui.buildGeoVaultMapFabActions
 import com.geovault.common.maps.ui.geoVaultLayerToggleFabAction
@@ -89,6 +87,7 @@ import com.geovault.common.maps.ui.geoVaultZoomOutFabAction
 import com.geovault.common.maps.ui.oneshot.rememberGeoVaultGpsOneShotMyLocationFabAction
 import com.geovault.common.maps.ui.scale.GeoVaultMapScaleBar
 import com.geovault.common.maps.ui.scale.GeoVaultMapScaleBarDefaults
+import com.geovault.common.maps.ui.scaffold.GeoVaultMapScaffold
 import com.geovault.common.geo.CoordinateFormat
 import com.geovault.common.util.ClipboardCopyHelper
 import com.geovault.common.ui.GeoVaultAuthShellState
@@ -99,27 +98,21 @@ import com.geovault.common.ui.components.GeoVaultLoadingSpinner
 import com.geovault.common.ui.components.GeoVaultSecondaryButton
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.common.ui.theme.geoVaultContentSecondaryColor
-import com.geovault.tracker.di.TrackerAppServices
+import com.geovault.tracker.map.MapRenderMath
+import com.geovault.tracker.map.MapSessionDocument
+import com.geovault.tracker.map.MapSessionEngine
 import com.geovault.tracker.policy.ActiveButDeadTrackerPolicy
+import com.geovault.tracker.Tracker
 import com.geovault.tracker.params.TrackerParamsRouteArgs
 import com.geovault.tracker.params.toTrackerParamsRouteArgs
 import com.geovault.tracker.R
-import com.geovault.tracker.presentation.LiveActiveFitInput
 import com.geovault.tracker.presentation.TrackerMapDisplayMode
 import com.geovault.tracker.presentation.TrackerMapFitTrailMode
-import com.geovault.tracker.presentation.TrackerMapGpsAccuracyIndicatorPolicy
-import com.geovault.tracker.presentation.TrackerMapLiveActiveFitPolicy
 import com.geovault.tracker.presentation.TrackerMapRenderContract
 import com.geovault.tracker.presentation.TrackerMapSelectionCard
-import com.geovault.tracker.presentation.TrackerMapTopLeftChipMapper
 import com.geovault.tracker.presentation.TrackerMapTopLeftChipUiModel
-import com.geovault.tracker.presentation.TrackerMapUiState
 import com.geovault.tracker.presentation.TrackerMapLockFabBehavior
-import com.geovault.tracker.presentation.TrackerMapLockFabInput
-import com.geovault.tracker.presentation.TrackerMapLockFabPolicy
-import com.geovault.tracker.presentation.TrackerMapMyLocationFabPolicy
 import com.geovault.tracker.presentation.TrackerMapUserLocationInput
-import com.geovault.tracker.presentation.TrackerMapUserLocationPolicy
 import com.geovault.tracker.presentation.TrackerMapViewModel
 import com.geovault.tracker.ui.time.mapElapsedAgoText
 import org.maplibre.android.geometry.LatLng
@@ -134,8 +127,7 @@ fun MapScreen(
     isActive: Boolean = true,
     auth: GeoVaultAuthShellState,
     isServerAccessible: Boolean,
-    onHostNavigationRequested: (MapHostNavigationRequest) -> Unit,
-    onRequestTrackerParams: (TrackerParamsRouteArgs) -> Unit,
+    onNavigate: (MapNavigation) -> Unit,
 ) {
     GeoVaultTabShell(
         title = stringResource(R.string.map_screen_title),
@@ -151,8 +143,7 @@ fun MapScreen(
                 viewModel = mapViewModel,
                 isActive = isActive,
                 isServerAccessible = isServerAccessible,
-                onHostNavigationRequested = onHostNavigationRequested,
-                onRequestTrackerParams = onRequestTrackerParams,
+                onNavigate = onNavigate,
             )
         },
         tabOverlay = { TrackerParamsOverlayLayer() },
@@ -165,18 +156,16 @@ private fun TrackerMapAuthenticatedContent(
     viewModel: TrackerMapViewModel,
     isActive: Boolean,
     isServerAccessible: Boolean,
-    onHostNavigationRequested: (MapHostNavigationRequest) -> Unit,
-    onRequestTrackerParams: (TrackerParamsRouteArgs) -> Unit,
+    onNavigate: (MapNavigation) -> Unit,
 ) {
-    val state by viewModel.uiState.collectAsState()
     val renderPackage by viewModel.renderPackage.collectAsState()
-    val mapPaddingPolicy = remember { TrackerMapPaddingPolicy() }
-    val topLeftChipMapper = remember { TrackerMapTopLeftChipMapper() }
-    val topLeftChipModel = topLeftChipMapper.map(
-        state = state,
-        roster = viewModel.trackerRosterForMapChip(),
-        acceptedRemoteTrackerIds = viewModel.acceptedRemoteTrackerIdsForCurrentSession(),
-    )
+    val chrome by viewModel.chrome.collectAsState()
+    val sessionDocument by viewModel.sessionDocument.collectAsState()
+    val trailView by viewModel.trailView.collectAsState()
+    val recording = chrome.recording
+    val mapPaddingPolicy = MapRenderMath
+    val topLeftChipModel = chrome.chip
+    val selectionModel = sessionDocument.toSelectionPanelUiModel()
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val mapLocationPermission = rememberGeoVaultMapLocationPermissionState()
@@ -222,13 +211,7 @@ private fun TrackerMapAuthenticatedContent(
     }
 
     val activity = context as? Activity
-    val application = context.applicationContext as android.app.Application
-    val settingsRepo = remember(application) {
-        TrackerAppServices.from(application).trackerSettingsRepository()
-    }
-    val keepScreenOnSetting by settingsRepo.observeSettings()
-        .collectAsState(initial = settingsRepo.getSettings())
-    val shouldKeepScreenOn = isActive && keepScreenOnSetting.keepScreenOnWhileViewingMap
+    val shouldKeepScreenOn = isActive && chrome.keepScreenOnWhileViewingMap
     DisposableEffect(activity, shouldKeepScreenOn) {
         if (activity != null && shouldKeepScreenOn) {
             activity.window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -247,13 +230,28 @@ private fun TrackerMapAuthenticatedContent(
     // bounds-fit padding instead. Falls back to the policy's static guess for the first frame(s)
     // before layout has run, and to zero when no chip is shown at all.
     var topLeftChipMeasuredHeightPx by remember { mutableStateOf(0) }
+    var selectionPanelMeasuredHeightPx by remember { mutableStateOf(0) }
     val topLeftChipReserveDp = when {
         topLeftChipModel !is TrackerMapTopLeftChipUiModel.Visible -> 0.dp
         topLeftChipMeasuredHeightPx > 0 -> with(density) { topLeftChipMeasuredHeightPx.toDp() }
-        else -> TrackerMapPaddingPolicy.FallbackTopLeftChipViewportReserveTopDp
+        else -> MapRenderMath.FallbackTopLeftChipViewportReserveTopDp
     }
-    val boundsFitPaddingPx = remember(density, mapPaddingPolicy, topLeftChipReserveDp) {
-        mapPaddingPolicy.computeBoundsFitPaddingPx(density, topLeftChipReserveDp)
+    val selectionPanelReserveDp = when {
+        selectionModel == null -> 0.dp
+        selectionPanelMeasuredHeightPx > 0 -> with(density) { selectionPanelMeasuredHeightPx.toDp() }
+        else -> MapRenderMath.FallbackSelectionPanelViewportReserveBottomDp
+    }
+    val boundsFitPaddingPx = remember(
+        density,
+        mapPaddingPolicy,
+        topLeftChipReserveDp,
+        selectionPanelReserveDp,
+    ) {
+        mapPaddingPolicy.computeBoundsFitPaddingPx(
+            density,
+            topLeftChipReserveDp,
+            selectionPanelReserveDp,
+        )
     }
     val renderPlugin = remember {
         GeoJsonRenderPlugin(
@@ -276,8 +274,8 @@ private fun TrackerMapAuthenticatedContent(
     renderPlugin.onRenderedMapHitSelected = { hit ->
         val trackerId = trackerIdFromRenderedHit(
             id = hit.id,
-            displayedTrackerId = state.displayedTrackerId,
-            selectedTrackerId = state.runtime.selectedTrackerId,
+            displayedTrackerId = sessionDocument.displayedTrackerId,
+            selectedTrackerId = sessionDocument.selectedTrackerId,
         )
         if (trackerId != null) {
             viewModel.onTrackerMarkerTapped(trackerId)
@@ -293,30 +291,21 @@ private fun TrackerMapAuthenticatedContent(
         TrackerMapMarkerIconPlugin(context.applicationContext)
     }
     val locationPlugin = rememberGeoVaultMapUserLocationPlugin(context = context)
-    val userLocationPolicy = remember { TrackerMapUserLocationPolicy() }
     val viewportContextSeed = remember(
-        state.mode,
-        state.currentGroupId,
-        state.displayedTrackerId,
-        state.runtime.selectedTrackerId,
+        sessionDocument.mode,
+        sessionDocument.groupId,
+        sessionDocument.displayedTrackerId,
+        sessionDocument.selectedTrackerId,
     ) {
-        val effectiveDisplayedTrackerId = state.displayedTrackerId
-            .ifBlank { state.runtime.selectedTrackerId }
+        val effectiveDisplayedTrackerId = sessionDocument.displayedTrackerId
+            .ifBlank { sessionDocument.selectedTrackerId }
             .trim()
-        "${state.mode}|${state.currentGroupId.trim()}|$effectiveDisplayedTrackerId"
+        "${sessionDocument.mode}|${sessionDocument.groupId.trim()}|$effectiveDisplayedTrackerId"
     }
-    var liveGpsPuckRequestedThisSession by rememberSaveable(viewportContextSeed) {
-        mutableStateOf(false)
-    }
+    val liveGpsPuckRequestedThisSession = sessionDocument.surface.liveGpsPuckRequested
     val clearMapLocks = remember(viewModel) {
         { viewModel.disableAllMapLocks() }
     }
-    var gpsHomeAnchor by remember { mutableStateOf<LatLng?>(null) }
-    // LIVE PUCK TRACKING: unlike `gpsHomeAnchor` (a one-shot snapshot captured only when the
-    // "my location" FAB resolves a fix), this mirrors every fix the plugin renders while the
-    // puck is active, so a live-active-fit re-fit keeps a moving user framed instead of
-    // freezing on wherever they happened to be standing at FAB-tap time.
-    var liveGpsPuckPosition by remember { mutableStateOf<LatLng?>(null) }
     var didInitialBounds by remember { mutableStateOf(false) }
     // INITIAL-FRAME GATE: covers the map view with a loading overlay until the very
     // first camera directive at this viewport context has been applied (or, as a
@@ -327,8 +316,6 @@ private fun TrackerMapAuthenticatedContent(
     var mapInitialFrameReady by remember { mutableStateOf(false) }
     LaunchedEffect(viewportContextSeed) {
         didInitialBounds = false
-        gpsHomeAnchor = null
-        liveGpsPuckPosition = null
         // Re-arm the loading overlay on every viewport context change so the brief
         // window between "old context's camera position" and "new context's camera
         // fit" is hidden (e.g. switching tracker, switching to group mode).
@@ -337,37 +324,32 @@ private fun TrackerMapAuthenticatedContent(
         // first bounds fit for this one -- fall back to the default reserve until this
         // viewport's own chip (if any) reports its measured height.
         topLeftChipMeasuredHeightPx = 0
+        selectionPanelMeasuredHeightPx = 0
     }
-    val displayedTrackerId = state.displayedTrackerId.trim()
-        .ifBlank { state.runtime.selectedTrackerId.trim() }
-    val locallyRecordedTrackerId = state.runtime.locallyRecordedTrackerId.trim()
-    val ownRecordedTrackerOnScreen = state.runtime.localRecordingActive &&
-        locallyRecordedTrackerId.isNotEmpty() &&
-        displayedTrackerId == locallyRecordedTrackerId
+    val displayedTrackerId = sessionDocument.displayedTrackerId.trim()
+        .ifBlank { sessionDocument.selectedTrackerId.trim() }
+    val locallyRecordedTrackerId = recording.locallyRecordedTrackerId.trim()
     val layerFabAction = remember(map) { geoVaultLayerToggleFabAction(map) }
     val zoomInFabAction = remember(map) { geoVaultZoomInFabAction(map) }
     val zoomOutFabAction = remember(map) { geoVaultZoomOutFabAction(map) }
-    val gpsFabAction = key(viewportContextSeed) {
+    val gpsFabAction = key(viewportContextSeed, chrome.userLocation.shouldEnablePuck) {
         rememberGeoVaultGpsOneShotMyLocationFabAction(
             map = map,
             userLocation = locationPlugin,
             order = 30,
             onLocationResolved = { latLng ->
-                gpsHomeAnchor = latLng
+                viewModel.setGpsHomeAnchor(latLng.latitude, latLng.longitude)
                 mapLocationPermission.value = context.geoVaultMapHasFineOrCoarseLocation()
             },
-            showUserLocationPuck = !ownRecordedTrackerOnScreen,
+            showUserLocationPuck = chrome.userLocation.shouldEnablePuck,
             coordinateOverride = {
-                val runtime = state.runtime
-                val recordedId = runtime.locallyRecordedTrackerId.trim()
-                val displayedId = state.displayedTrackerId.trim()
-                    .ifBlank { runtime.selectedTrackerId.trim() }
-                if (runtime.localRecordingActive &&
+                val recordedId = recording.locallyRecordedTrackerId.trim()
+                if (recording.localRecordingActive &&
                     recordedId.isNotEmpty() &&
-                    displayedId == recordedId
+                    displayedTrackerId == recordedId
                 ) {
-                    val lat = runtime.lastTrackedLatitude
-                    val lon = runtime.lastTrackedLongitude
+                    val lat = recording.lastTrackedLatitude
+                    val lon = recording.lastTrackedLongitude
                     if (lat != null && lon != null) LatLng(lat, lon) else null
                 } else {
                     null
@@ -378,7 +360,6 @@ private fun TrackerMapAuthenticatedContent(
 
     DisposableEffect(locationPlugin) {
         val listener: (Location) -> Unit = { location ->
-            liveGpsPuckPosition = latLngOrNull(location.latitude, location.longitude)
             viewModel.setFollowPuck(location.latitude, location.longitude)
         }
         locationPlugin.addLocationListener(listener)
@@ -424,22 +405,15 @@ private fun TrackerMapAuthenticatedContent(
     }
 
     val locationSessionActive = isLifecycleStarted && isActive
-    val commonLocationDecision = rememberGeoVaultMapLocationSessionDecision(
-        hasLocationPermission = locationPermission,
-        isMapReady = phase == GeoVaultMapPhase.Ready,
-        isActive = locationSessionActive,
-        userLocationRequested = liveGpsPuckRequestedThisSession,
-    )
-    val userLocationDecision = remember(
+    LaunchedEffect(
         locationSessionActive,
         locationPermission,
         phase,
         liveGpsPuckRequestedThisSession,
         displayedTrackerId,
         locallyRecordedTrackerId,
-        commonLocationDecision,
     ) {
-        userLocationPolicy.evaluate(
+        viewModel.updateLocationSurface(
             TrackerMapUserLocationInput(
                 isMapActive = locationSessionActive,
                 hasLocationPermission = locationPermission,
@@ -447,22 +421,12 @@ private fun TrackerMapAuthenticatedContent(
                 userLocationRequestedThisSession = liveGpsPuckRequestedThisSession,
                 displayedTrackerId = displayedTrackerId,
                 locallyRecordedTrackerId = locallyRecordedTrackerId,
-            ),
-            commonDecision = commonLocationDecision,
+            )
         )
     }
-    val useTrackingLocationFixes = state.runtime.localRecordingActive &&
+    val userLocationDecision = chrome.userLocation
+    val useTrackingLocationFixes = recording.localRecordingActive &&
         userLocationDecision.shouldStreamGps
-
-    // ORPHAN GUARD: both anchors are captured/updated only while the puck is enabled -- once it
-    // is disabled (permission revoked, backgrounded, own recorded tracker on screen, etc.) they
-    // must not survive to be unioned into a later fit as stale, no-longer-current positions.
-    LaunchedEffect(userLocationDecision.shouldEnablePuck) {
-        if (!userLocationDecision.shouldEnablePuck) {
-            gpsHomeAnchor = null
-            liveGpsPuckPosition = null
-        }
-    }
 
     GeoVaultMapUserLocationNavigationLifecycle(
         userLocation = locationPlugin,
@@ -482,18 +446,18 @@ private fun TrackerMapAuthenticatedContent(
     )
     LaunchedEffect(
         useTrackingLocationFixes,
-        state.runtime.lastTrackedLatitude,
-        state.runtime.lastTrackedLongitude,
-        state.runtime.lastTrackedTimestampMs,
+        recording.lastTrackedLatitude,
+        recording.lastTrackedLongitude,
+        recording.lastTrackedTimestampMs,
     ) {
         if (!useTrackingLocationFixes) return@LaunchedEffect
-        val lat = state.runtime.lastTrackedLatitude ?: return@LaunchedEffect
-        val lon = state.runtime.lastTrackedLongitude ?: return@LaunchedEffect
+        val lat = recording.lastTrackedLatitude ?: return@LaunchedEffect
+        val lon = recording.lastTrackedLongitude ?: return@LaunchedEffect
         val synthetic = Location("tracker-recording").apply {
             latitude = lat
             longitude = lon
-            accuracy = state.runtime.lastAccuracyMeters ?: 12f
-            time = state.runtime.lastTrackedTimestampMs.takeIf { it > 0L }
+            accuracy = recording.lastAccuracyMeters ?: 12f
+            time = recording.lastTrackedTimestampMs.takeIf { it > 0L }
                 ?: System.currentTimeMillis()
         }
         locationPlugin.renderLocation(synthetic)
@@ -507,6 +471,9 @@ private fun TrackerMapAuthenticatedContent(
     LaunchedEffect(
         phase,
         renderPackage.revision,
+        sessionDocument.mode,
+        sessionDocument.visibleTrackerIds,
+        trailView.tracksByTrackerId.keys,
     ) {
         if (phase != GeoVaultMapPhase.Ready) return@LaunchedEffect
         delay(RENDER_COALESCE_MS)
@@ -588,34 +555,23 @@ private fun TrackerMapAuthenticatedContent(
                     )
                     didInitialBounds = true
                 } else {
-                    // GPS ANCHOR UNION: a one-shot explicit fit (the "Home" FAB) additionally
-                    // frames in the last-resolved GPS one-shot anchor, if any, so the position
-                    // the user tapped "my location" at stays in view for that single fit. An
-                    // ongoing live-active-fit re-fit instead unions the *live*, continuously-
-                    // updating puck position -- using the one-shot anchor there would freeze the
-                    // union at wherever the user happened to be standing when the FAB was
-                    // originally tapped, silently falling out of frame as they walk away from it.
-                    // Both anchors are Compose-local UI state the ViewModel has no notion of, so
-                    // the union happens here rather than at request time.
-                    val effectiveBounds = when (directive.reason) {
-                        com.geovault.tracker.presentation.TrackerMapCameraDirective.Reason.ExplicitFit -> {
-                            gpsHomeAnchor?.let { anchor -> geoVaultLatLngBoundsUnion(directive.bounds, listOf(anchor)) }
-                                ?: directive.bounds
-                        }
-                        com.geovault.tracker.presentation.TrackerMapCameraDirective.Reason.LiveActiveFit -> {
-                            liveGpsPuckPosition
-                                .takeIf { userLocationDecision.shouldEnablePuck }
-                                ?.let { anchor -> geoVaultLatLngBoundsUnion(directive.bounds, listOf(anchor)) }
-                                ?: directive.bounds
-                        }
-                        else -> directive.bounds
+                    if (directive.reason ==
+                        com.geovault.tracker.presentation.TrackerMapCameraDirective.Reason.ExplicitFit &&
+                        directive.mode == TrackerMapFitTrailMode.Animated
+                    ) {
+                        map.animateCameraToHomeFit(
+                            bounds = directive.bounds,
+                            gpsAnchor = null,
+                            paddingPx = boundsFitPaddingPx,
+                        )
+                    } else {
+                        fitTrackerMapBounds(
+                            map = map,
+                            bounds = directive.bounds,
+                            boundsFitPaddingPx = boundsFitPaddingPx,
+                            mode = directive.mode,
+                        )
                     }
-                    fitTrackerMapBounds(
-                        map = map,
-                        bounds = effectiveBounds,
-                        boundsFitPaddingPx = boundsFitPaddingPx,
-                        mode = directive.mode,
-                    )
                 }
                 mapInitialFrameReady = true
             }
@@ -643,7 +599,11 @@ private fun TrackerMapAuthenticatedContent(
         // has to fight the top-left tracker chip or the top-right FAB column for screen space --
         // both of those already claim the top edge of the map surface itself.
         MapBatteryOptimizationHint(
-            visible = state.batteryOptimizationHintVisible,
+            visible = sessionDocument.surface.batteryOptimizationHintVisible,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+        )
+        MapTrailDegradeHint(
+            visible = chrome.trailDegradedVisible,
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
         )
         Box(
@@ -651,64 +611,7 @@ private fun TrackerMapAuthenticatedContent(
                 .weight(1f)
                 .fillMaxWidth(),
         ) {
-            // Keep persistent viewport padding at zero. MapLibre Native's
-            // `TransformState::constrain` clamps the camera centre to the Web-Mercator
-            // ±85° band using the full viewport height but does NOT compensate for
-            // `edgeInsets`, so any non-zero top or bottom viewport padding lets the user
-            // pan the camera past the world edge and exposes the MapView underlay.
-            // Top/left reserves for the chip and FAB column are still applied to
-            // bounds-fit camera updates via `boundsFitPaddingPx`, which is one-shot and
-            // therefore doesn't leave a persistent camera offset.
-            GeoVaultMainMapView(
-                modifier = Modifier.fillMaxSize(),
-                map = map,
-                showDefaultSourceToggle = false,
-                includeDefaultFabColumnPadding = false,
-                mapPaddingDp = GeoVaultMapPaddingDp(),
-                suppressMapLoadErrorDialog = !isServerAccessible,
-            )
-
-            val effectiveDisplayedTrackerId = state.displayedTrackerId
-                .ifBlank { state.runtime.selectedTrackerId }
-                .trim()
-            val lockFabBehavior = TrackerMapLockFabPolicy.resolve(
-                TrackerMapLockFabInput(
-                    mode = state.mode,
-                    displayedTrackerId = effectiveDisplayedTrackerId,
-                    selectionLockTrackerId = state.selectionLockTrackerId,
-                    liveActiveFitEnabled = state.liveActiveFitEnabled,
-                    followLockEnabled = state.followLockEnabled,
-                )
-            )
-            val selectionLockBehavior = lockFabBehavior as? TrackerMapLockFabBehavior.SelectionLock
-            val singleTrackerLocked = selectionLockBehavior?.isLocked == true
-            val isSelectedDefaultTracker = selectionLockBehavior != null &&
-                selectionLockBehavior.displayedTrackerId == state.runtime.selectedTrackerId.trim()
-            // MULTI-TRACKER GATE: fitting bounds around a single point is indistinguishable from
-            // centering on it, so the live-active-fit toggle only earns its keep once there's a
-            // second tracker/position sharing the map. This is deliberately just the user's own
-            // GPS puck -- a locally-recorded tracker different from the one currently displayed
-            // was considered here too, but SINGLE_SESSION bounds (trailBoundsOrNull in
-            // MapTrailDisplaySubsystem) and point routing (TrackerMapPointRouter.routeLocal) both
-            // only ever use the *displayed* tracker's own trail/position; a differing overlay
-            // tracker's points are accepted but never appended to any trail or unioned into
-            // bounds in this mode. Gating on it here would show a toggle that's a pure no-op.
-            // Hoisted above the FAB builder (rather than computed inline) so the auto-clear
-            // effect below can react to it too.
-            val hasMultipleTrackersOnMap = userLocationDecision.shouldEnablePuck
-            // STUCK-LIVE-FIT GUARD: once this gate drops to false, the secondary FAB that would
-            // let the user turn live active fit back off disappears too (see
-            // TrackerMapLiveActiveFitPolicy.resolveVisibility) -- without this, a toggle enabled
-            // while a second tracker/GPS puck was present would stay silently stuck on forever
-            // once that second position source goes away (e.g. GPS puck disabled, or the local
-            // recording overlay tracker changes). Auto-clearing here preserves the selection lock
-            // (see MapContextSubsystem.setLiveActiveFit) -- only the live-fit modifier itself is
-            // dropped.
-            LaunchedEffect(hasMultipleTrackersOnMap, viewportContextSeed) {
-                if (!hasMultipleTrackersOnMap && state.liveActiveFitEnabled) {
-                    viewModel.setLiveActiveFit(false)
-                }
-            }
+            val lockFabBehavior = chrome.lockFab
             val lockFabIsActive = when (lockFabBehavior) {
                 is TrackerMapLockFabBehavior.SelectionLock -> lockFabBehavior.isLocked
                 is TrackerMapLockFabBehavior.LiveActiveFit -> lockFabBehavior.isEnabled
@@ -736,13 +639,7 @@ private fun TrackerMapAuthenticatedContent(
                         }
                     },
                 )
-                if (
-                    TrackerMapMyLocationFabPolicy.shouldShowFab(
-                        mode = state.mode,
-                        displayedTrackerId = state.displayedTrackerId,
-                        selectedTrackerId = state.runtime.selectedTrackerId,
-                    )
-                ) {
+                if (chrome.showMyLocationFab) {
                     action(
                         id = gpsFabAction.id,
                         order = gpsFabAction.order,
@@ -750,7 +647,7 @@ private fun TrackerMapAuthenticatedContent(
                         contentDescription = fabDescLiveGpsPuck,
                         tooltip = tooltipMapLiveGpsPuck,
                         onTap = {
-                            liveGpsPuckRequestedThisSession = true
+                            viewModel.requestLiveGpsPuck()
                             gpsFabAction.onTap?.invoke()
                         },
                     )
@@ -787,36 +684,23 @@ private fun TrackerMapAuthenticatedContent(
                         }
                     },
                 )
-                val liveActiveFitLockArmed = TrackerMapLiveActiveFitPolicy.resolveLockArmed(
-                    singleTrackerLocked = singleTrackerLocked,
-                )
-                val liveActiveFitVisibility = TrackerMapLiveActiveFitPolicy.resolveVisibility(
-                    LiveActiveFitInput(
-                        mode = state.mode,
-                        followLockArmed = liveActiveFitLockArmed,
-                        liveActiveFitEnabled = state.liveActiveFitEnabled,
-                        hasTrailPoints = state.trail.isNotEmpty(),
-                        isSelectedDefaultTracker = isSelectedDefaultTracker,
-                        hasMultipleTrackersOnMap = hasMultipleTrackersOnMap,
-                    )
-                )
-                if (liveActiveFitVisibility.showButton) {
+                if (chrome.liveActiveFit.showButton) {
                     action(
                         id = "live_active_fit",
                         order = 32,
                         icon = GeoVaultMapFabIcon.Drawable(
-                            if (state.liveActiveFitEnabled) R.drawable.ic_live_active_fit_on
+                            if (chrome.liveActiveFitEnabled) R.drawable.ic_live_active_fit_on
                             else R.drawable.ic_live_active_fit_off
                         ),
-                        contentDescription = if (state.liveActiveFitEnabled) {
+                        contentDescription = if (chrome.liveActiveFitEnabled) {
                             fabDescLiveActiveFitDisable
                         } else {
                             fabDescLiveActiveFitEnable
                         },
-                        enabled = liveActiveFitVisibility.buttonEnabled,
+                        enabled = chrome.liveActiveFit.buttonEnabled,
                         tooltip = tooltipMapLiveActiveFit,
                         onTap = {
-                            viewModel.setLiveActiveFit(!state.liveActiveFitEnabled)
+                            viewModel.setLiveActiveFit(!chrome.liveActiveFitEnabled)
                         },
                     )
                 }
@@ -848,122 +732,134 @@ private fun TrackerMapAuthenticatedContent(
                 )
             }
 
-            GeoVaultMapFabColumn(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(top = 16.dp, end = 16.dp),
-                actions = mapFabActions,
-            )
-
-            if (topLeftChipModel is TrackerMapTopLeftChipUiModel.Visible) {
-                BoxWithConstraints(
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .fillMaxWidth()
-                        // Placed before `padding` so the measured size includes the top offset
-                        // below, i.e. the full reserved region from the top of the map down to
-                        // below the chip -- exactly what `boundsFitPaddingPx` above needs.
-                        .onGloballyPositioned { coordinates ->
-                            topLeftChipMeasuredHeightPx = coordinates.size.height
-                        }
-                        .padding(top = 16.dp, start = 16.dp, end = 80.dp),
-                ) {
-                    // KEYED ON VIEWPORT: forces the chip's internal `remember`ed interaction
-                    // state (tooltip-suppression, tracked card bounds) to reset when the tracker
-                    // being viewed changes, instead of silently carrying over state that was
-                    // computed for a different tracker's chip.
-                    key(viewportContextSeed) {
-                        MapTopLeftTrackerChip(
-                            modifier = Modifier.widthIn(max = maxWidth),
-                            model = topLeftChipModel,
-                            onCardClick = {
-                                onHostNavigationRequested(
-                                    MapHostNavigationRequestResolver.fromListNavigationTarget(
-                                        viewModel.resolveListNavigationTarget()
-                                    )
+            val gpsAccuracyIndicatorModel = chrome.gpsAccuracy
+            GeoVaultMapScaffold(
+                modifier = Modifier.fillMaxSize(),
+                showDrawer = false,
+                topStart = {
+                    if (topLeftChipModel is TrackerMapTopLeftChipUiModel.Visible) {
+                        BoxWithConstraints(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .onGloballyPositioned { coordinates ->
+                                    topLeftChipMeasuredHeightPx = coordinates.size.height
+                                }
+                                .padding(top = 16.dp, start = 16.dp, end = 80.dp),
+                        ) {
+                            key(viewportContextSeed) {
+                                MapTopLeftTrackerChip(
+                                    modifier = Modifier.widthIn(max = maxWidth),
+                                    model = topLeftChipModel,
+                                    onCardClick = {
+                                        onNavigate(
+                                            MapNavigation.List(
+                                                MapHostNavigationRequestResolver.fromListNavigationTarget(
+                                                    viewModel.resolveListNavigationTarget()
+                                                )
+                                            )
+                                        )
+                                    },
+                                    onResetClick = viewModel::restoreSelectedTrackerMapContext,
                                 )
-                            },
-                            onResetClick = viewModel::restoreSelectedTrackerMapContext,
+                            }
+                        }
+                    }
+                },
+                topEnd = {
+                    GeoVaultMapFabColumn(
+                        modifier = Modifier.padding(top = 16.dp, end = 16.dp),
+                        actions = mapFabActions,
+                    )
+                },
+                bottomStart = {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.Start,
+                    ) {
+                        GeoVaultMapScaleBar(
+                            map = map,
+                            modifier = Modifier.padding(
+                                start = GeoVaultMapScaleBarDefaults.EdgePadding,
+                                bottom = if (selectionModel != null) {
+                                    GeoVaultMapScaleBarDefaults.DrawerGap
+                                } else {
+                                    GeoVaultMapScaleBarDefaults.EdgePadding
+                                },
+                            ),
+                        )
+                        if (selectionModel != null) {
+                            GeoVaultMapBottomActionPanel(
+                                modifier = Modifier.onGloballyPositioned { coordinates ->
+                                    selectionPanelMeasuredHeightPx = coordinates.size.height
+                                },
+                            ) {
+                                Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+                                    MapTrackerSelectionPanel(
+                                        model = selectionModel,
+                                        onViewInList = {
+                                            onNavigate(
+                                                MapNavigation.List(
+                                                    MapHostNavigationRequestResolver.fromListNavigationTarget(
+                                                        viewModel.resolveListNavigationTarget(selectionModel.trackerId)
+                                                    )
+                                                )
+                                            )
+                                        },
+                                        onViewParams = {
+                                            onNavigate(
+                                                MapNavigation.Params(
+                                                    selectionModel.toTrackerParamsRouteArgs(
+                                                        viewModel.catalogTracker(selectionModel.trackerId),
+                                                    )
+                                                )
+                                            )
+                                        },
+                                        onFocus = viewModel::focusSelectedTrackerOnMap,
+                                        onToggleLock = viewModel::toggleSelectedTrackerLock,
+                                        onClear = viewModel::clearMapTrackerSelection,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                },
+                bottomEnd = {
+                    Column(
+                        modifier = Modifier.padding(bottom = 16.dp, end = 16.dp),
+                        horizontalAlignment = Alignment.End,
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        if (gpsAccuracyIndicatorModel.isVisible) {
+                            MapGpsAccuracyIndicator()
+                        }
+                        MapStreamingIndicator(
+                            model = chrome.streamingStatus,
                         )
                     }
-                }
-            }
-            if (state.isGeometryLoading) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(MaterialTheme.colors.background),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    GeoVaultLoadingSpinner(
-                        bottomText = stringResource(R.string.map_status_map_loading),
+                },
+                mapContent = {
+                    GeoVaultMainMapView(
+                        modifier = Modifier.fillMaxSize(),
+                        map = map,
+                        showDefaultSourceToggle = false,
+                        includeDefaultFabColumnPadding = false,
+                        mapPaddingDp = GeoVaultMapPaddingDp(),
+                        suppressMapLoadErrorDialog = !isServerAccessible,
                     )
-                }
-            }
-            val gpsAccuracyIndicatorModel = TrackerMapGpsAccuracyIndicatorPolicy.resolve(state.runtime)
-            Column(
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(bottom = 16.dp, end = 16.dp),
-                horizontalAlignment = Alignment.End,
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                if (gpsAccuracyIndicatorModel.isVisible) {
-                    MapGpsAccuracyIndicator()
-                }
-                MapStreamingIndicator(
-                    model = state.streamingStatus,
-                )
-            }
-            val selectionModel = state.toSelectionPanelUiModel()
-            Column(
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .fillMaxWidth(),
-                horizontalAlignment = Alignment.Start,
-            ) {
-                GeoVaultMapScaleBar(
-                    map = map,
-                    modifier = Modifier.padding(
-                        start = GeoVaultMapScaleBarDefaults.EdgePadding,
-                        bottom = if (selectionModel != null) {
-                            GeoVaultMapScaleBarDefaults.DrawerGap
-                        } else {
-                            GeoVaultMapScaleBarDefaults.EdgePadding
-                        },
-                    ),
-                )
-                if (selectionModel != null) {
-                    GeoVaultMapBottomActionPanel {
-                        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
-                            MapTrackerSelectionPanel(
-                                model = selectionModel,
-                                onViewInList = {
-                                    onHostNavigationRequested(
-                                        MapHostNavigationRequestResolver.fromListNavigationTarget(
-                                            viewModel.resolveListNavigationTarget(selectionModel.trackerId)
-                                        )
-                                    )
-                                },
-                                onViewParams = {
-                                    onRequestTrackerParams(selectionModel.toTrackerParamsRouteArgs())
-                                },
-                                onFocus = viewModel::focusSelectedTrackerOnMap,
-                                onToggleLock = viewModel::toggleSelectedTrackerLock,
-                                onClear = viewModel::clearMapTrackerSelection,
+                    if (sessionDocument.surface.geometryLoading) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(MaterialTheme.colors.background),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            GeoVaultLoadingSpinner(
+                                bottomText = stringResource(R.string.map_status_map_loading),
                             )
                         }
                     }
-                }
-            }
-            // INITIAL-FRAME LOADING SHIELD: drawn last so it occludes everything in
-            // the map area (map view, FABs, chips, indicators) until the very first
-            // camera directive for the current viewport context has been applied.
-            // The shield stays until the first position is set after map ready; otherwise
-            // the user briefly sees MapLibre's default camera (~0,0) before the
-            // LaunchedEffect that consumes the directive can run on the same frame
-            // `phase` flips Ready.
-            // Touch is swallowed so the user can't pan the still-loading map.
+                },
+            )
             GeoVaultMapInitialFrameShield(
                 visible = !mapInitialFrameReady,
                 statusText = stringResource(R.string.map_status_map_loading),
@@ -1003,9 +899,9 @@ private fun fitTrackerMapBounds(
     }
 }
 
-private fun TrackerMapUiState.toSelectionPanelUiModel(): MapSelectionPanelUiModel? {
-    val selection = selectedMapTracker ?: return null
-    if (!isBottomCardVisible) return null
+private fun MapSessionDocument.toSelectionPanelUiModel(): MapSelectionPanelUiModel? {
+    val selection = selectionCard ?: return null
+    if (!surface.bottomCardVisible) return null
     return MapSelectionPanelUiModel(
         trackerId = selection.trackerId,
         trackerName = selection.trackerName,
@@ -1016,12 +912,14 @@ private fun TrackerMapUiState.toSelectionPanelUiModel(): MapSelectionPanelUiMode
         serverMetadataUpdatedAtMs = selection.serverMetadataUpdatedAtMs,
         lastPointParamsMs = selection.lastPointParamsMs,
         accuracyMeters = selection.accuracyMeters,
-        isLocked = selectionLockTrackerId == selection.trackerId,
-        showFocusAction = TrackerMapViewModel.resolveFocusActionVisible(mode),
+        isLocked = cameraLock.selectionTrackerId == selection.trackerId,
+        showFocusAction = MapSessionEngine.resolveFocusActionVisible(mode),
     )
 }
 
-private fun MapSelectionPanelUiModel.toTrackerParamsRouteArgs(): TrackerParamsRouteArgs {
+private fun MapSelectionPanelUiModel.toTrackerParamsRouteArgs(
+    tracker: Tracker? = null,
+): TrackerParamsRouteArgs {
     return TrackerMapSelectionCard(
         trackerId = trackerId,
         trackerName = trackerName,
@@ -1032,7 +930,7 @@ private fun MapSelectionPanelUiModel.toTrackerParamsRouteArgs(): TrackerParamsRo
         isOwned = isOwned,
         serverMetadataUpdatedAtMs = serverMetadataUpdatedAtMs,
         lastPointParamsMs = lastPointParamsMs,
-    ).toTrackerParamsRouteArgs()
+    ).toTrackerParamsRouteArgs(tracker)
 }
 
 @Composable
@@ -1206,6 +1104,25 @@ private fun MapInfoActionIconButton(
         contentPadding = PaddingValues(0.dp),
         tooltip = tooltip,
     )
+}
+
+@Composable
+private fun MapTrailDegradeHint(
+    visible: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    if (!visible) return
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        color = MaterialTheme.colors.background,
+    ) {
+        Text(
+            text = stringResource(R.string.map_status_trail_degraded),
+            style = MaterialTheme.typography.caption,
+            color = geoVaultContentSecondaryColor(),
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
+        )
+    }
 }
 
 private fun trackerIdFromRenderedHit(

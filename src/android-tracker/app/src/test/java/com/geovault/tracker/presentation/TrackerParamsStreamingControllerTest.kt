@@ -2,9 +2,8 @@ package com.geovault.tracker.presentation
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
-import com.geovault.tracker.MapStreamingStartResult
-import com.geovault.tracker.MapStreamingStopResult
-import com.geovault.tracker.streaming.LiveStreamServicePort
+import com.geovault.tracker.streaming.FakeLiveStreamHostPort
+import com.geovault.tracker.streaming.FakeLiveStreamPersistPort
 import com.geovault.tracker.streaming.LiveStreamSubscriptionRepository
 import com.geovault.tracker.streaming.StreamingOwner
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -142,24 +141,14 @@ class TrackerParamsStreamingControllerTest {
         testScope: kotlinx.coroutines.test.TestScope,
     ): Pair<TrackerParamsStreamingController, LiveStreamSubscriptionRepository> {
         val context: Context = ApplicationProvider.getApplicationContext()
+        val persist = FakeLiveStreamPersistPort()
         val repository = LiveStreamSubscriptionRepository(
             appContext = context,
-            servicePort = NoOpLiveStreamServicePort,
+            persist = persist,
+            host = FakeLiveStreamHostPort(persist),
             dispatchDebounceMs = 0L,
             scope = testScope,
         )
         return TrackerParamsStreamingController(repository) to repository
-    }
-
-    private object NoOpLiveStreamServicePort : LiveStreamServicePort {
-        override fun startStreaming(
-            context: Context,
-            trackerIds: Set<String>,
-            trackerName: String?,
-        ): MapStreamingStartResult = MapStreamingStartResult.Started(trackerIds)
-
-        override fun stopStreaming(context: Context): MapStreamingStopResult = MapStreamingStopResult.Stopped
-
-        override fun persistedTargets(context: Context): Pair<Set<String>, String?> = emptySet<String>() to null
     }
 }

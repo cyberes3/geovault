@@ -9,13 +9,13 @@ class PendingReloadCameraFitTest {
 
     @Test
     fun arm_nonFetchingReasonNeverArms() {
-        val fit = PendingReloadCameraFit()
+        val engine = MapTrailEngine()
 
-        fit.arm(TrackerMapTrailReloadReason.GenericMapRefresh, generation = 0L)
+        engine.armReloadFit(TrackerMapTrailReloadReason.GenericMapRefresh, generation = 0L)
 
         assertFalse(
             "A non-fetching reason must never arm the flag, even if a later fetching reason lands.",
-            fit.consumeIfLanded(
+            engine.consumeReloadFitIfLanded(
                 reason = TrackerMapTrailReloadReason.GenericMapRefresh,
                 hasData = true,
                 anyLockActive = false,
@@ -26,10 +26,10 @@ class PendingReloadCameraFitTest {
 
     @Test
     fun consumeIfLanded_nonFetchingReasonNeverConsumesEvenIfArmedByFetchingReason() {
-        val fit = PendingReloadCameraFit()
-        fit.arm(TrackerMapTrailReloadReason.ExplicitTrackerLoad, generation = 0L)
+        val engine = MapTrailEngine()
+        engine.armReloadFit(TrackerMapTrailReloadReason.ExplicitTrackerLoad, generation = 0L)
 
-        val consumed = fit.consumeIfLanded(
+        val consumed = engine.consumeReloadFitIfLanded(
             reason = TrackerMapTrailReloadReason.GenericMapRefresh,
             hasData = true,
             anyLockActive = false,
@@ -41,11 +41,11 @@ class PendingReloadCameraFitTest {
 
     @Test
     fun consumeIfLanded_requiresArmedDataPresentAndFetchingReason() {
-        val fit = PendingReloadCameraFit()
-        fit.arm(TrackerMapTrailReloadReason.ExplicitTrackerLoad, generation = 0L)
+        val engine = MapTrailEngine()
+        engine.armReloadFit(TrackerMapTrailReloadReason.ExplicitTrackerLoad, generation = 0L)
 
         assertTrue(
-            fit.consumeIfLanded(
+            engine.consumeReloadFitIfLanded(
                 reason = TrackerMapTrailReloadReason.ExplicitTrackerLoad,
                 hasData = true,
                 anyLockActive = false,
@@ -56,10 +56,10 @@ class PendingReloadCameraFitTest {
 
     @Test
     fun consumeIfLanded_doesNotConsumeWhenNotArmed() {
-        val fit = PendingReloadCameraFit()
+        val engine = MapTrailEngine()
 
         assertFalse(
-            fit.consumeIfLanded(
+            engine.consumeReloadFitIfLanded(
                 reason = TrackerMapTrailReloadReason.ExplicitTrackerLoad,
                 hasData = true,
                 anyLockActive = false,
@@ -70,11 +70,11 @@ class PendingReloadCameraFitTest {
 
     @Test
     fun consumeIfLanded_doesNotConsumeWhenNoData() {
-        val fit = PendingReloadCameraFit()
-        fit.arm(TrackerMapTrailReloadReason.ExplicitTrackerLoad, generation = 0L)
+        val engine = MapTrailEngine()
+        engine.armReloadFit(TrackerMapTrailReloadReason.ExplicitTrackerLoad, generation = 0L)
 
         assertFalse(
-            fit.consumeIfLanded(
+            engine.consumeReloadFitIfLanded(
                 reason = TrackerMapTrailReloadReason.ExplicitTrackerLoad,
                 hasData = false,
                 anyLockActive = false,
@@ -90,10 +90,10 @@ class PendingReloadCameraFitTest {
         // behavior, it also must disarm here -- once a data-bearing landing for the armed reason
         // has occurred, the arm's job is done either way, so a later, unrelated reload can never
         // pick up this stale arm.
-        val fit = PendingReloadCameraFit()
-        fit.arm(TrackerMapTrailReloadReason.StreamingStart, generation = 0L)
+        val engine = MapTrailEngine()
+        engine.armReloadFit(TrackerMapTrailReloadReason.StreamingStart, generation = 0L)
 
-        val consumed = fit.consumeIfLanded(
+        val consumed = engine.consumeReloadFitIfLanded(
             reason = TrackerMapTrailReloadReason.StreamingStart,
             hasData = true,
             anyLockActive = true,
@@ -101,7 +101,7 @@ class PendingReloadCameraFitTest {
         )
         assertFalse(consumed)
 
-        val laterUnrelatedConsume = fit.consumeIfLanded(
+        val laterUnrelatedConsume = engine.consumeReloadFitIfLanded(
             reason = TrackerMapTrailReloadReason.ExplicitTrackerLoad,
             hasData = true,
             anyLockActive = false,
@@ -115,16 +115,16 @@ class PendingReloadCameraFitTest {
 
     @Test
     fun consumeIfLanded_disarmsAfterSuccessfulConsume() {
-        val fit = PendingReloadCameraFit()
-        fit.arm(TrackerMapTrailReloadReason.ExplicitTrackerLoad, generation = 0L)
+        val engine = MapTrailEngine()
+        engine.armReloadFit(TrackerMapTrailReloadReason.ExplicitTrackerLoad, generation = 0L)
 
-        val firstConsume = fit.consumeIfLanded(
+        val firstConsume = engine.consumeReloadFitIfLanded(
             reason = TrackerMapTrailReloadReason.ExplicitTrackerLoad,
             hasData = true,
             anyLockActive = false,
             currentGeneration = 0L,
         )
-        val secondConsume = fit.consumeIfLanded(
+        val secondConsume = engine.consumeReloadFitIfLanded(
             reason = TrackerMapTrailReloadReason.ExplicitTrackerLoad,
             hasData = true,
             anyLockActive = false,
@@ -140,10 +140,10 @@ class PendingReloadCameraFitTest {
         // POST-GESTURE SNAP: a fetch armed before the user started panning must not fire a
         // full-extent fit after the gesture bumped the camera generation -- but it still
         // disarms, so it can't be picked up by a later, unrelated reload either.
-        val fit = PendingReloadCameraFit()
-        fit.arm(TrackerMapTrailReloadReason.ExplicitTrackerLoad, generation = 0L)
+        val engine = MapTrailEngine()
+        engine.armReloadFit(TrackerMapTrailReloadReason.ExplicitTrackerLoad, generation = 0L)
 
-        val consumed = fit.consumeIfLanded(
+        val consumed = engine.consumeReloadFitIfLanded(
             reason = TrackerMapTrailReloadReason.ExplicitTrackerLoad,
             hasData = true,
             anyLockActive = false,
@@ -151,7 +151,7 @@ class PendingReloadCameraFitTest {
         )
         assertFalse("Generation moved on since arm -- a gesture happened, so this must not fire.", consumed)
 
-        val laterUnrelatedConsume = fit.consumeIfLanded(
+        val laterUnrelatedConsume = engine.consumeReloadFitIfLanded(
             reason = TrackerMapTrailReloadReason.RosterChanged,
             hasData = true,
             anyLockActive = false,
@@ -162,11 +162,11 @@ class PendingReloadCameraFitTest {
 
     @Test
     fun consumeIfLanded_firesWhenGenerationUnchangedSinceArm() {
-        val fit = PendingReloadCameraFit()
-        fit.arm(TrackerMapTrailReloadReason.ExplicitTrackerLoad, generation = 3L)
+        val engine = MapTrailEngine()
+        engine.armReloadFit(TrackerMapTrailReloadReason.ExplicitTrackerLoad, generation = 3L)
 
         assertTrue(
-            fit.consumeIfLanded(
+            engine.consumeReloadFitIfLanded(
                 reason = TrackerMapTrailReloadReason.ExplicitTrackerLoad,
                 hasData = true,
                 anyLockActive = false,
@@ -177,14 +177,14 @@ class PendingReloadCameraFitTest {
 
     @Test
     fun disarm_nonFetchingReasonNeverDisarms() {
-        val fit = PendingReloadCameraFit()
-        fit.arm(TrackerMapTrailReloadReason.ExplicitTrackerLoad, generation = 0L)
+        val engine = MapTrailEngine()
+        engine.armReloadFit(TrackerMapTrailReloadReason.ExplicitTrackerLoad, generation = 0L)
 
-        fit.disarm(TrackerMapTrailReloadReason.GenericMapRefresh)
+        engine.disarmReloadFit(TrackerMapTrailReloadReason.GenericMapRefresh)
 
         assertTrue(
             "A non-fetching reason's disarm call must be a no-op against a fetching-reason arm.",
-            fit.consumeIfLanded(
+            engine.consumeReloadFitIfLanded(
                 reason = TrackerMapTrailReloadReason.ExplicitTrackerLoad,
                 hasData = true,
                 anyLockActive = false,
@@ -195,13 +195,13 @@ class PendingReloadCameraFitTest {
 
     @Test
     fun disarm_fetchingReasonDisarms() {
-        val fit = PendingReloadCameraFit()
-        fit.arm(TrackerMapTrailReloadReason.ExplicitTrackerLoad, generation = 0L)
+        val engine = MapTrailEngine()
+        engine.armReloadFit(TrackerMapTrailReloadReason.ExplicitTrackerLoad, generation = 0L)
 
-        fit.disarm(TrackerMapTrailReloadReason.ExplicitTrackerLoad)
+        engine.disarmReloadFit(TrackerMapTrailReloadReason.ExplicitTrackerLoad)
 
         assertFalse(
-            fit.consumeIfLanded(
+            engine.consumeReloadFitIfLanded(
                 reason = TrackerMapTrailReloadReason.ExplicitTrackerLoad,
                 hasData = true,
                 anyLockActive = false,

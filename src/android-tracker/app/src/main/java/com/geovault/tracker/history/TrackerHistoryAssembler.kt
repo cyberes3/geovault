@@ -122,10 +122,8 @@ object TrackerHistoryAssembler {
                     "trunk_batches=${if (input.trunk != null) 1 else 0} overlay_batches=${input.overlayBatches.size} " +
                     "action=defer_empty",
             )
-            return TrackerHistoryTransactionResult(
+            return TrackerHistoryTransactionResult.DeferredEmpty(
                 snapshot = input.previousSnapshot.copy(isLoading = false),
-                committed = false,
-                reason = "empty_snapshot_deferred",
             )
         }
         val snapshot = TrackerHistorySnapshot(
@@ -155,11 +153,11 @@ object TrackerHistoryAssembler {
                     "complete=${snapshot.complete} degraded=${snapshot.degradedLocalOnly}"
             )
         }
-        return TrackerHistoryTransactionResult(
-            snapshot = snapshot,
-            committed = true,
-            reason = if (wasForcedEmptyCommit) "forced_empty_commit" else "composed",
-        )
+        return if (wasForcedEmptyCommit) {
+            TrackerHistoryTransactionResult.ForcedEmpty(snapshot = snapshot)
+        } else {
+            TrackerHistoryTransactionResult.Composed(snapshot = snapshot)
+        }
     }
 
     private fun fallback(input: TrackerHistoryComposeInput, reason: String): TrackerHistoryTransactionResult {
@@ -171,10 +169,9 @@ object TrackerHistoryAssembler {
             committedAtMs = input.nowMs,
             generation = input.nowMs,
         )
-        return TrackerHistoryTransactionResult(
+        return TrackerHistoryTransactionResult.RejectedTrunk(
             snapshot = previous,
-            committed = false,
-            reason = reason,
+            rejectReason = reason,
         )
     }
 
@@ -222,7 +219,6 @@ object TrackerHistoryAssembler {
         val priority = mapOf(
             TrackerHistoryProvenance.LOCAL_QUEUE to 4,
             TrackerHistoryProvenance.LOCAL_LIVE to 3,
-            TrackerHistoryProvenance.RUNTIME_HEAD to 2,
             TrackerHistoryProvenance.REMOTE_STREAM to 1,
             TrackerHistoryProvenance.SERVER_GEOMETRY to 0,
         )

@@ -5,7 +5,7 @@ import com.geovault.tracker.policy.StreamingTargetPolicyInput
 
 /**
  * The two independent callers that can want a live-track websocket subscription. Each owner
- * holds at most one [OwnerLease] at a time; [LiveStreamSubscriptionRepository] merges them.
+ * holds at most one [StreamIntent] at a time; [LiveStreamSubscriptionRepository] merges them.
  */
 enum class StreamingOwner {
     MAP,
@@ -19,10 +19,23 @@ enum class StreamingOwner {
  * subscription, so the locally-recorded tracker never round-trips through the websocket
  * regardless of which owner's request happened to include it.
  */
-data class OwnerLease(
+data class StreamIntent(
     val trackerIds: Set<String>,
     val displayName: String? = null,
     val locallyRecordedTrackerId: String? = null,
+)
+
+
+data class StreamLease(
+    val owner: StreamingOwner,
+    val intent: StreamIntent,
+)
+
+data class ConnectionHealth(
+    val phase: ConnectionPhase = ConnectionPhase.IDLE,
+    val activeTargets: Set<String> = emptySet(),
+    val failureReason: String? = null,
+    val hasConnectedThisProcess: Boolean = false,
 )
 
 /**
@@ -61,6 +74,9 @@ enum class ReapplyReason {
 enum class ClearReason {
     LOGOUT,
     ACCOUNT_RESET,
+    NOTIFICATION,
+    TASK_REMOVED,
+    TIMEOUT,
 }
 
 data class DispatchedCommand(
@@ -74,8 +90,8 @@ data class DispatchedCommand(
  * streaming" ([connection]/[activeTargets]).
  */
 data class LiveStreamSubscriptionState(
-    val leases: Map<StreamingOwner, OwnerLease> = emptyMap(),
-    internal val bootstrapLease: OwnerLease? = null,
+    val leases: Map<StreamingOwner, StreamIntent> = emptyMap(),
+    internal val bootstrapLease: StreamIntent? = null,
     val connection: ConnectionPhase = ConnectionPhase.IDLE,
     val activeTargets: Set<String> = emptySet(),
     val failureReason: String? = null,
@@ -91,7 +107,7 @@ data class LiveStreamSubscriptionState(
      */
     val hasConnectedThisProcess: Boolean = false,
 ) {
-    private val effectiveLeases: List<OwnerLease>
+    private val effectiveLeases: List<StreamIntent>
         get() = leases.values + listOfNotNull(bootstrapLease)
 
     /** Union of every owner's requested ids (plus any still-live bootstrap seed), minus every owner's locally-recorded id. */
@@ -117,6 +133,14 @@ data class LiveStreamSubscriptionState(
     val wantsSubscription: Boolean get() = mergedTargets.isNotEmpty()
 
     /** True only when the connection is actually [ConnectionPhase.RUNNING]. */
+    val health: ConnectionHealth
+        get() = ConnectionHealth(
+            phase = connection,
+            activeTargets = activeTargets,
+            failureReason = failureReason,
+            hasConnectedThisProcess = hasConnectedThisProcess,
+        )
+
     val subscriptionHealthy: Boolean get() = connection == ConnectionPhase.RUNNING
 
     /**

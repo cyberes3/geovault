@@ -1,5 +1,6 @@
 package com.geovault.tracker.policy
 
+import com.geovault.tracker.domain.TrackPoint
 import com.geovault.tracker.policy.filter.LocationFilterConfig
 import com.geovault.tracker.policy.filter.LocationFilterPolicy
 import org.junit.After
@@ -53,24 +54,24 @@ class TrackPointPolicyEngineStreamIsolationTest {
     fun differentSources_doNotShareAnchorStateForSameTrackId() {
         val track = "shared-id"
         TrackPointPolicyEngine.evaluate(
-            event = TrackPointEvent(
-                source = TrackPointSource.LOCAL_GPS,
-                trackId = track,
-                lon = 10.0,
-                lat = 10.0,
-                timestampMs = 1_000L,
+            event = TrackPoint(
+                provenance = TrackPointSource.LOCAL_GPS,
+                trackerId = track,
+                longitude = 10.0,
+                latitude = 10.0,
+                timeMs = 1_000L,
                 accuracyMeters = 5f,
             ),
             nowMs = 1_000L,
             config = baseConfig,
         )
         val remoteFirst = TrackPointPolicyEngine.evaluate(
-            event = TrackPointEvent(
-                source = TrackPointSource.REMOTE_STREAM,
-                trackId = track,
-                lon = 30.0,
-                lat = 30.0,
-                timestampMs = 1_000L,
+            event = TrackPoint(
+                provenance = TrackPointSource.REMOTE_STREAM,
+                trackerId = track,
+                longitude = 30.0,
+                latitude = 30.0,
+                timeMs = 1_000L,
                 accuracyMeters = 5f,
             ),
             nowMs = 1_000L,
@@ -207,13 +208,13 @@ class TrackPointPolicyEngineStreamIsolationTest {
         TrackPointPolicyEngine.notifyMotionChanged(TrackPointSource.LOCAL_GPS, "never-seen")
     }
 
-    private fun makeEvent(track: String, lat: Double, lon: Double, ts: Long): TrackPointEvent {
-        return TrackPointEvent(
-            source = TrackPointSource.LOCAL_GPS,
-            trackId = track,
-            lon = lon,
-            lat = lat,
-            timestampMs = ts,
+    private fun makeEvent(track: String, lat: Double, lon: Double, ts: Long): TrackPoint {
+        return TrackPoint(
+            provenance = TrackPointSource.LOCAL_GPS,
+            trackerId = track,
+            longitude = lon,
+            latitude = lat,
+            timeMs = ts,
             accuracyMeters = 5f,
         )
     }

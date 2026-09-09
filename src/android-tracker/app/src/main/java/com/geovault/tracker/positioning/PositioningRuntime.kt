@@ -9,19 +9,18 @@ import android.location.Location
 import android.location.LocationListener
 import android.os.IBinder
 import com.geovault.common.logging.GeoVaultCaptureLog
-import com.geovault.tracker.SelectedTrackerManager
-import com.geovault.tracker.TrackingRecoveryCoordinator
+import com.geovault.tracker.di.TrackerAppServices
 import com.geovault.tracker.positioning.collection.GpsCollectionSubsystem
 import com.geovault.tracker.positioning.collection.LocationRequestSubsystem
 import com.geovault.tracker.positioning.ingest.FixIngestSubsystem
+import com.geovault.tracker.positioning.motion.MotionOrchestrator
 import com.geovault.tracker.positioning.motion.MotionSubsystem
+import com.geovault.tracker.positioning.motion.ResumeIntent
 import com.geovault.tracker.positioning.recovery.RecoverySubsystem
-import com.geovault.tracker.runtime.TrackingRuntimeController
-import com.geovault.tracker.runtime.RuntimeCommand
-import com.geovault.tracker.runtime.RuntimeCommandType
-import com.geovault.tracker.runtime.RuntimeTrigger
+import com.geovault.tracker.runtime.TrackerRuntimeCommands
+import com.geovault.tracker.runtime.TrackerRuntimeEngine
 import com.geovault.tracker.runtime.TrackingServiceLifecycleGate
-import com.geovault.tracker.services.TrackingRuntimeSnapshot
+import com.geovault.tracker.positioning.TrackingRuntimeSnapshot
 import com.geovault.tracker.tracking.TrackingService
 import com.geovault.tracker.tracking.TrackingServiceConstants
 import com.geovault.tracker.tracking.TrackingServiceIntents
@@ -62,6 +61,7 @@ internal class PositioningRuntime(
     internal lateinit var commands: CommandDiagnosticsSubsystem
     internal lateinit var manualFix: ManualFixSubsystem
     internal lateinit var upload: UploadSubsystem
+    internal lateinit var motionOrchestrator: MotionOrchestrator
 
     internal val localTrackPointOrderingCounter get() = state.localTrackPointOrderingCounter
 
@@ -72,7 +72,7 @@ internal class PositioningRuntime(
             return@LocationListener
         }
         if (utilities.isWaitingForProviderState()) {
-            collection.resumeFromGpsProviderWait(reason = "location_callback")
+            motionOrchestrator.resume(ResumeIntent.ProviderWait("location_callback"))
             if (utilities.isWaitingForProviderState()) {
                 return@LocationListener
             }
@@ -90,7 +90,7 @@ internal class PositioningRuntime(
         override fun onReceive(context: Context?, intent: Intent?) {
             if (!state.isTracking) return
             if (utilities.isGpsProviderEnabled()) {
-                collection.resumeFromGpsProviderWait(reason = "provider_broadcast")
+                motionOrchestrator.resume(ResumeIntent.ProviderWait("provider_broadcast"))
             } else {
                 collection.enterWaitingForGpsProvider(reason = "provider_broadcast")
             }
@@ -106,6 +106,7 @@ internal class PositioningRuntime(
         contextBuilder = PositioningContextBuilder(this)
         projection = RuntimeProjectionSubsystem(this)
         collection = GpsCollectionSubsystem(this)
+        motionOrchestrator = MotionOrchestrator(this)
         locationRequests = LocationRequestSubsystem(this)
         recovery = RecoverySubsystem(this)
         motion = MotionSubsystem(this)
@@ -129,9 +130,11 @@ internal class PositioningRuntime(
             )
             wireSubsystems()
             deps.wire(settingsRepositoryLazy)
-            SelectedTrackerManager.syncRuntimeSelectedTracker(service)
-            TrackingRecoveryCoordinator.markHeartbeat(service.applicationContext)
-            projection.syncRuntimeStateStore()
+            TrackerAppServices.from(service.application).catalogSelectionController().seedFromPersist(service)
+            TrackerRuntimeEngine.get(service.applicationContext).handle(
+                TrackerRuntimeCommands.Heartbeat(),
+            )
+            projection.commit()
             contextBuilder.startSparseTrackingObserver()
             TrackingServiceLifecycleGate.markUsable()
         } catch (t: Throwable) {
@@ -182,7 +185,9 @@ internal class PositioningRuntime(
                 }
             }
             TrackingServiceIntents.StartupCommandPath.StopNoRestart -> {
-                TrackingRecoveryCoordinator.markIntentionalStop(service.applicationContext, reason = "restart_not_required")
+                TrackerRuntimeEngine.get(service.applicationContext).handle(
+                    TrackerRuntimeCommands.ServiceStopped(reason = "restart_not_required"),
+                )
                 foreground.stopSelfSafelyAfterStartup(reason = "restart_not_required")
                 Service.START_NOT_STICKY
             }
@@ -195,7 +200,7 @@ internal class PositioningRuntime(
                             sessionBoundaryId = state.sessionVisibleBoundaryId,
                         )
                         projection.updateRuntimeSnapshot { it.copy(queuedPointsVisible = count) }
-                        projection.syncRuntimeStateStore()
+                        projection.commit()
                         withContext(Dispatchers.Main) {
                             val notification: Notification = deps.notificationPresenter.buildTrackingNotification(
                                 state.runtimeSnapshot,
@@ -236,7 +241,9 @@ internal class PositioningRuntime(
                 if (intent?.action == TrackingServiceIntents.ACTION_STOP) {
                     lifecycle.stopTracking(reason = "action_stop")
                 } else {
-                    TrackingRecoveryCoordinator.markIntentionalStop(service.applicationContext, reason = "unknown_action")
+                    TrackerRuntimeEngine.get(service.applicationContext).handle(
+                        TrackerRuntimeCommands.ServiceStopped(reason = "unknown_action"),
+                    )
                     foreground.stopSelfSafelyAfterStartup(reason = "unknown_action")
                 }
                 Service.START_NOT_STICKY
@@ -254,12 +261,8 @@ internal class PositioningRuntime(
                 "lifecycle=${state.controlState.lifecycleState} generation=${state.trackingGeneration} " +
                 "rootAction=${rootIntent?.action ?: "none"}",
         )
-        TrackingRuntimeController.get(service.applicationContext).handle(
-            RuntimeCommand(
-                type = RuntimeCommandType.TASK_REMOVED,
-                trigger = RuntimeTrigger.TASK_REMOVED,
-                reason = "task_removed",
-            ),
+        TrackerRuntimeEngine.get(service.applicationContext).handle(
+            TrackerRuntimeCommands.TaskRemoved(),
         )
     }
 
@@ -267,7 +270,9 @@ internal class PositioningRuntime(
         GeoVaultCaptureLog.d(TrackingServiceConstants.TAG, "onDestroy isTracking=${state.isTracking}")
         TrackingServiceLifecycleGate.markDestroying()
         if (state.isTracking) {
-            TrackingRecoveryCoordinator.markUnexpectedDestroy(service.applicationContext, wasTracking = true)
+            TrackerRuntimeEngine.get(service.applicationContext).handle(
+                TrackerRuntimeCommands.UnexpectedDestroy(wasTracking = true),
+            )
             lifecycle.transitionToStoppedState(failureReason = "unexpected_destroy")
         }
         lifecycle.cleanupServiceResources(reason = "on_destroy")

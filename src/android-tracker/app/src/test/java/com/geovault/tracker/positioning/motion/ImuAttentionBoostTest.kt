@@ -3,7 +3,7 @@ package com.geovault.tracker.positioning.motion
 import com.geovault.tracker.TrackingLocationPolicy
 import com.geovault.tracker.policy.filter.StationaryConfidence
 import com.geovault.tracker.sensor.ImuClassification
-import com.geovault.tracker.services.TrackingMotionMode
+import com.geovault.tracker.positioning.TrackingMotionMode
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test

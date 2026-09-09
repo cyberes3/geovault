@@ -1,10 +1,11 @@
 package com.geovault.tracker.presentation
 
 import com.geovault.tracker.db.QueuedLocation
-import com.geovault.tracker.policy.TrackPointEvent
+import com.geovault.tracker.map.MapRenderMath
+import com.geovault.tracker.domain.TrackPoint
 import com.geovault.tracker.policy.TrackPointSource
-import com.geovault.tracker.services.RecordingRuntime
-import com.geovault.tracker.services.TrackingRuntimeSnapshot
+import com.geovault.tracker.positioning.RecordingRuntime
+import com.geovault.tracker.positioning.TrackingRuntimeSnapshot
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Test
@@ -12,12 +13,12 @@ import org.junit.Test
 class TrackerMapEffectiveSessionProjectorLiveHeadTest {
     @Test
     fun resolveLiveHead_viewingSharedWhileRecording_usesSharedRemoteNotNull() {
-        val remote = TrackPointEvent(
-            source = TrackPointSource.REMOTE_STREAM,
-            trackId = "shared",
-            lon = 6.0,
-            lat = 5.0,
-            timestampMs = 2_000L,
+        val remote = TrackPoint(
+            provenance = TrackPointSource.REMOTE_STREAM,
+            trackerId = "shared",
+            longitude = 6.0,
+            latitude = 5.0,
+            timeMs = 2_000L,
         )
         val trail = listOf(
             QueuedLocation(
@@ -35,8 +36,6 @@ class TrackerMapEffectiveSessionProjectorLiveHeadTest {
             uiState = TrackerMapUiState(
                 mode = TrackerMapDisplayMode.SINGLE_SESSION,
                 displayedTrackerId = "shared",
-                trail = trail,
-                remoteLastPoints = mapOf("shared" to remote),
             ),
             plan = TrackerMapStreamingPlan(
                 mode = TrackerMapDisplayMode.SINGLE_SESSION,
@@ -65,7 +64,7 @@ class TrackerMapEffectiveSessionProjectorLiveHeadTest {
             acceptedRemoteLastPoints = mapOf("shared" to remote),
         )
 
-        val head = TrackerMapEffectiveSessionProjector.resolveLiveHead(snapshot)
+        val head = MapRenderMath.resolveLiveHead(snapshot)
 
         assertNotNull(head)
         assertEquals(5.0 to 6.0, head)

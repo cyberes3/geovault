@@ -1,5 +1,6 @@
 package com.geovault.tracker.policy
 
+import com.geovault.tracker.domain.TrackPoint
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -21,7 +22,7 @@ class RemoteStreamIngressPolicyTest {
             nowMs = now
         )
         assertNotNull(accepted)
-        assertEquals("t1", accepted!!.trackId)
+        assertEquals("t1", accepted!!.trackerId)
         assertEquals(true, accepted.orderingKey > 0L)
     }
 
@@ -60,12 +61,12 @@ class RemoteStreamIngressPolicyTest {
         val now = 1_700_000_000_000L
         TrackPointCrossSourceState.update(
             trackId = "t1",
-            event = TrackPointEvent(
-                source = TrackPointSource.LOCAL_GPS,
-                trackId = "t1",
-                lon = -120.0,
-                lat = 60.0,
-                timestampMs = now - 10_000L,
+            event = TrackPoint(
+                provenance = TrackPointSource.LOCAL_GPS,
+                trackerId = "t1",
+                longitude = -120.0,
+                latitude = 60.0,
+                timeMs = now - 10_000L,
                 accuracyMeters = 5f
             )
         )
@@ -79,9 +80,8 @@ class RemoteStreamIngressPolicyTest {
     }
 
     @Test
-    fun updateSubscribedTracks_evictsRemovedTrackStateWithoutResettingRetainedTracks() {
+    fun resetTracks_evictsRemovedTrackStateWithoutResettingRetainedTracks() {
         val now = 1_700_000_000_000L
-        RemoteStreamIngressPolicy.updateSubscribedTracks(listOf("A", "B"))
         assertNotNull(
             RemoteStreamIngressPolicy.process(
                 event = remoteEvent(trackId = "A", timestampMs = now - 1_000L, lon = 10.0, lat = 20.0),
@@ -95,7 +95,7 @@ class RemoteStreamIngressPolicyTest {
             )
         )
 
-        RemoteStreamIngressPolicy.updateSubscribedTracks(listOf("B", "C"))
+        RemoteStreamIngressPolicy.resetTracks(listOf("A"))
         val acceptedAfterEviction = RemoteStreamIngressPolicy.process(
             event = remoteEvent(trackId = "A", timestampMs = now - 2_000L, lon = 10.1, lat = 20.1),
             nowMs = now
@@ -144,9 +144,8 @@ class RemoteStreamIngressPolicyTest {
     }
 
     @Test
-    fun startSubscriptionSession_resetsCurrentSubscribedTrackState() {
+    fun resetRemoteSession_clearsRemoteTrackState() {
         val now = 1_700_000_000_000L
-        RemoteStreamIngressPolicy.updateSubscribedTracks(listOf("B"))
         assertNotNull(
             RemoteStreamIngressPolicy.process(
                 event = remoteEvent(trackId = "B", timestampMs = now - 1_000L, lon = 30.0, lat = 40.0),
@@ -154,7 +153,7 @@ class RemoteStreamIngressPolicyTest {
             )
         )
 
-        RemoteStreamIngressPolicy.startSubscriptionSession(listOf("B"))
+        RemoteStreamIngressPolicy.resetRemoteSession()
         val acceptedAfterSocketReset = RemoteStreamIngressPolicy.process(
             event = remoteEvent(trackId = "B", timestampMs = now - 2_000L, lon = 30.1, lat = 40.1),
             nowMs = now
@@ -163,13 +162,13 @@ class RemoteStreamIngressPolicyTest {
         assertNotNull(acceptedAfterSocketReset)
     }
 
-    private fun remoteEvent(trackId: String, timestampMs: Long, lon: Double, lat: Double): TrackPointEvent {
-        return TrackPointEvent(
-            source = TrackPointSource.REMOTE_STREAM,
-            trackId = trackId,
-            lon = lon,
-            lat = lat,
-            timestampMs = timestampMs,
+    private fun remoteEvent(trackId: String, timestampMs: Long, lon: Double, lat: Double): TrackPoint {
+        return TrackPoint(
+            provenance = TrackPointSource.REMOTE_STREAM,
+            trackerId = trackId,
+            longitude = lon,
+            latitude = lat,
+            timeMs = timestampMs,
             accuracyMeters = 10f
         )
     }

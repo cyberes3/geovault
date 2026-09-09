@@ -18,7 +18,7 @@ object HiddenTrackersPolicy {
     fun buildItems(trackers: List<Tracker>, groups: List<Group>): List<HiddenTrackerItem> {
         val hiddenTrackers = trackers
             .asSequence()
-            .filter { it.isOwner() && ((it.settings?.get("hidden") as? Boolean) == true) }
+            .filter { it.isOwner() && it.catalogSettings.hidden }
             .map { HiddenTrackerItem(id = it.id, name = it.name, type = HiddenTrackerItemType.TRACKER) }
             .sortedBy { it.name.lowercase() }
             .toList()

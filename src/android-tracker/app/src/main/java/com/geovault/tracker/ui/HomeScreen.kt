@@ -1,11 +1,11 @@
 package com.geovault.tracker.ui
 
 import android.Manifest
+import android.app.Application
 import android.graphics.Rect
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
-import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -73,19 +73,18 @@ import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.common.ui.theme.geoVaultContentSecondaryColor
 import com.geovault.common.ui.time.rememberNowMs
 import com.geovault.tracker.sensor.ImuMotionClassifier
+import com.geovault.tracker.Tracker
 import com.geovault.tracker.params.TrackerParamsRouteArgs
-import com.geovault.tracker.params.TrackerParamsSeed
+import com.geovault.tracker.params.paramsRouteArgs
 import com.geovault.tracker.R
+import com.geovault.tracker.di.TrackerAppServices
 import com.geovault.tracker.location.TrackingPermissionGate
 import com.geovault.tracker.presentation.HomeLayoutMode
 import com.geovault.tracker.presentation.HomeLayoutSizingInput
 import com.geovault.tracker.presentation.HomeLayoutSizingPolicy
 import com.geovault.tracker.presentation.HomeUiState
 import com.geovault.tracker.presentation.HomeViewModel
-import com.geovault.tracker.presentation.TrackerLastReportedAtPolicy
-import com.geovault.tracker.services.RecordingRuntime
-import com.geovault.tracker.services.TrackingRuntimeSnapshot
-import com.geovault.tracker.services.TrackingUiStatus
+import com.geovault.tracker.positioning.TrackingUiStatus
 import com.geovault.tracker.ui.time.HomeElapsedTimeFormat
 
 private const val MAX_DISPLAY_ACCURACY_FEET = 1500f
@@ -95,12 +94,6 @@ private val MAX_DISPLAY_ACCURACY_METERS = MAX_DISPLAY_ACCURACY_FEET / DistanceFo
 fun HomeScreen(
     auth: GeoVaultAuthShellState,
     isServerAccessible: Boolean,
-    isPreparingToTrack: Boolean,
-    infoMessage: String?,
-    onClearInfoMessage: () -> Unit,
-    onRequestStartTracking: () -> Unit,
-    onRequestStopTracking: () -> Unit,
-    onRequestManualPoint: () -> Unit,
     onRequestTrackerParams: (TrackerParamsRouteArgs) -> Unit,
 ) {
     val homeViewModel: HomeViewModel = viewModel()
@@ -169,8 +162,12 @@ fun HomeScreen(
                 perms.hasExactAlarmPermission &&
                 perms.hasActivityRecognition &&
                 perms.hasOtherSensors
-            val trackerParamsArgs = homeTrackerParamsRouteArgsOrNull(homeState)
+            val trackerParamsArgs = homeTrackerParamsRouteArgsOrNull(
+                homeState,
+                homeViewModel.catalogTracker(homeState.selectedTrackerId),
+            )
             val showInlineButtons = homeState.isTracking && homeState.selectedTrackerId.isNotBlank()
+            val isPreparingToTrack = homeState.isPreparingToTrack
             val isRunningOrPreparing = homeState.isTracking || isPreparingToTrack
 
             val imuAvailable = remember(context) { ImuMotionClassifier.isAvailable(context) }
@@ -231,11 +228,11 @@ fun HomeScreen(
                             if (isRunningOrPreparing) {
                                 showStopTrackingConfirm = true
                             } else {
-                                onRequestStartTracking()
+                                homeViewModel.requestStartTracking()
                             }
                         },
                         onParams = { trackerParamsArgs?.let(onRequestTrackerParams) },
-                        onManualPoint = onRequestManualPoint,
+                        onManualPoint = homeViewModel::requestManualPoint,
                     )
                 }
                 if (!isServerAccessible && !auth.isConnecting) {
@@ -268,7 +265,7 @@ fun HomeScreen(
             message = stringResource(R.string.home_stop_confirm_message),
             onConfirm = {
                 showStopTrackingConfirm = false
-                onRequestStopTracking()
+                homeViewModel.requestStopTracking()
             },
             onCancel = { showStopTrackingConfirm = false },
             confirmText = stringResource(R.string.stop_tracking),
@@ -344,11 +341,9 @@ private fun PermissionsContainer(
                     if (hasForegroundLocation) {
                         onGrantBackground()
                     } else {
-                        Toast.makeText(
-                            context,
-                            context.getString(R.string.grant_location_permission_first),
-                            Toast.LENGTH_SHORT
-                        ).show()
+                        TrackerAppServices.from(context.applicationContext as Application)
+                            .uiEffects()
+                            .emitMessage(context.getString(R.string.grant_location_permission_first))
                     }
                 },
                 tooltip = stringResource(R.string.tooltip_grant_background_location),
@@ -681,19 +676,7 @@ private fun formatDurationMs(isTracking: Boolean, sessionStartTimeMs: Long, nowM
 
 private fun formatHomeLastAgo(state: HomeUiState, nowMs: Long): String {
     if (!state.isTracking) return "\u2014"
-    val lastMs = TrackerLastReportedAtPolicy.resolve(
-        trackerId = state.selectedTrackerId,
-        runtime = TrackingRuntimeSnapshot(
-            selectedTrackerId = state.selectedTrackerId,
-            recordingRuntime = RecordingRuntime(
-                sessionActive = true,
-                selectedTrackerId = state.selectedTrackerId,
-            ),
-            lastPointSentAtMs = state.lastPointSentAtMs,
-        ),
-        resolverLastUpdatedMs = state.lastPointSentAtMs.takeIf { it > 0L },
-    )
-    return HomeElapsedTimeFormat.format(lastMs, nowMs)
+    return HomeElapsedTimeFormat.format(state.lastPointSentAtMs.takeIf { it > 0L }, nowMs)
 }
 
 private fun formatDistanceText(
@@ -722,34 +705,22 @@ private fun formatAccuracyPresentation(state: HomeUiState, system: MeasurementSy
     )
 }
 
-private fun homeTrackerParamsRouteArgsOrNull(state: HomeUiState): TrackerParamsRouteArgs? {
+private fun homeTrackerParamsRouteArgsOrNull(
+    state: HomeUiState,
+    tracker: Tracker?,
+): TrackerParamsRouteArgs? {
     val trackerId = state.selectedTrackerId.trim()
     if (trackerId.isBlank()) return null
-    val lat = state.lastTrackedLatitude
-    val lon = state.lastTrackedLongitude
     val trackerName = state.selectedTrackerDisplayName.ifBlank { state.selectedTrackerId }
     if (trackerName.isBlank()) return null
-    val lastUpdateMs = TrackerLastReportedAtPolicy.resolve(
+    val lastUpdateMs = state.lastPointSentAtMs.takeIf { it > 0L }
+    return paramsRouteArgs(
+        tracker = tracker,
         trackerId = trackerId,
-        runtime = TrackingRuntimeSnapshot(
-            selectedTrackerId = trackerId,
-            recordingRuntime = RecordingRuntime(
-                sessionActive = state.isTracking,
-                selectedTrackerId = trackerId,
-            ),
-            lastPointSentAtMs = state.lastPointSentAtMs,
-        ),
-        resolverLastUpdatedMs = state.lastPointSentAtMs.takeIf { it > 0L },
-    )
-    return TrackerParamsRouteArgs(
-        trackerId = trackerId,
-        seed = TrackerParamsSeed(
-            displayName = trackerName,
-            lastUpdateMs = lastUpdateMs,
-            latitude = lat,
-            longitude = lon,
-            initialParams = null,
-            isOwner = true,
-        ),
+        displayName = trackerName,
+        lastUpdateMs = lastUpdateMs,
+        latitude = state.lastTrackedLatitude,
+        longitude = state.lastTrackedLongitude,
+        isOwner = true,
     )
 }

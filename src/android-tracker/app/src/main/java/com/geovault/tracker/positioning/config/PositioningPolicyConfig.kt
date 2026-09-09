@@ -1,5 +1,5 @@
 package com.geovault.tracker.positioning.config
-import com.geovault.tracker.services.TrackingMotionMode
+import com.geovault.tracker.positioning.TrackingMotionMode
 
 import com.geovault.tracker.policy.filter.LocationFilterConfig
 import com.geovault.tracker.policy.filter.MotionProfileTuning

@@ -2,7 +2,7 @@ package com.geovault.tracker.presentation
 
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.db.QueuedLocation
-import com.geovault.tracker.policy.TrackPointEvent
+import com.geovault.tracker.domain.TrackPoint
 import com.geovault.tracker.policy.TrackPointSource
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -38,20 +38,15 @@ class TrackerMapGroupBoundsResolverTest {
     @Test
     fun resolve_activeOnly_rosterOnlyLiveTractor_includesLastPoint() {
         val nowMs = System.currentTimeMillis()
-        val trackers = listOf(
-            Tracker(
-                id = "live-roster",
-                name = "Live",
-                color = null,
-                updated_at = (nowMs - 20 * 60 * 1000L) / 1000L,
-                last_point = listOf(-74.0, 40.0, (nowMs - 30_000L).toDouble()),
-            ),
-            Tracker(
-                id = "stale-roster",
-                name = "Stale",
-                color = null,
-                updated_at = (nowMs - 20 * 60 * 1000L) / 1000L,
-                last_point = listOf(-80.0, 35.0),
+        val remoteLastPoints = mapOf(
+            "live-roster" to TrackPoint(
+                trackerId = "live-roster",
+                latitude = 40.0,
+                longitude = -74.0,
+                timeMs = nowMs - 30_000L,
+                accuracyMeters = null,
+                propsJson = null,
+                provenance = TrackPointSource.REMOTE_STREAM,
             ),
         )
 
@@ -60,7 +55,8 @@ class TrackerMapGroupBoundsResolverTest {
                 liveActiveFitEnabled = true,
                 fitOnlyActiveTrackers = true,
                 visibleTrackerIds = setOf("live-roster", "stale-roster"),
-                trackers = trackers,
+                remoteLastPoints = remoteLastPoints,
+                acceptedRemoteTrackerIds = setOf("live-roster"),
                 nowMs = nowMs,
             ),
         )
@@ -119,20 +115,24 @@ class TrackerMapGroupBoundsResolverTest {
     @Test
     fun resolve_allVisible_includesAllRosterLastPoints() {
         val nowMs = System.currentTimeMillis()
-        val trackers = listOf(
-            Tracker(
-                id = "a",
-                name = "A",
-                color = null,
-                updated_at = (nowMs - 20 * 60 * 1000L) / 1000L,
-                last_point = listOf(-74.0, 40.0),
+        val remoteLastPoints = mapOf(
+            "a" to TrackPoint(
+                trackerId = "a",
+                latitude = 40.0,
+                longitude = -74.0,
+                timeMs = nowMs - 20_000L,
+                accuracyMeters = null,
+                propsJson = null,
+                provenance = TrackPointSource.REMOTE_STREAM,
             ),
-            Tracker(
-                id = "b",
-                name = "B",
-                color = null,
-                updated_at = (nowMs - 25 * 60 * 1000L) / 1000L,
-                last_point = listOf(-80.0, 35.0),
+            "b" to TrackPoint(
+                trackerId = "b",
+                latitude = 35.0,
+                longitude = -80.0,
+                timeMs = nowMs - 25_000L,
+                accuracyMeters = null,
+                propsJson = null,
+                provenance = TrackPointSource.REMOTE_STREAM,
             ),
         )
 
@@ -140,7 +140,7 @@ class TrackerMapGroupBoundsResolverTest {
             baseInput(
                 liveActiveFitEnabled = false,
                 visibleTrackerIds = setOf("a", "b"),
-                trackers = trackers,
+                remoteLastPoints = remoteLastPoints,
                 nowMs = nowMs,
             ),
         )
@@ -179,14 +179,14 @@ class TrackerMapGroupBoundsResolverTest {
     fun resolve_allVisible_staleRosterLastPointFarFromNewerRemoteHead_isNotInsideBounds() {
         val nowMs = System.currentTimeMillis()
         val remotePoints = mapOf(
-            "t1" to TrackPointEvent(
-                trackId = "t1",
-                lat = 10.0,
-                lon = 20.0,
-                timestampMs = nowMs - 1_000L,
+            "t1" to TrackPoint(
+                trackerId = "t1",
+                latitude = 10.0,
+                longitude = 20.0,
+                timeMs = nowMs - 1_000L,
                 accuracyMeters = null,
                 propsJson = null,
-                source = TrackPointSource.REMOTE_STREAM,
+                provenance = TrackPointSource.REMOTE_STREAM,
             ),
         )
         val trackers = listOf(
@@ -221,23 +221,23 @@ class TrackerMapGroupBoundsResolverTest {
     fun resolve_allVisible_hiddenRemoteHeadDoesNotExpandBounds() {
         val nowMs = System.currentTimeMillis()
         val remotePoints = mapOf(
-            "visible" to TrackPointEvent(
-                trackId = "visible",
-                lat = 1.0,
-                lon = 1.0,
-                timestampMs = nowMs,
+            "visible" to TrackPoint(
+                trackerId = "visible",
+                latitude = 1.0,
+                longitude = 1.0,
+                timeMs = nowMs,
                 accuracyMeters = null,
                 propsJson = null,
-                source = TrackPointSource.REMOTE_STREAM,
+                provenance = TrackPointSource.REMOTE_STREAM,
             ),
-            "hidden" to TrackPointEvent(
-                trackId = "hidden",
-                lat = 50.0,
-                lon = 50.0,
-                timestampMs = nowMs,
+            "hidden" to TrackPoint(
+                trackerId = "hidden",
+                latitude = 50.0,
+                longitude = 50.0,
+                timeMs = nowMs,
                 accuracyMeters = null,
                 propsJson = null,
-                source = TrackPointSource.REMOTE_STREAM,
+                provenance = TrackPointSource.REMOTE_STREAM,
             ),
         )
 
@@ -259,14 +259,14 @@ class TrackerMapGroupBoundsResolverTest {
     fun resolve_activeOnly_includesActiveRemoteOnlyHead() {
         val nowMs = System.currentTimeMillis()
         val remotePoints = mapOf(
-            "remote" to TrackPointEvent(
-                trackId = "remote",
-                lat = 12.0,
-                lon = 34.0,
-                timestampMs = nowMs - 30_000L,
+            "remote" to TrackPoint(
+                trackerId = "remote",
+                latitude = 12.0,
+                longitude = 34.0,
+                timeMs = nowMs - 30_000L,
                 accuracyMeters = null,
                 propsJson = null,
-                source = TrackPointSource.REMOTE_STREAM,
+                provenance = TrackPointSource.REMOTE_STREAM,
             ),
         )
 
@@ -292,14 +292,14 @@ class TrackerMapGroupBoundsResolverTest {
     fun resolve_activeOnly_groupStreamingIncludesLocalOverlayAndRemoteHeads() {
         val nowMs = System.currentTimeMillis()
         val remotePoints = mapOf(
-            "remote" to TrackPointEvent(
-                trackId = "remote",
-                lat = 50.0,
-                lon = 60.0,
-                timestampMs = nowMs - 30_000L,
+            "remote" to TrackPoint(
+                trackerId = "remote",
+                latitude = 50.0,
+                longitude = 60.0,
+                timeMs = nowMs - 30_000L,
                 accuracyMeters = null,
                 propsJson = null,
-                source = TrackPointSource.REMOTE_STREAM,
+                provenance = TrackPointSource.REMOTE_STREAM,
             ),
         )
 
@@ -357,13 +357,15 @@ class TrackerMapGroupBoundsResolverTest {
     @Test
     fun resolve_activeOnly_usesTrackerLastDataForVisibleRosterOnly() {
         val nowMs = System.currentTimeMillis()
-        val trackers = listOf(
-            Tracker(
-                id = "t1",
-                name = "T1",
-                color = null,
-                updated_at = (nowMs - 20 * 60 * 1000L) / 1000L,
-                last_point = listOf(-74.0, 40.0, (nowMs - 30_000L).toDouble()),
+        val remoteLastPoints = mapOf(
+            "t1" to TrackPoint(
+                trackerId = "t1",
+                latitude = 40.0,
+                longitude = -74.0,
+                timeMs = nowMs - 30_000L,
+                accuracyMeters = null,
+                propsJson = null,
+                provenance = TrackPointSource.REMOTE_STREAM,
             ),
         )
 
@@ -373,7 +375,8 @@ class TrackerMapGroupBoundsResolverTest {
                 fitOnlyActiveTrackers = true,
                 visibleTrackerIds = setOf("t1"),
                 trailsByTracker = mapOf("t1" to listOf(makeQueuedLocation(nowMs - 20 * 60 * 1000L))),
-                trackers = trackers,
+                remoteLastPoints = remoteLastPoints,
+                acceptedRemoteTrackerIds = setOf("t1"),
                 nowMs = nowMs,
             ),
         )
@@ -386,14 +389,14 @@ class TrackerMapGroupBoundsResolverTest {
     fun resolve_activeOnly_remoteOutsideTenMinuteWindow_stillPinnedWhenAccepted() {
         val nowMs = System.currentTimeMillis()
         val remotePoints = mapOf(
-            "remote" to TrackPointEvent(
-                trackId = "remote",
-                lat = 12.0,
-                lon = 34.0,
-                timestampMs = nowMs - 11 * 60 * 1000L,
+            "remote" to TrackPoint(
+                trackerId = "remote",
+                latitude = 12.0,
+                longitude = 34.0,
+                timeMs = nowMs - 11 * 60 * 1000L,
                 accuracyMeters = null,
                 propsJson = null,
-                source = TrackPointSource.REMOTE_STREAM,
+                provenance = TrackPointSource.REMOTE_STREAM,
             ),
         )
 
@@ -417,14 +420,14 @@ class TrackerMapGroupBoundsResolverTest {
     fun resolve_activeOnly_hiddenAcceptedRemoteIsNotPinned() {
         val nowMs = System.currentTimeMillis()
         val remotePoints = mapOf(
-            "hidden" to TrackPointEvent(
-                trackId = "hidden",
-                lat = 12.0,
-                lon = 34.0,
-                timestampMs = nowMs - 11 * 60 * 1000L,
+            "hidden" to TrackPoint(
+                trackerId = "hidden",
+                latitude = 12.0,
+                longitude = 34.0,
+                timeMs = nowMs - 11 * 60 * 1000L,
                 accuracyMeters = null,
                 propsJson = null,
-                source = TrackPointSource.REMOTE_STREAM,
+                provenance = TrackPointSource.REMOTE_STREAM,
             ),
         )
 
@@ -471,13 +474,15 @@ class TrackerMapGroupBoundsResolverTest {
     @Test
     fun resolve_activeOnly_lastPointTimestampMakesRosterTrackerActive() {
         val nowMs = System.currentTimeMillis()
-        val trackers = listOf(
-            Tracker(
-                id = "last-point",
-                name = "Last Point",
-                color = null,
-                updated_at = (nowMs - 20 * 60 * 1000L) / 1000L,
-                last_point = listOf(-74.0, 40.0, (nowMs - 30_000L).toDouble()),
+        val remoteLastPoints = mapOf(
+            "last-point" to TrackPoint(
+                trackerId = "last-point",
+                latitude = 40.0,
+                longitude = -74.0,
+                timeMs = nowMs - 30_000L,
+                accuracyMeters = null,
+                propsJson = null,
+                provenance = TrackPointSource.REMOTE_STREAM,
             ),
         )
 
@@ -486,7 +491,8 @@ class TrackerMapGroupBoundsResolverTest {
                 liveActiveFitEnabled = true,
                 fitOnlyActiveTrackers = true,
                 visibleTrackerIds = setOf("last-point"),
-                trackers = trackers,
+                remoteLastPoints = remoteLastPoints,
+                acceptedRemoteTrackerIds = setOf("last-point"),
                 nowMs = nowMs,
             ),
         )
@@ -499,14 +505,15 @@ class TrackerMapGroupBoundsResolverTest {
     @Test
     fun resolve_activeOnly_pointParamsTimestampMakesRosterTrackerActive() {
         val nowMs = System.currentTimeMillis()
-        val trackers = listOf(
-            Tracker(
-                id = "params",
-                name = "Params",
-                color = null,
-                updated_at = (nowMs - 20 * 60 * 1000L) / 1000L,
-                point_params = listOf(mapOf("timestamp" to nowMs - 30_000L)),
-                last_point = listOf(-74.0, 40.0),
+        val remoteLastPoints = mapOf(
+            "params" to TrackPoint(
+                trackerId = "params",
+                latitude = 40.0,
+                longitude = -74.0,
+                timeMs = nowMs - 30_000L,
+                accuracyMeters = null,
+                propsJson = null,
+                provenance = TrackPointSource.REMOTE_STREAM,
             ),
         )
 
@@ -515,7 +522,8 @@ class TrackerMapGroupBoundsResolverTest {
                 liveActiveFitEnabled = true,
                 fitOnlyActiveTrackers = true,
                 visibleTrackerIds = setOf("params"),
-                trackers = trackers,
+                remoteLastPoints = remoteLastPoints,
+                acceptedRemoteTrackerIds = setOf("params"),
                 nowMs = nowMs,
             ),
         )
@@ -530,14 +538,14 @@ class TrackerMapGroupBoundsResolverTest {
         val nowMs = System.currentTimeMillis()
         val staleTrail = listOf(makeQueuedLocation(nowMs - 20 * 60 * 1000L))
         val remotePoints = mapOf(
-            "t1" to TrackPointEvent(
-                trackId = "t1",
-                lat = 0.0,
-                lon = 0.0,
-                timestampMs = nowMs - 30_000L,
+            "t1" to TrackPoint(
+                trackerId = "t1",
+                latitude = 0.0,
+                longitude = 0.0,
+                timeMs = nowMs - 30_000L,
                 accuracyMeters = null,
                 propsJson = null,
-                source = TrackPointSource.REMOTE_STREAM,
+                provenance = TrackPointSource.REMOTE_STREAM,
             ),
         )
 
@@ -613,13 +621,15 @@ class TrackerMapGroupBoundsResolverTest {
     @Test
     fun resolveOrHold_activeOnlyWithQualifyingTracker_returnsBounds() {
         val nowMs = System.currentTimeMillis()
-        val trackers = listOf(
-            Tracker(
-                id = "live-roster",
-                name = "Live",
-                color = null,
-                updated_at = (nowMs - 20 * 60 * 1000L) / 1000L,
-                last_point = listOf(-74.0, 40.0, (nowMs - 30_000L).toDouble()),
+        val remoteLastPoints = mapOf(
+            "live-roster" to TrackPoint(
+                trackerId = "live-roster",
+                latitude = 40.0,
+                longitude = -74.0,
+                timeMs = nowMs - 30_000L,
+                accuracyMeters = null,
+                propsJson = null,
+                provenance = TrackPointSource.REMOTE_STREAM,
             ),
         )
 
@@ -628,7 +638,8 @@ class TrackerMapGroupBoundsResolverTest {
                 liveActiveFitEnabled = true,
                 fitOnlyActiveTrackers = true,
                 visibleTrackerIds = setOf("live-roster"),
-                trackers = trackers,
+                remoteLastPoints = remoteLastPoints,
+                acceptedRemoteTrackerIds = setOf("live-roster"),
                 nowMs = nowMs,
             ),
         )
@@ -639,26 +650,24 @@ class TrackerMapGroupBoundsResolverTest {
 
     @Test
     fun isTrackerActive_trimsIdsBeforeMatchingRosterTracker() {
-        // TRIM-COMPARISON FIX: a roster tracker id with incidental whitespace must still match
-        // an untrimmed candidate id -- untrimmed ids otherwise silently fail the roster lookup
-        // and fall through to trail/remote-only recency, missing legitimately fresh
-        // `last_point`/`point_params` timestamps.
         val nowMs = System.currentTimeMillis()
-        val trackers = listOf(
-            Tracker(
-                id = " tracker-1 ",
-                name = "Tracker 1",
-                color = null,
-                updated_at = (nowMs - 20 * 60 * 1000L) / 1000L,
-                last_point = listOf(-74.0, 40.0, (nowMs - 30_000L).toDouble()),
+        val remoteLastPoints = mapOf(
+            " tracker-1 " to TrackPoint(
+                trackerId = " tracker-1 ",
+                latitude = 40.0,
+                longitude = -74.0,
+                timeMs = nowMs - 30_000L,
+                accuracyMeters = null,
+                propsJson = null,
+                provenance = TrackPointSource.REMOTE_STREAM,
             ),
         )
 
         val active = TrackerMapGroupBoundsResolver.isTrackerActive(
             trackerId = "tracker-1",
             trailsByTracker = emptyMap(),
-            remoteLastPoints = emptyMap(),
-            trackers = trackers,
+            remoteLastPoints = remoteLastPoints,
+            trackers = emptyList(),
             nowMs = nowMs,
         )
 
@@ -670,7 +679,7 @@ class TrackerMapGroupBoundsResolverTest {
         liveActiveFitEnabled: Boolean = false,
         fitOnlyActiveTrackers: Boolean = true,
         trailsByTracker: Map<String, List<QueuedLocation>> = emptyMap(),
-        remoteLastPoints: Map<String, TrackPointEvent> = emptyMap(),
+        remoteLastPoints: Map<String, TrackPoint> = emptyMap(),
         acceptedRemoteTrackerIds: Set<String> = remoteLastPoints.keys,
         trackers: List<Tracker> = emptyList(),
         nowMs: Long = System.currentTimeMillis(),

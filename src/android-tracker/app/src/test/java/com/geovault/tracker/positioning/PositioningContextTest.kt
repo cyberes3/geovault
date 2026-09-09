@@ -3,7 +3,7 @@ package com.geovault.tracker.positioning
 import com.geovault.tracker.TrackingLocationPolicy
 import com.geovault.tracker.location.StationaryPingController
 import com.geovault.tracker.policy.filter.MotionProfileTuning
-import com.geovault.tracker.services.TrackingMotionMode
+import com.geovault.tracker.positioning.TrackingMotionMode
 import com.geovault.tracker.settings.TrackerSettings
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals

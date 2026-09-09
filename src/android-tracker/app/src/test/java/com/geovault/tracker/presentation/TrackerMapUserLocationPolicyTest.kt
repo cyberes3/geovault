@@ -5,12 +5,12 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+import com.geovault.tracker.map.MapRenderMath
 class TrackerMapUserLocationPolicyTest {
-    private val policy = TrackerMapUserLocationPolicy()
-
+    
     @Test
     fun evaluate_blocksWhenLocationNotRequestedInSession() {
-        val decision = policy.evaluate(
+        val decision = MapRenderMath.evaluateUserLocation(
             TrackerMapUserLocationInput(
                 isMapActive = true,
                 hasLocationPermission = true,
@@ -28,7 +28,7 @@ class TrackerMapUserLocationPolicyTest {
 
     @Test
     fun evaluate_allowsStreamingPuckOnlyWhenAllGuardsPass() {
-        val decision = policy.evaluate(
+        val decision = MapRenderMath.evaluateUserLocation(
             allowedInput()
         )
 
@@ -39,7 +39,7 @@ class TrackerMapUserLocationPolicyTest {
 
     @Test
     fun evaluate_recordingWhileViewingAnotherTracker_allowsPuck() {
-        val decision = policy.evaluate(
+        val decision = MapRenderMath.evaluateUserLocation(
             allowedInput(
                 displayedTrackerId = "shared",
                 locallyRecordedTrackerId = "self",
@@ -55,7 +55,7 @@ class TrackerMapUserLocationPolicyTest {
 
     @Test
     fun evaluate_ownRecordedTrackerOnScreen_hidesPuck() {
-        val decision = policy.evaluate(
+        val decision = MapRenderMath.evaluateUserLocation(
             allowedInput(
                 displayedTrackerId = "self",
                 locallyRecordedTrackerId = "self",
@@ -71,7 +71,7 @@ class TrackerMapUserLocationPolicyTest {
 
     @Test
     fun evaluate_inactiveWithLocationIntent_streamsWithoutPuck() {
-        val decision = policy.evaluate(
+        val decision = MapRenderMath.evaluateUserLocation(
             allowedInput(isMapActive = false)
         )
 
@@ -82,7 +82,7 @@ class TrackerMapUserLocationPolicyTest {
 
     @Test
     fun evaluate_locationRequestDoesNotNeedFollowLock() {
-        val decision = policy.evaluate(allowedInput())
+        val decision = MapRenderMath.evaluateUserLocation(allowedInput())
 
         assertTrue(decision.shouldStreamGps)
         assertTrue(decision.shouldEnablePuck)
@@ -91,7 +91,7 @@ class TrackerMapUserLocationPolicyTest {
 
     @Test
     fun evaluate_collectsAllExpectedBlockers() {
-        val decision = policy.evaluate(
+        val decision = MapRenderMath.evaluateUserLocation(
             TrackerMapUserLocationInput(
                 isMapActive = false,
                 hasLocationPermission = false,

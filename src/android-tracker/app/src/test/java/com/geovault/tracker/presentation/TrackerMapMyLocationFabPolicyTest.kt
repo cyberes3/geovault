@@ -3,6 +3,7 @@ package com.geovault.tracker.presentation
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
+import com.geovault.tracker.map.MapRenderMath
 class TrackerMapMyLocationFabPolicyTest {
 
     private data class Case(
@@ -84,7 +85,7 @@ class TrackerMapMyLocationFabPolicyTest {
             assertEquals(
                 c.label,
                 c.expectShow,
-                TrackerMapMyLocationFabPolicy.shouldShowFab(
+                MapRenderMath.shouldShowMyLocationFab(
                     mode = c.mode,
                     displayedTrackerId = c.displayed,
                     selectedTrackerId = c.selected,

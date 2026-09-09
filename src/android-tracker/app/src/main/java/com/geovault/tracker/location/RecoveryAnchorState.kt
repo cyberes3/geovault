@@ -2,7 +2,7 @@ package com.geovault.tracker.location
 
 import android.content.Context
 import android.location.Location
-import com.geovault.tracker.services.TrackingMotionMode
+import com.geovault.tracker.positioning.TrackingMotionMode
 
 data class RecoveryAnchorState(
     val trackerId: String,

@@ -12,7 +12,7 @@ object TrackerHistoryWindowResolver {
     private const val TAG = "TrackerHistoryWindowResolver"
 
     fun fromTracker(tracker: Tracker?): TrackerHistoryWindow {
-        val key = tracker?.settings?.get("recent_data_window") as? String
+        val key = tracker?.catalogSettings?.recentDataWindow
         return TrackerHistoryWindow(key ?: TrackerHistoryWindow.KEY_ALL)
     }
 

@@ -8,7 +8,7 @@ import com.geovault.tracker.location.LowAccuracyFallbackLoopDecision
 import com.geovault.tracker.positioning.config.GpsRuntimeEvent
 import com.geovault.tracker.positioning.config.GpsRuntimeState
 import com.geovault.tracker.runtime.PositioningDiagnosticEvent
-import com.geovault.tracker.services.TrackingMotionMode
+import com.geovault.tracker.positioning.TrackingMotionMode
 import com.geovault.tracker.settings.TrackerSettings
 import com.geovault.tracker.tracking.TrackingServiceConstants
 import kotlinx.coroutines.Dispatchers

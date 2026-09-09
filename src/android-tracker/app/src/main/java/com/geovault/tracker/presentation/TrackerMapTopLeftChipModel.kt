@@ -4,6 +4,7 @@ import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import com.geovault.tracker.R
 import com.geovault.tracker.Tracker
+import com.geovault.tracker.map.MapRenderMath
 import com.geovault.tracker.ui.TrackerPointTimestamps
 
 sealed interface TrackerMapTopLeftChipText {
@@ -37,16 +38,20 @@ enum class TrackerMapTopLeftChipMode {
     GROUP,
 }
 
-class TrackerMapTopLeftChipMapper {
+internal class TrackerMapTopLeftChipMapper {
     fun map(
         state: TrackerMapUiState,
         roster: List<Tracker>,
-        acceptedRemoteTrackerIds: Set<String>,
+        acceptedRemoteTrackerIds: Set<String> = emptySet(),
+        selectedTrackerId: String = "",
+        selectedTrackerName: String = "",
+        liveHeads: Map<String, com.geovault.tracker.domain.TrackPoint> = emptyMap(),
+        recording: com.geovault.tracker.positioning.TrackingRuntimeSnapshot = state.runtime,
     ): TrackerMapTopLeftChipUiModel {
-        val displayedTrackerId = state.displayedTrackerId.trim().ifBlank {
-            state.runtime.selectedTrackerId.trim()
-        }
-        val selectedTrackerId = state.runtime.selectedTrackerId.trim()
+        val displayedTrackerId = TrackerMapDisplayIds.effectiveDisplayedTrackerId(
+            state.displayedTrackerId,
+            selectedTrackerId,
+        )
         val isSingleTrackerMode = state.mode == TrackerMapDisplayMode.SINGLE_SESSION
         val showingSingleTracker = isSingleTrackerMode && displayedTrackerId.isNotEmpty()
 
@@ -98,16 +103,19 @@ class TrackerMapTopLeftChipMapper {
         }
 
         val title = state.displayedTrackerName.trim()
-            .ifBlank { state.runtime.selectedTrackerName.trim() }
+            .ifBlank { selectedTrackerName.trim() }
             .takeIf { it.isNotEmpty() }
             ?.let { TrackerMapTopLeftChipText.Value(it) }
             ?: TrackerMapTopLeftChipText.Resource(R.string.select_tracker)
 
-        val effectiveDisplayedTrackerId = TrackerMapDisplayIds.effectiveDisplayedTrackerId(state)
+        val effectiveDisplayedTrackerId = TrackerMapDisplayIds.effectiveDisplayedTrackerId(
+            state.displayedTrackerId,
+            selectedTrackerId,
+        )
         val tracker = roster.firstOrNull { it.id == effectiveDisplayedTrackerId }
         val isStreamingDisplayedTracker = effectiveDisplayedTrackerId.isNotEmpty() &&
             (effectiveDisplayedTrackerId in state.activeStreamedTrackerIds ||
-                effectiveDisplayedTrackerId in state.streamTargetIds)
+                effectiveDisplayedTrackerId in acceptedRemoteTrackerIds)
         val userLabel = if (isStreamingDisplayedTracker) {
             tracker?.owner_email?.trim()?.takeIf { it.isNotEmpty() }
         } else {
@@ -118,14 +126,12 @@ class TrackerMapTopLeftChipMapper {
             selectedTrackerId.isNotEmpty() &&
                 displayedTrackerId == selectedTrackerId -> null
             else -> {
-                val lastMs = TrackerLastReportedAtPolicy.resolve(
+                val lastMs = MapRenderMath.resolveLastReportedAtMs(
                     trackerId = effectiveDisplayedTrackerId,
-                    runtime = state.runtime,
-                    resolverLastUpdatedMs = TrackerMapLastPointResolver.resolve(
-                        state,
+                    recording = recording,
+                    resolverLastUpdatedMs = MapRenderMath.resolveLastPoint(
                         effectiveDisplayedTrackerId,
-                        tracker,
-                        acceptedRemoteTrackerIds,
+                        liveHeads,
                     )?.lastUpdatedMs,
                 )
                 if (lastMs == null) {

@@ -1,5 +1,6 @@
 package com.geovault.common.net
 
+import com.geovault.common.auth.GeoVaultAuthSession
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -29,6 +30,7 @@ suspend fun <T> Call<T>.awaitResponse(operation: String? = null): Response<T> =
 
 fun <T> Response<T>.bodyOrThrow(operation: String? = null): T {
     if (!isSuccessful) {
+        resetSessionIfForbidden(code())
         throw GeoVaultApiFailure.fromRetrofit(this, operation)
     }
     return body() ?: throw GeoVaultApiFailure(
@@ -40,6 +42,13 @@ fun <T> Response<T>.bodyOrThrow(operation: String? = null): T {
 
 fun Response<*>.successOrThrow(operation: String? = null) {
     if (!isSuccessful) {
+        resetSessionIfForbidden(code())
         throw GeoVaultApiFailure.fromRetrofit(this, operation)
+    }
+}
+
+private fun resetSessionIfForbidden(httpCode: Int) {
+    if (httpCode == 403) {
+        runCatching { GeoVaultAuthSession.get().handleAuthFailure() }
     }
 }

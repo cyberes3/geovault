@@ -1,7 +1,7 @@
 package com.geovault.tracker.positioning
 import com.geovault.tracker.positioning.PositioningRuntime
-import android.content.Intent
 import com.geovault.common.auth.GeoVaultAuthSession
+import com.geovault.tracker.di.TrackerAppServices
 import com.geovault.common.net.GeoVaultHttp
 import com.geovault.tracker.R
 import com.geovault.common.net.GeoVaultConnectivity
@@ -9,12 +9,13 @@ import com.geovault.tracker.location.SyncFailureClass
 import com.geovault.tracker.location.TrackingPermissionGate
 import com.geovault.tracker.location.TrackingSyncPolicy
 import com.geovault.tracker.positioning.config.GpsRuntimeState
+import com.geovault.tracker.positioning.motion.ResumeIntent
 import com.geovault.tracker.runtime.PositioningDiagnosticEvent
-import com.geovault.tracker.services.QueueUploadConfig
-import com.geovault.tracker.services.QueueUploadOutcomePolicy
-import com.geovault.tracker.services.QueueUploadResult
-import com.geovault.tracker.services.QueueUploadScope
-import com.geovault.tracker.services.QueueUploadSkipReason
+import com.geovault.tracker.positioning.QueueUploadConfig
+import com.geovault.tracker.positioning.QueueUploadOutcomePolicy
+import com.geovault.tracker.positioning.QueueUploadResult
+import com.geovault.tracker.positioning.QueueUploadScope
+import com.geovault.tracker.positioning.QueueUploadSkipReason
 import com.geovault.tracker.settings.TrackerSettings
 import com.geovault.tracker.tracking.TrackingServiceConstants
 import com.geovault.tracker.tracking.TrackingServiceIntents
@@ -103,7 +104,7 @@ internal class UploadSubsystem(private val rt: PositioningRuntime) {
                     rt.state.gpsRuntimeState == GpsRuntimeState.WAITING_FOR_PROVIDER_PAUSED
                 ) {
                     withContext(Dispatchers.Main) {
-                        rt.collection.resumeFromGpsProviderWait(reason = "preflight_monitor")
+                        rt.motionOrchestrator.resume(ResumeIntent.ProviderWait("preflight_monitor"))
                     }
                 }
             }
@@ -154,12 +155,7 @@ internal class UploadSubsystem(private val rt: PositioningRuntime) {
                 updateFailureCounters = updateFailureCounters,
             )
             withContext(Dispatchers.Main) {
-                rt.ports.service.sendBroadcast(
-                    Intent(TrackingServiceIntents.ACTION_TRACKING_ERROR).apply {
-                        setPackage(rt.ports.service.packageName)
-                        putExtra(TrackingServiceIntents.EXTRA_TRACKING_ERROR_MESSAGE, trackerError)
-                    }
-                )
+                TrackerAppServices.from(rt.ports.service.application).uiEffects().emitMessage(trackerError)
                 rt.projection.updateNotificationFromDb(broadcastStats = true)
             }
             return result.failureClass
@@ -268,10 +264,21 @@ internal class UploadSubsystem(private val rt: PositioningRuntime) {
     fun trimQueuedLocationsRetention(trackerId: String) {
         if (trackerId.isBlank()) return
         val cutoff = rt.deps.clock.wallTimeMs() - TrackingServiceConstants.MAX_QUEUE_AGE_MS
-        val deletedByAge = rt.deps.database.locationDao().deleteOlderThanForTracker(trackerId, cutoff)
-        val count = rt.deps.database.locationDao().getCountForTracker(trackerId)
-        val deletedBySize = if (count > TrackingServiceConstants.MAX_QUEUE_SIZE) {
-            rt.deps.database.locationDao().deleteOldestCountForTracker(trackerId, count - TrackingServiceConstants.MAX_QUEUE_SIZE)
+        val claimedIds = rt.deps.queueUploadEngine.claimedIds().toList()
+        val dao = rt.deps.database.locationDao()
+        val deletedByAge = if (claimedIds.isEmpty()) {
+            dao.deleteOlderThanForTracker(trackerId, cutoff)
+        } else {
+            dao.deleteOlderThanForTrackerExcluding(trackerId, cutoff, claimedIds)
+        }
+        val count = dao.getCountForTracker(trackerId)
+        val overflow = count - TrackingServiceConstants.MAX_QUEUE_SIZE
+        val deletedBySize = if (overflow > 0) {
+            if (claimedIds.isEmpty()) {
+                dao.deleteOldestCountForTracker(trackerId, overflow)
+            } else {
+                dao.deleteOldestCountForTrackerExcluding(trackerId, overflow, claimedIds)
+            }
         } else {
             0
         }

@@ -4,8 +4,8 @@ import android.location.Location
 import com.geovault.tracker.location.LowAccuracyFallbackArmDecision
 import com.geovault.tracker.positioning.PositioningRuntime
 import com.geovault.tracker.positioning.config.GpsRuntimeEvent
-import com.geovault.tracker.services.LocationIngestResult
-import com.geovault.tracker.services.TrackingMotionMode
+import com.geovault.tracker.positioning.ingest.LocationIngestResult
+import com.geovault.tracker.positioning.TrackingMotionMode
 import com.geovault.tracker.settings.TrackerSettings
 
 internal class RecoverySubsystem(private val rt: PositioningRuntime) {

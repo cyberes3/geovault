@@ -52,11 +52,20 @@ object TrackerGeometryMergePolicy {
         existing: Tracker,
         incoming: Tracker,
         incomingHasGeometry: Boolean,
-    ): List<Map<String, Any?>>? {
-        return if (incomingHasGeometry) {
-            incoming.point_params
-        } else {
-            incoming.point_params ?: existing.point_params
+    ): List<com.google.gson.JsonObject>? {
+        val incomingParams = incoming.point_params
+        val existingParams = existing.point_params
+        if (!incomingHasGeometry) {
+            if (incomingParams.isNullOrEmpty()) return existingParams
+            if (existingParams != null && incomingParams.size < existingParams.size) {
+                return existingParams
+            }
+            return incomingParams
         }
+        if (incomingParams.isNullOrEmpty()) return existingParams
+        if (existingParams != null && incomingParams.size < existingParams.size) {
+            return existingParams
+        }
+        return incomingParams
     }
 }

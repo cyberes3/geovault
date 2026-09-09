@@ -2,8 +2,8 @@ package com.geovault.tracker.positioning
 
 import com.geovault.tracker.positioning.config.PositioningDensity
 import com.geovault.tracker.positioning.config.PositioningPresets
-import com.geovault.tracker.services.PointFreshnessTracker
-import com.geovault.tracker.services.TrackingMotionMode
+import com.geovault.tracker.positioning.PointFreshnessTracker
+import com.geovault.tracker.positioning.TrackingMotionMode
 import com.geovault.tracker.settings.TrackerSettings
 
 internal object PositioningConfig {

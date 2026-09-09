@@ -1,9 +1,9 @@
 package com.geovault.tracker.presentation
 
 import com.geovault.tracker.location.TrackingLifecycleState
-import com.geovault.tracker.services.TrackingRuntimeSnapshot
-import com.geovault.tracker.services.TrackingStatusAccuracyProjector
-import com.geovault.tracker.services.TrackingUiStatus
+import com.geovault.tracker.positioning.TrackingStatusAccuracyProjector
+import com.geovault.tracker.positioning.TrackingUiStatus
+import com.geovault.tracker.runtime.TrackerRuntimeDocument
 
 data class HomePermissionSnapshot(
     val hasForegroundLocation: Boolean = false,
@@ -39,50 +39,53 @@ data class HomeUiState(
     val gpsProviderEnabled: Boolean = true,
     val runtimeFailureReason: String? = null,
     val permissions: HomePermissionSnapshot = HomePermissionSnapshot(),
-    val statusMessage: String = "",
     val sparseTrackingEnabled: Boolean = false,
+    val isPreparingToTrack: Boolean = false,
 )
 
 internal fun mergeHomeUiState(
-    runtime: TrackingRuntimeSnapshot,
+    document: TrackerRuntimeDocument,
     permissions: HomePermissionSnapshot,
-    statusMessage: String,
     sparseTrackingEnabled: Boolean = false,
+    isPreparingToTrack: Boolean = false,
+    selectedTrackerId: String = "",
+    selectedTrackerName: String = "",
 ): HomeUiState {
-    val displayName = runtime.selectedTrackerName.trim().ifBlank {
-        runtime.selectedTrackerId.trim()
+    val recording = document.recording
+    val displayName = selectedTrackerName.trim().ifBlank {
+        selectedTrackerId.trim()
     }
-    val effectiveRunning = runtime.sessionActive || runtime.startupActive
-    val effectiveLifecycleState = if (!runtime.sessionActive && runtime.startupActive) {
+    val effectiveRunning = recording.sessionActive || recording.startupActive
+    val effectiveLifecycleState = if (!recording.sessionActive && recording.startupActive) {
         TrackingLifecycleState.STARTING
     } else {
-        runtime.lifecycleState
+        recording.lifecycleState
     }
     val displayAccuracyMeters = TrackingStatusAccuracyProjector.displayAccuracy(
-        uiStatus = runtime.uiStatus,
-        lastAccuracyMeters = runtime.lastAccuracyMeters,
-        currentFixAccuracyMeters = runtime.currentFixAccuracyMeters,
+        uiStatus = recording.uiStatus,
+        lastAccuracyMeters = recording.lastAccuracyMeters,
+        currentFixAccuracyMeters = recording.currentFixAccuracyMeters,
     )
     return HomeUiState(
         isTracking = effectiveRunning,
         lifecycleState = effectiveLifecycleState,
-        trackingUiStatus = runtime.uiStatus,
-        selectedTrackerId = runtime.selectedTrackerId,
+        trackingUiStatus = recording.uiStatus,
+        selectedTrackerId = selectedTrackerId,
         selectedTrackerDisplayName = displayName,
-        queuedPointsVisible = runtime.queuedPointsVisible,
-        pointsSentThisSession = runtime.pointsSentThisSession,
-        sessionStartTimeMs = runtime.sessionStartTimeMs,
-        lastPointSentAtMs = runtime.lastPointSentAtMs,
-        sessionTotalDistanceMeters = runtime.sessionTotalDistanceMeters,
+        queuedPointsVisible = recording.queuedPointsVisible,
+        pointsSentThisSession = recording.pointsSentThisSession,
+        sessionStartTimeMs = recording.sessionStartTimeMs,
+        lastPointSentAtMs = recording.lastPointSentAtMs,
+        sessionTotalDistanceMeters = recording.sessionTotalDistanceMeters,
         lastAccuracyMeters = displayAccuracyMeters,
-        effectiveAccuracyThresholdMeters = runtime.effectiveAccuracyThresholdMeters,
-        lastTrackedLatitude = runtime.lastTrackedLatitude,
-        lastTrackedLongitude = runtime.lastTrackedLongitude,
-        lastTrackedTimestampMs = runtime.lastTrackedTimestampMs,
-        gpsProviderEnabled = runtime.gpsProviderEnabled,
-        runtimeFailureReason = runtime.failureReason,
+        effectiveAccuracyThresholdMeters = recording.effectiveAccuracyThresholdMeters,
+        lastTrackedLatitude = recording.lastTrackedLatitude,
+        lastTrackedLongitude = recording.lastTrackedLongitude,
+        lastTrackedTimestampMs = recording.lastTrackedTimestampMs,
+        gpsProviderEnabled = recording.gpsProviderEnabled,
+        runtimeFailureReason = recording.failureReason,
         permissions = permissions,
-        statusMessage = statusMessage,
         sparseTrackingEnabled = sparseTrackingEnabled,
+        isPreparingToTrack = isPreparingToTrack,
     )
 }

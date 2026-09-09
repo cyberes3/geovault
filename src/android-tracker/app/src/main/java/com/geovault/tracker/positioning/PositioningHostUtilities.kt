@@ -7,9 +7,10 @@ import android.provider.Settings
 import com.geovault.common.logging.GeoVaultCaptureLog
 import com.geovault.tracker.location.PausedFreshnessPointFactory
 import com.geovault.tracker.policy.TrackPointBus
-import com.geovault.tracker.policy.TrackPointEvent
+import com.geovault.tracker.domain.TrackPoint
 import com.geovault.tracker.policy.TrackPointQuality
 import com.geovault.tracker.policy.TrackPointSource
+import com.geovault.tracker.positioning.motion.MotionState
 import com.geovault.tracker.tracking.TrackingServiceConstants
 import com.geovault.tracker.tracking.TrackingServiceIntents
 import org.json.JSONObject
@@ -52,12 +53,12 @@ internal class PositioningHostUtilities(private val rt: PositioningRuntime) {
                 "manual=${location.extras?.getBoolean(TrackingServiceConstants.EXTRAS_KEY_MANUAL_SEND, false) == true}"
         )
         TrackPointBus.publish(
-            TrackPointEvent(
-                source = TrackPointSource.LOCAL_GPS,
-                trackId = trackId,
-                lon = location.longitude,
-                lat = location.latitude,
-                timestampMs = location.time,
+            TrackPoint(
+                provenance = TrackPointSource.LOCAL_GPS,
+                trackerId = trackId,
+                longitude = location.longitude,
+                latitude = location.latitude,
+                timeMs = location.time,
                 accuracyMeters = if (location.hasAccuracy()) location.accuracy else null,
                 propsJson = propsJson,
                 quality = quality,
@@ -141,7 +142,7 @@ internal class PositioningHostUtilities(private val rt: PositioningRuntime) {
     }
 
     fun isWaitingForProviderState(): Boolean =
-        GpsProviderWaitPolicy.isWaitingForProviderState(rt.state.gpsRuntimeState)
+        rt.motionOrchestrator.current() is MotionState.WaitingForProvider
 
     fun resolveObservedSpeedMps(
         location: Location,

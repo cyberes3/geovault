@@ -16,18 +16,18 @@ import com.geovault.tracker.location.StationaryPingActions
 import com.geovault.tracker.location.StationaryPingController
 import com.geovault.tracker.location.StationaryRegionStore
 import com.geovault.tracker.positioning.config.PositioningDensity
+import com.geovault.tracker.positioning.motion.PauseIntent
+import com.geovault.tracker.positioning.motion.ResumeIntent
 import com.geovault.tracker.positioning.ingest.TrackerLocationPipeline
 import com.geovault.tracker.runtime.RuntimeTelemetry
 import com.geovault.tracker.sensor.ImuMotionClassifier
 import com.geovault.tracker.sensor.SignificantMotionResumeGateway
-import com.geovault.tracker.services.LocationIngestCoordinator
-import com.geovault.tracker.services.LocationSessionGateway
-import com.geovault.tracker.services.PointFreshnessTracker
-import com.geovault.tracker.services.ProviderHealthController
-import com.geovault.tracker.services.QueueUploadGateway
-import com.geovault.tracker.services.RuntimeEventPublisher
-import com.geovault.tracker.services.TrackingNotificationGateway
-import com.geovault.tracker.services.TrackingSessionCoordinator
+import com.geovault.tracker.positioning.ingest.LocationIngestCoordinator
+import com.geovault.tracker.positioning.LocationSessionGateway
+import com.geovault.tracker.positioning.PointFreshnessTracker
+import com.geovault.tracker.positioning.ProviderHealthController
+import com.geovault.tracker.positioning.QueueUploadGateway
+import com.geovault.tracker.positioning.TrackingNotificationGateway
 import com.geovault.tracker.settings.TrackerSettingsRepository
 import com.geovault.tracker.tracking.TrackingServiceConstants
 import kotlinx.coroutines.CoroutineScope
@@ -45,15 +45,11 @@ internal class PositioningDependencies(
         private set
     lateinit var settingsRepository: TrackerSettingsRepository
         private set
-    lateinit var sessionCoordinator: TrackingSessionCoordinator
-        private set
     lateinit var locationIngestCoordinator: LocationIngestCoordinator
         private set
     lateinit var trackerLocationPipeline: TrackerLocationPipeline
         private set
     lateinit var notificationPresenter: TrackingNotificationGateway
-        private set
-    lateinit var runtimeEventPublisher: RuntimeEventPublisher
         private set
     lateinit var queueUploadEngine: QueueUploadGateway
         private set
@@ -93,9 +89,7 @@ internal class PositioningDependencies(
     fun wire(settingsRepository: TrackerSettingsRepository) {
         this.settingsRepository = settingsRepository
         database = environment.database(service)
-        sessionCoordinator = TrackingSessionCoordinator()
         notificationPresenter = environment.notificationPresenter(service)
-        runtimeEventPublisher = RuntimeEventPublisher(service.applicationContext)
         runtimeTelemetry = environment.runtimeTelemetry(service)
         recoveryAnchorStore = environment.recoveryAnchorStore(service)
         locationSessionCoordinator = environment.locationSessionCoordinator(service) { error ->
@@ -126,7 +120,7 @@ internal class PositioningDependencies(
         significantMotionBridge = environment.significantMotionBridge(
             service = service,
             serviceScope = serviceScope,
-            onResume = { runtime.collection.onSignificantMotion() },
+            onResume = { runtime.motionOrchestrator.resume(ResumeIntent.SignificantMotion) },
         )
         imuMotionClassifier = ImuMotionClassifier(
             context = service.applicationContext,
@@ -158,7 +152,7 @@ internal class PositioningDependencies(
                 }
 
                 override fun onProbeTimeout() {
-                    runtime.collection.pauseGpsInternal(force = true)
+                    runtime.motionOrchestrator.pause(PauseIntent.FreshnessForce)
                 }
             },
         )

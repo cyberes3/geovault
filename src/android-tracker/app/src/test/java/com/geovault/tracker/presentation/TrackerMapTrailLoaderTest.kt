@@ -7,186 +7,13 @@ import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+import com.geovault.tracker.map.MapTrailEngine
 class TrackerMapTrailLoaderTest {
-
-    @Test
-    fun load_singleServer_returnsSeedAndQueueOverlayWithoutClobberingServerMap() {
-        val server = listOf(
-            point("me", time = 100L, prov = TrackerMapPointProvenancePolicy.PROVENANCE_SERVER_GEOMETRY),
-        )
-        val queue = listOf(
-            point("me", time = 200L, prov = TrackerMapPointProvenancePolicy.PROVENANCE_LOCAL_GPS),
-        )
-        val ops = ops(
-            singleServer = { id, _ -> if (id == "me") server else emptyList() },
-            queue = { id -> if (id == "me") queue else emptyList() },
-        )
-        val plan = TrackerMapTrailReloadPlan(
-            source = TrackerMapTrailSource.SINGLE_SERVER,
-            singleTrackerId = "me",
-            overlayTrackerId = "me",
-            activeTrackerId = "me",
-        )
-
-        val loaded = runBlocking {
-            TrackerMapTrailLoader.load(plan, existingTrailMinTimeMs = null, existingMultiMinTimes = emptyMap(), ops = ops)
-        }
-
-        assertEquals(server, loaded.singleTrailSeed)
-        assertEquals(mapOf("me" to queue), loaded.queueOverlaysByTracker)
-        assertTrue("server multi map should stay empty in SINGLE_SERVER", loaded.serverTrails.isEmpty())
-    }
-
-    @Test
-    fun load_multiServer_keepsServerGeometryForOwnTrackerAndExposesQueueAsOverlay() {
-        // MULTI_SERVER: server geometry for the locally-recorded tracker stays in serverTrails;
-        // queue rows are exposed only via queueOverlaysByTracker so merge treats them as overlays.
-        val ownerServer = listOf(
-            point("me", time = 100L, prov = TrackerMapPointProvenancePolicy.PROVENANCE_SERVER_GEOMETRY),
-            point("me", time = 110L, prov = TrackerMapPointProvenancePolicy.PROVENANCE_SERVER_GEOMETRY),
-        )
-        val peerServer = listOf(
-            point("peer", time = 50L, prov = TrackerMapPointProvenancePolicy.PROVENANCE_SERVER_GEOMETRY),
-        )
-        val ownerQueue = listOf(
-            point("me", time = 200L, prov = TrackerMapPointProvenancePolicy.PROVENANCE_LOCAL_GPS),
-        )
-        val ops = ops(
-            multiServer = { ids, _ ->
-                ids.associateWith {
-                    when (it) {
-                        "me" -> ownerServer
-                        "peer" -> peerServer
-                        else -> emptyList()
-                    }
-                }
-            },
-            queue = { id -> if (id == "me") ownerQueue else emptyList() },
-        )
-        val plan = TrackerMapTrailReloadPlan(
-            source = TrackerMapTrailSource.MULTI_SERVER,
-            trackerIds = setOf("me", "peer"),
-            overlayTrackerId = "me",
-            activeTrackerId = "me",
-        )
-
-        val loaded = runBlocking {
-            TrackerMapTrailLoader.load(plan, existingTrailMinTimeMs = null, existingMultiMinTimes = emptyMap(), ops = ops)
-        }
-
-        assertEquals(setOf("me", "peer"), loaded.serverTrails.keys)
-        assertSame("server map for own tracker must reference the unmodified server list", ownerServer, loaded.serverTrails["me"])
-        assertSame(peerServer, loaded.serverTrails["peer"])
-        assertEquals(mapOf("me" to ownerQueue), loaded.queueOverlaysByTracker)
-        assertEquals(ownerServer, loaded.singleTrailSeed)
-    }
-
-    @Test
-    fun load_multiServer_noOverlayTracker_returnsEmptyQueueOverlays() {
-        val server = mapOf("a" to listOf(point("a", time = 1L)))
-        val ops = ops(
-            multiServer = { _, _ -> server },
-            queue = { error("queue must not be loaded when overlayTrackerId is null") },
-        )
-        val plan = TrackerMapTrailReloadPlan(
-            source = TrackerMapTrailSource.MULTI_SERVER,
-            trackerIds = setOf("a"),
-            overlayTrackerId = null,
-            activeTrackerId = "a",
-        )
-
-        val loaded = runBlocking {
-            TrackerMapTrailLoader.load(plan, existingTrailMinTimeMs = null, existingMultiMinTimes = emptyMap(), ops = ops)
-        }
-
-        assertEquals(server, loaded.serverTrails)
-        assertTrue(loaded.queueOverlaysByTracker.isEmpty())
-    }
-
-    @Test
-    fun load_singleQueue_populatesOnlySingleTrailSeed() {
-        val queue = listOf(point("me", time = 50L, prov = TrackerMapPointProvenancePolicy.PROVENANCE_LOCAL_GPS))
-        val ops = ops(queue = { id -> if (id == "me") queue else emptyList() })
-        val plan = TrackerMapTrailReloadPlan(
-            source = TrackerMapTrailSource.SINGLE_QUEUE,
-            activeTrackerId = "me",
-        )
-
-        val loaded = runBlocking {
-            TrackerMapTrailLoader.load(plan, existingTrailMinTimeMs = null, existingMultiMinTimes = emptyMap(), ops = ops)
-        }
-
-        assertEquals(queue, loaded.singleTrailSeed)
-        assertTrue(loaded.serverTrails.isEmpty())
-        assertTrue(loaded.queueOverlaysByTracker.isEmpty())
-    }
-
-    @Test
-    fun load_multiServer_keepsServerTrailsSeparateFromQueueOverlays() {
-        // MULTI_SERVER loader must return server geometry per tracker and queue overlays in a
-        // separate map so history can compose trunk + overlay without clobbering server history.
-        val ownerServer = listOf(
-            point("me", time = 100L, prov = TrackerMapPointProvenancePolicy.PROVENANCE_SERVER_GEOMETRY),
-            point("me", time = 110L, prov = TrackerMapPointProvenancePolicy.PROVENANCE_SERVER_GEOMETRY),
-            point("me", time = 120L, prov = TrackerMapPointProvenancePolicy.PROVENANCE_SERVER_GEOMETRY),
-        )
-        val peerServer = listOf(
-            point("peer", time = 200L, prov = TrackerMapPointProvenancePolicy.PROVENANCE_SERVER_GEOMETRY),
-        )
-        val ownerQueue = listOf(
-            point("me", time = 150L, prov = TrackerMapPointProvenancePolicy.PROVENANCE_LOCAL_GPS),
-        )
-        val ops = ops(
-            multiServer = { _, _ -> mapOf("me" to ownerServer, "peer" to peerServer) },
-            queue = { id -> if (id == "me") ownerQueue else emptyList() },
-        )
-        val plan = TrackerMapTrailReloadPlan(
-            source = TrackerMapTrailSource.MULTI_SERVER,
-            trackerIds = setOf("me", "peer"),
-            overlayTrackerId = "me",
-            activeTrackerId = "me",
-        )
-
-        val loaded = runBlocking {
-            TrackerMapTrailLoader.load(plan, existingTrailMinTimeMs = null, existingMultiMinTimes = emptyMap(), ops = ops)
-        }
-
-        assertEquals(setOf("me", "peer"), loaded.serverTrails.keys)
-        assertEquals(ownerServer, loaded.serverTrails["me"])
-        assertEquals(peerServer, loaded.serverTrails["peer"])
-        assertEquals(ownerQueue, loaded.queueOverlaysByTracker["me"])
-        assertEquals(ownerServer, loaded.singleTrailSeed)
-    }
-
-    @Test
-    fun load_emptyQueueResult_isOmittedFromOverlayMap() {
-        val ops = ops(
-            singleServer = { _, _ -> listOf(point("me", time = 1L)) },
-            queue = { emptyList() },
-        )
-        val plan = TrackerMapTrailReloadPlan(
-            source = TrackerMapTrailSource.SINGLE_SERVER,
-            singleTrackerId = "me",
-            overlayTrackerId = "me",
-            activeTrackerId = "me",
-        )
-
-        val loaded = runBlocking {
-            TrackerMapTrailLoader.load(plan, existingTrailMinTimeMs = null, existingMultiMinTimes = emptyMap(), ops = ops)
-        }
-
-        assertTrue("empty queue should not pollute the overlay map", loaded.queueOverlaysByTracker.isEmpty())
-    }
 
     @Test
     fun loadLocalOverlay_singleServer_readsQueueWithoutServerFetch() {
         val currentServer = listOf(point("me", time = 1L))
-        val queue = listOf(point("me", time = 2L, prov = TrackerMapPointProvenancePolicy.PROVENANCE_LOCAL_GPS))
-        val ops = ops(
-            singleServer = { _, _ -> error("local overlay refresh must not fetch single server history") },
-            multiServer = { _, _ -> error("local overlay refresh must not fetch multi server history") },
-            queue = { id -> if (id == "me") queue else emptyList() },
-        )
+        val queue = listOf(point("me", time = 2L, prov = MapTrailEngine.PROVENANCE_LOCAL_GPS))
         val plan = TrackerMapTrailReloadPlan(
             source = TrackerMapTrailSource.SINGLE_SERVER,
             singleTrackerId = "me",
@@ -195,11 +22,11 @@ class TrackerMapTrailLoaderTest {
         )
 
         val loaded = runBlocking {
-            TrackerMapTrailLoader.loadLocalOverlay(
+            MapTrailEngine.loadLocalOverlay(
                 plan = plan,
                 currentSingleTrail = currentServer,
                 currentMultiTrails = emptyMap(),
-                ops = ops,
+                loadQueue = { id -> if (id == "me") queue else emptyList() },
             )
         }
 
@@ -209,31 +36,93 @@ class TrackerMapTrailLoaderTest {
         assertTrue(loaded.authoritativeServerTrackerIds.isEmpty())
     }
 
-    private fun ops(
-        singleServer: suspend (String, Long?) -> List<QueuedLocation> = { _, _ -> emptyList() },
-        multiServer: suspend (Collection<String>, Map<String, Long>) -> Map<String, List<QueuedLocation>> = { _, _ -> emptyMap() },
-        queue: suspend (String) -> List<QueuedLocation> = { emptyList() },
-    ): TrackerMapTrailLoaderOps = TrackerMapTrailLoaderOps(
-        loadSingleServer = { id, minTime ->
-            TrackerMapServerTrailResult(
-                trailsByTracker = mapOf(id to singleServer(id, minTime)),
-                authoritativeTrackerIds = setOf(id),
+    @Test
+    fun loadLocalOverlay_emptyQueue_isOmittedFromOverlayMap() {
+        val currentServer = listOf(point("me", time = 1L))
+        val plan = TrackerMapTrailReloadPlan(
+            source = TrackerMapTrailSource.SINGLE_SERVER,
+            singleTrackerId = "me",
+            overlayTrackerId = "me",
+            activeTrackerId = "me",
+        )
+
+        val loaded = runBlocking {
+            MapTrailEngine.loadLocalOverlay(
+                plan = plan,
+                currentSingleTrail = currentServer,
+                currentMultiTrails = emptyMap(),
+                loadQueue = { emptyList() },
             )
-        },
-        loadMultiServer = { ids, minTimes ->
-            val trails = multiServer(ids, minTimes)
-            TrackerMapServerTrailResult(
-                trailsByTracker = trails,
-                authoritativeTrackerIds = trails.keys,
+        }
+
+        assertTrue("empty queue should not pollute the overlay map", loaded.queueOverlaysByTracker.isEmpty())
+        assertEquals(currentServer, loaded.singleTrailSeed)
+    }
+
+    @Test
+    fun loadLocalOverlay_noOverlayTracker_doesNotLoadQueue() {
+        val currentMulti = mapOf("a" to listOf(point("a", time = 1L)))
+        val plan = TrackerMapTrailReloadPlan(
+            source = TrackerMapTrailSource.MULTI_SERVER,
+            trackerIds = setOf("a"),
+            overlayTrackerId = null,
+            activeTrackerId = "a",
+        )
+
+        val loaded = runBlocking {
+            MapTrailEngine.loadLocalOverlay(
+                plan = plan,
+                currentSingleTrail = emptyList(),
+                currentMultiTrails = currentMulti,
+                loadQueue = { error("queue must not be loaded when overlayTrackerId is null") },
             )
-        },
-        loadQueue = queue,
-    )
+        }
+
+        assertEquals(currentMulti, loaded.serverTrails)
+        assertTrue(loaded.queueOverlaysByTracker.isEmpty())
+    }
+
+    @Test
+    fun loadLocalOverlay_multiServer_keepsCurrentMultiTrailsAndQueueOverlay() {
+        val ownerServer = listOf(
+            point("me", time = 100L, prov = MapTrailEngine.PROVENANCE_SERVER_GEOMETRY),
+            point("me", time = 110L, prov = MapTrailEngine.PROVENANCE_SERVER_GEOMETRY),
+        )
+        val peerServer = listOf(
+            point("peer", time = 50L, prov = MapTrailEngine.PROVENANCE_SERVER_GEOMETRY),
+        )
+        val ownerQueue = listOf(
+            point("me", time = 200L, prov = MapTrailEngine.PROVENANCE_LOCAL_GPS),
+        )
+        val currentMulti = mapOf("me" to ownerServer, "peer" to peerServer)
+        val plan = TrackerMapTrailReloadPlan(
+            source = TrackerMapTrailSource.MULTI_SERVER,
+            trackerIds = setOf("me", "peer"),
+            overlayTrackerId = "me",
+            activeTrackerId = "me",
+        )
+
+        val loaded = runBlocking {
+            MapTrailEngine.loadLocalOverlay(
+                plan = plan,
+                currentSingleTrail = ownerServer,
+                currentMultiTrails = currentMulti,
+                loadQueue = { id -> if (id == "me") ownerQueue else emptyList() },
+            )
+        }
+
+        assertEquals(setOf("me", "peer"), loaded.serverTrails.keys)
+        assertSame("server map for own tracker must reference the unmodified server list", ownerServer, loaded.serverTrails["me"])
+        assertSame(peerServer, loaded.serverTrails["peer"])
+        assertEquals(mapOf("me" to ownerQueue), loaded.queueOverlaysByTracker)
+        assertEquals(ownerServer, loaded.singleTrailSeed)
+        assertTrue(loaded.authoritativeServerTrackerIds.isEmpty())
+    }
 
     private fun point(
         trackerId: String,
         time: Long,
-        prov: String = TrackerMapPointProvenancePolicy.PROVENANCE_SERVER_GEOMETRY,
+        prov: String = MapTrailEngine.PROVENANCE_SERVER_GEOMETRY,
     ): QueuedLocation = QueuedLocation(
         id = time,
         trackerId = trackerId,

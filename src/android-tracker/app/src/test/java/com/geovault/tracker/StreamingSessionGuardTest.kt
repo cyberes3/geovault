@@ -1,6 +1,5 @@
 package com.geovault.tracker
 
-import com.geovault.tracker.location.TrackingLifecycleState
 import com.geovault.tracker.streaming.StreamingConfig
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -19,7 +18,7 @@ class StreamingSessionGuardTest {
             requestedTrackerIds = setOf("a"),
             currentTrackerIds = setOf("a"),
             hasSocket = true,
-            lifecycleState = TrackingLifecycleState.RUNNING
+            running = true
         )
 
         assertEquals(StreamingSessionReuseDecision.REUSE, assessment.decision)
@@ -37,7 +36,7 @@ class StreamingSessionGuardTest {
             requestedTrackerIds = setOf("a"),
             currentTrackerIds = setOf("a"),
             hasSocket = true,
-            lifecycleState = TrackingLifecycleState.RUNNING
+            running = true
         )
 
         assertEquals(StreamingSessionReuseDecision.STALE_ACTIVITY, assessment.decision)
@@ -55,7 +54,7 @@ class StreamingSessionGuardTest {
             requestedTrackerIds = setOf("a", "b"),
             currentTrackerIds = setOf("a"),
             hasSocket = true,
-            lifecycleState = TrackingLifecycleState.RUNNING
+            running = true
         )
 
         assertEquals(StreamingSessionReuseDecision.HOT_UPDATE, assessment.decision)
@@ -69,7 +68,7 @@ class StreamingSessionGuardTest {
             requestedTrackerIds = setOf("a", "b"),
             currentTrackerIds = setOf("a"),
             hasSocket = false,
-            lifecycleState = TrackingLifecycleState.RUNNING
+            running = true
         )
 
         assertEquals(StreamingSessionReuseDecision.NO_SOCKET, assessment.decision)
@@ -86,7 +85,7 @@ class StreamingSessionGuardTest {
             requestedTrackerIds = setOf("a", "b"),
             currentTrackerIds = setOf("a"),
             hasSocket = true,
-            lifecycleState = TrackingLifecycleState.RUNNING
+            running = true
         )
 
         assertEquals(StreamingSessionReuseDecision.STALE_ACTIVITY, assessment.decision)
@@ -111,7 +110,7 @@ class StreamingSessionGuardTest {
             requestedTrackerIds = setOf("a"),
             currentTrackerIds = setOf("a"),
             hasSocket = true,
-            lifecycleState = TrackingLifecycleState.RUNNING
+            running = true
         )
 
         assertEquals(StreamingSessionReuseDecision.REUSE, assessment.decision)
@@ -135,7 +134,7 @@ class StreamingSessionGuardTest {
             requestedTrackerIds = setOf("a"),
             currentTrackerIds = setOf("a"),
             hasSocket = true,
-            lifecycleState = TrackingLifecycleState.RUNNING
+            running = true
         )
 
         assertEquals(StreamingSessionReuseDecision.REUSE, assessment.decision)
@@ -152,7 +151,7 @@ class StreamingSessionGuardTest {
             requestedTrackerIds = setOf("a"),
             currentTrackerIds = setOf("a"),
             hasSocket = true,
-            lifecycleState = TrackingLifecycleState.RUNNING
+            running = true
         )
         assertEquals(StreamingSessionReuseDecision.REUSE, stillFresh.decision)
 
@@ -161,7 +160,7 @@ class StreamingSessionGuardTest {
             requestedTrackerIds = setOf("a"),
             currentTrackerIds = setOf("a"),
             hasSocket = true,
-            lifecycleState = TrackingLifecycleState.RUNNING
+            running = true
         )
         assertEquals(StreamingSessionReuseDecision.STALE_ACTIVITY, nowStale.decision)
     }

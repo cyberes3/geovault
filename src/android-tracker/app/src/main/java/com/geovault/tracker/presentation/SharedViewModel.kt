@@ -11,12 +11,13 @@ import com.geovault.tracker.MapVisibilityResponse
 import com.geovault.tracker.R
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.data.GroupManagementRepository
+import com.geovault.tracker.data.PendingTransaction
 import com.geovault.tracker.data.TrackerApiFailureMessages
 import com.geovault.tracker.data.TrackerBootstrapOutcome
 import com.geovault.tracker.data.TrackerManagementRepository
-import com.geovault.tracker.data.TrackerSessionWarmup
+import com.geovault.tracker.data.CatalogBootstrap
+import com.geovault.tracker.data.CatalogStateStore
 import com.geovault.tracker.di.TrackerAppServices
-import com.geovault.tracker.services.TrackingRuntimeStateStore
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.collectLatest
@@ -36,19 +37,15 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
         TrackerAppServices.from(application).trackerManagementRepository()
     private val groupRepository: GroupManagementRepository =
         TrackerAppServices.from(application).groupManagementRepository()
-    private val addRemoveCoordinator = TrackerAddRemoveCoordinator(
-        trackerRepository = trackerRepository,
-        groupRepository = groupRepository,
-    )
-    private val sessionWarmup: TrackerSessionWarmup =
-        TrackerAppServices.from(application).trackerSessionWarmup()
-    private val stateStore = TrackerAppServices.from(application).trackerManagementStateStore()
+    private val mutationQueue = TrackerAppServices.from(application).mutationQueue()
+    private val sessionWarmup: CatalogBootstrap =
+        TrackerAppServices.from(application).catalogBootstrap()
+    private val catalogStateStore: CatalogStateStore =
+        TrackerAppServices.from(application).catalogStateStore()
+    private val selectionController = TrackerAppServices.from(application).catalogSelectionController()
 
     private val _uiState = MutableStateFlow(SharedUiState())
     val uiState: StateFlow<SharedUiState> = _uiState.asStateFlow()
-
-    private val _snackbarEvents = MutableSharedFlow<String>(extraBufferCapacity = 8)
-    val snackbarEvents: SharedFlow<String> = _snackbarEvents
 
     /** Successful remove/leave from Shared tracker edit — shell should close that sub-view. */
     private val _dismissSharedTrackerEditId = MutableSharedFlow<String>(extraBufferCapacity = 8)
@@ -64,33 +61,21 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
 
     init {
         viewModelScope.launch {
-            stateStore.trackers.collectLatest { trackers ->
+            catalogStateStore.state.collectLatest { catalog ->
                 _uiState.update {
                     it.copy(
-                        trackers = trackers,
-                        selectedTrackerId = selectedTrackerId(),
+                        trackers = catalog.trackers,
+                        groups = catalog.groups,
+                        mapVisibility = catalog.mapVisibility,
+                        availableToAdd = catalog.availableToAdd,
+                        selectedTrackerId = catalog.selectedTrackerId.trim(),
                     )
                 }
             }
         }
         viewModelScope.launch {
-            stateStore.groups.collectLatest { groups ->
-                _uiState.update {
-                    it.copy(
-                        groups = groups,
-                        selectedTrackerId = selectedTrackerId(),
-                    )
-                }
-            }
-        }
-        viewModelScope.launch {
-            stateStore.mapVisibility.collectLatest { mapVisibility ->
-                _uiState.update {
-                    it.copy(
-                        mapVisibility = mapVisibility,
-                        selectedTrackerId = selectedTrackerId(),
-                    )
-                }
+            mutationQueue.state.collectLatest { rows ->
+                _uiState.update { it.copy(mutations = rows) }
             }
         }
     }
@@ -114,8 +99,6 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
                 viewMode = SharedViewMode.DISCOVER_OVERLAY,
                 discoverMode = DiscoverOverlayMode.ON_MY_MAP,
                 isLoading = current.isLoading || current.availableToAdd == null,
-                retainedIncomingTrackers = emptyMap(),
-                retainedIncomingGroups = emptyMap(),
             )
         }
         ensureDiscoveryDataLoaded()
@@ -127,8 +110,6 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
             current.copy(
                 viewMode = SharedViewMode.PUBLIC_OVERLAY,
                 isLoading = current.isLoading || current.availableToAdd == null,
-                retainedPublicTrackers = emptyMap(),
-                retainedPublicGroups = emptyMap(),
             )
         }
         ensureDiscoveryDataLoaded()
@@ -168,26 +149,25 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
     private fun startPendingMutation(
         key: String,
         phase: SharedMutationPhase,
-        optimisticApply: (SharedUiState) -> SharedUiState = { it },
     ): Boolean {
-        var started = false
-        _uiState.update { state ->
-            if (state.pendingOps.containsKey(key)) {
-                state
-            } else {
-                started = true
-                val optimistic = optimisticApply(state)
-                optimistic.copy(pendingOps = optimistic.pendingOps + (key to phase))
-            }
-        }
-        return started
+        val (entityType, entityId) = CatalogMutation.editOccupancy(key)
+        return mutationQueue.enqueue(
+            PendingTransaction(
+                entityType = entityType,
+                entityId = entityId,
+                op = phase.name,
+                phase = phase.name,
+                occupancyKey = key,
+            ),
+        )
     }
 
     private fun clearPendingMutation(key: String) {
-        _uiState.update { state -> state.copy(pendingOps = state.pendingOps - key) }
+        val (entityType, entityId) = CatalogMutation.editOccupancy(key)
+        mutationQueue.complete(entityType, entityId)
     }
 
-    private fun optimisticTrackerForId(state: SharedUiState, trackerId: String): Tracker {
+    private fun trackerForPendingAdd(state: SharedUiState, trackerId: String): Tracker {
         val fromExisting = state.trackers.firstOrNull { it.id == trackerId }
         if (fromExisting != null) return fromExisting
         val fromIncoming = state.availableToAdd
@@ -251,31 +231,43 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
     fun editGroupLeavePendingKey(groupId: String): String = mutationKeyEditGroupLeave(groupId)
 
     private fun performSharedMutation(operation: SharedAddRemoveOperation) {
-        var startResult: SharedMutationStartResult? = null
+        val state = _uiState.value
         val incomingTrackersSnapshot = if (operation is SharedAddRemoveOperation.IncomingGroupAccept) {
-            _uiState.value.incomingTrackers
+            state.incomingTrackers
         } else {
             emptyList()
         }
-        _uiState.update { state ->
-            val result = addRemoveCoordinator.beginSharedMutation(
-                state = state,
-                operation = operation,
-                optimisticTrackerResolver = { trackerId -> optimisticTrackerForId(state, trackerId) },
-                incomingTrackerResolver = { trackerId -> incomingTrackerForId(state, trackerId) },
-                incomingGroupResolver = { groupId -> incomingGroupForId(state, groupId) },
-                publicTrackerResolver = { trackerId -> publicTrackerForId(state, trackerId) },
-                publicGroupResolver = { groupId -> publicGroupForId(state, groupId) },
-            )
-            if (result.started) startResult = result
-            result.state
-        }
-        val started = startResult ?: return
+        val transaction = CatalogMutation.begin(
+            operation = operation,
+            addedTracker = when (operation) {
+                is SharedAddRemoveOperation.IncomingTrackerAdd -> trackerForPendingAdd(state, operation.trackerId)
+                is SharedAddRemoveOperation.PublicTrackerAdd -> trackerForPendingAdd(state, operation.trackerId)
+                else -> null
+            },
+            incomingTracker = when (operation) {
+                is SharedAddRemoveOperation.IncomingTrackerAdd -> incomingTrackerForId(state, operation.trackerId)
+                is SharedAddRemoveOperation.IncomingTrackerReject -> incomingTrackerForId(state, operation.trackerId)
+                else -> null
+            },
+            incomingGroup = when (operation) {
+                is SharedAddRemoveOperation.IncomingGroupAccept -> incomingGroupForId(state, operation.groupId)
+                else -> null
+            },
+            publicTracker = when (operation) {
+                is SharedAddRemoveOperation.PublicTrackerAdd -> publicTrackerForId(state, operation.trackerId)
+                else -> null
+            },
+            publicGroup = when (operation) {
+                is SharedAddRemoveOperation.PublicGroupAdd -> publicGroupForId(state, operation.groupId)
+                else -> null
+            },
+        )
+        if (!mutationQueue.enqueue(transaction)) return
         viewModelScope.launch {
-            when (operation) {
-                is SharedAddRemoveOperation.IncomingGroupAccept -> {
-                    try {
-                        val group = addRemoveCoordinator.executeIncomingGroupAccept(operation.groupId)
+            try {
+                when (operation) {
+                    is SharedAddRemoveOperation.IncomingGroupAccept -> {
+                        val group = groupRepository.acceptGroupShare(operation.groupId)
                         val overlapCount = countOverlappingIncomingShares(
                             incomingTrackersSnapshot,
                             group.track_ids,
@@ -283,29 +275,45 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
                         refreshStateFromServerSerialized(
                             feedbackMessage = resolveAlsoAcceptedSharesMessage(overlapCount),
                         )
-                        _uiState.update { state -> addRemoveCoordinator.applySuccess(state, operation) }
-                    } catch (e: GeoVaultApiFailure) {
-                        _uiState.update { state -> addRemoveCoordinator.applyFailure(state, operation) }
-                        emitSnackbar(apiFailureMessage(e))
                     }
-                }
-                else -> {
-                    try {
-                        addRemoveCoordinator.executeSharedMutation(
-                            operation = operation,
-                            trackerResolver = { trackerId ->
-                                _uiState.value.trackers.firstOrNull { it.id == trackerId }
-                            },
-                        )
+                    else -> {
+                        executeSharedMutation(operation)
                         refreshStateFromServerSerialized(feedbackMessage = null)
-                        _uiState.update { state -> addRemoveCoordinator.applySuccess(state, operation) }
-                    } catch (e: GeoVaultApiFailure) {
-                        _uiState.update { state -> addRemoveCoordinator.applyFailure(state, operation) }
-                        emitSnackbar(apiFailureMessage(e))
                     }
                 }
+            } catch (e: GeoVaultApiFailure) {
+                emitSnackbar(apiFailureMessage(e))
             }
-            _uiState.update { state -> addRemoveCoordinator.clearPendingMutation(state, started.key) }
+            val occupancy = CatalogMutation.occupancy(operation)
+            mutationQueue.complete(occupancy.first, occupancy.second)
+        }
+    }
+
+    private suspend fun executeSharedMutation(operation: SharedAddRemoveOperation) {
+        when (operation) {
+            is SharedAddRemoveOperation.IncomingTrackerAdd ->
+                trackerRepository.subscribeTracker(operation.trackerId)
+            is SharedAddRemoveOperation.IncomingTrackerReject ->
+                trackerRepository.leaveShareWithMe(operation.trackerId)
+            is SharedAddRemoveOperation.PublicTrackerAdd ->
+                trackerRepository.subscribeTracker(operation.trackerId)
+            is SharedAddRemoveOperation.PublicTrackerRemove ->
+                trackerRepository.unsubscribeTracker(operation.trackerId)
+            is SharedAddRemoveOperation.DiscoverOnMapTrackerRemove -> {
+                val tracker = _uiState.value.trackers.firstOrNull { it.id == operation.trackerId }
+                    ?: throw GeoVaultApiFailure(httpCode = null, serverMessage = "Unknown")
+                val command = SharedOwnershipTransitionPolicy.forTrackerLeave(tracker)
+                    ?: throw GeoVaultApiFailure(httpCode = null, serverMessage = "Unknown")
+                command.applyTo(trackerRepository)
+            }
+            is SharedAddRemoveOperation.IncomingGroupAccept ->
+                groupRepository.acceptGroupShare(operation.groupId)
+            is SharedAddRemoveOperation.DiscoverOnMapGroupRemove ->
+                groupRepository.leaveGroup(operation.groupId)
+            is SharedAddRemoveOperation.PublicGroupAdd ->
+                groupRepository.acceptGroupShare(operation.groupId)
+            is SharedAddRemoveOperation.PublicGroupRemove ->
+                groupRepository.leaveGroup(operation.groupId)
         }
     }
 
@@ -347,12 +355,10 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
         if (!startPendingMutation(key, SharedMutationPhase.PENDING_REMOVE)) return
         viewModelScope.launch {
             try {
-                executeTrackerTransition(
-                    SharedTrackerTransitionCommand(
-                        trackerId = trackerId,
-                        action = SharedTrackerTransitionAction.Unsubscribe,
-                    )
-                )
+                SharedTrackerTransitionCommand(
+                    trackerId = trackerId,
+                    action = SharedTrackerTransitionAction.Unsubscribe,
+                ).applyTo(trackerRepository)
                 // No forced refresh: repository mutation updates the state store immediately,
                 // and Shared UI collects that stream for in-place list updates.
                 _dismissSharedTrackerEditId.tryEmit(trackerId)
@@ -368,12 +374,10 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
         if (!startPendingMutation(key, SharedMutationPhase.PENDING_REMOVE)) return
         viewModelScope.launch {
             try {
-                executeTrackerTransition(
-                    SharedTrackerTransitionCommand(
-                        trackerId = trackerId,
-                        action = SharedTrackerTransitionAction.LeaveShare,
-                    )
-                )
+                SharedTrackerTransitionCommand(
+                    trackerId = trackerId,
+                    action = SharedTrackerTransitionAction.LeaveShare,
+                ).applyTo(trackerRepository)
                 // No forced refresh: repository mutation updates the state store immediately,
                 // and Shared UI collects that stream for in-place list updates.
                 _dismissSharedTrackerEditId.tryEmit(trackerId)
@@ -389,7 +393,7 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
         if (!startPendingMutation(key, SharedMutationPhase.PENDING_REMOVE)) return
         viewModelScope.launch {
             try {
-                executeGroupTransition(SharedOwnershipTransitionPolicy.forGroupLeave(groupId))
+                SharedOwnershipTransitionPolicy.forGroupLeave(groupId).applyTo(groupRepository)
                 _dismissSharedGroupEditId.tryEmit(groupId)
                 refreshStateFromServerSerialized(feedbackMessage = null)
             } catch (e: GeoVaultApiFailure) {
@@ -414,14 +418,7 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
     fun refreshAll() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
-            val snapshot = loadSharedSnapshot(forceRefresh = true)
-            _uiState.update { current ->
-                applySnapshot(
-                    base = current,
-                    snapshot = snapshot,
-                )
-            }
-            emitSnackbar(snapshot.errorMessage)
+            refreshStateFromServer(feedbackMessage = null)
         }
     }
 
@@ -451,6 +448,8 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
             }
             if (!outcome.isServerAccessible) {
                 emitSnackbar(apiFailureMessage(networkApiFailure()))
+            } else if (outcome.geometryFailure != null) {
+                emitSnackbar(apiFailureMessage(outcome.geometryFailure))
             }
         }
     }
@@ -497,7 +496,7 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             when (
-                val result = MapVisibilityMutationCoordinator.toggle(
+                val result = MapVisibilityTogglePolicy.toggle(
                     current = _uiState.value.mapVisibility,
                     target = target,
                     loadVisibility = { trackerRepository.loadMapVisibility(forceRefresh = true) },
@@ -524,7 +523,7 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
 
     /** Reject incoming direct share without subscribing. */
     fun leaveIncomingShare(trackerId: String) {
-        runTrackerTransition(SharedOwnershipTransitionPolicy.forIncomingTrackerReject(trackerId))
+        performSharedMutation(SharedAddRemoveOperation.IncomingTrackerReject(trackerId))
     }
 
     /**
@@ -540,7 +539,7 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
         onSuccess: () -> Unit = {},
         onSettled: () -> Unit = {},
     ) {
-        val normalizedIds = SharedBulkMutationCoordinator.normalizeIds(trackIds)
+        val normalizedIds = SharedBulkMutationOutcome.normalizeIds(trackIds)
         if (normalizedIds.isEmpty()) {
             onSettled()
             return
@@ -548,7 +547,7 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             var firstFailure: GeoVaultApiFailure? = null
-            val outcome = SharedBulkMutationCoordinator.run(normalizedIds) { id ->
+            val outcome = SharedBulkMutationOutcome.run(normalizedIds) { id ->
                 try {
                     trackerRepository.unsubscribeTracker(id)
                     true
@@ -594,7 +593,7 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             try {
-                executeTrackerTransition(command)
+                command.applyTo(trackerRepository)
                 refreshStateFromServer(feedbackMessage = null)
                 onSuccess()
             } catch (e: GeoVaultApiFailure) {
@@ -603,30 +602,6 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
                 onFailure()
             }
             onSettled()
-        }
-    }
-
-    private suspend fun executeTrackerTransition(
-        command: SharedTrackerTransitionCommand
-    ) {
-        when (command.action) {
-            SharedTrackerTransitionAction.Subscribe ->
-                trackerRepository.subscribeTracker(command.trackerId)
-            SharedTrackerTransitionAction.Unsubscribe ->
-                trackerRepository.unsubscribeTracker(command.trackerId)
-            SharedTrackerTransitionAction.LeaveShare ->
-                trackerRepository.leaveShareWithMe(command.trackerId)
-        }
-    }
-
-    private suspend fun executeGroupTransition(
-        command: SharedGroupTransitionCommand
-    ) {
-        when (command.action) {
-            SharedGroupTransitionAction.AcceptShare ->
-                groupRepository.acceptGroupShare(command.groupId)
-            SharedGroupTransitionAction.LeaveGroup ->
-                groupRepository.leaveGroup(command.groupId)
         }
     }
 
@@ -642,18 +617,20 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
                 snapshot = snapshot,
             )
         }
-        emitSnackbar(feedbackMessage ?: snapshot.errorMessage)
+        val geometry = sessionWarmup.refreshGeometry()
+        emitSnackbar(feedbackMessage ?: snapshot.errorMessage ?: geometry.failure?.let(::apiFailureMessage))
     }
 
     private fun applySnapshot(
         base: SharedUiState,
         snapshot: SharedLoadSnapshot,
     ): SharedUiState {
+        val catalog = catalogStateStore.state.value
         val next = base.copy(
             isLoading = false,
             trackers = snapshot.trackers.getOrDefault(base.trackers),
             groups = snapshot.groups.getOrDefault(base.groups),
-            availableToAdd = snapshot.availableToAdd.getOrNull() ?: base.availableToAdd,
+            availableToAdd = catalog.availableToAdd,
             mapVisibility = snapshot.mapVisibility.getOrNull() ?: base.mapVisibility,
             hasCompletedInitialLoad = true,
             selectedTrackerId = selectedTrackerId(),
@@ -661,8 +638,11 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
         return next
     }
 
-    private fun selectedTrackerId(): String =
-        TrackingRuntimeStateStore.state.value.selectedTrackerId.trim()
+    private fun selectedTrackerId(): String {
+        val fromStore = catalogStateStore.state.value.selectedTrackerId.trim()
+        if (fromStore.isNotEmpty()) return fromStore
+        return selectionController.selectedTrackerId(getApplication())
+    }
 
     private fun resolveBulkUnsubscribeMessage(
         outcome: SharedBulkMutationOutcome,
@@ -704,7 +684,7 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
 
     private fun emitSnackbar(message: String?) {
         if (message.isNullOrBlank()) return
-        _snackbarEvents.tryEmit(message)
+        TrackerAppServices.from(getApplication()).uiEffects().emitMessage(message)
     }
 
     private fun ensureDiscoveryDataLoaded(showLoading: Boolean = true) {
@@ -714,7 +694,7 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
                 _uiState.update { it.copy(isLoading = true) }
             }
             try {
-                val available = trackerRepository.loadAvailableToAdd(forceRefresh = false)
+                trackerRepository.loadAvailableToAdd(forceRefresh = false)
                 _uiState.update {
                     it.copy(
                         isLoading = if (showLoading || it.viewMode != SharedViewMode.SHARED_LIST) {
@@ -722,7 +702,7 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
                         } else {
                             it.isLoading
                         },
-                        availableToAdd = available,
+                        availableToAdd = catalogStateStore.state.value.availableToAdd,
                     )
                 }
             } catch (e: GeoVaultApiFailure) {

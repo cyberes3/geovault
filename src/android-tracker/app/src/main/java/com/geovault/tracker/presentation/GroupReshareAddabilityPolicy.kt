@@ -14,10 +14,8 @@ import com.geovault.tracker.Tracker
  * and intentionally left out of this policy so it stays a single, focused rule.
  */
 object GroupReshareAddabilityPolicy {
-    private const val ALLOW_GROUP_RESHARE_KEY = "allow_group_reshare"
-
     fun isAddableToGroup(tracker: Tracker): Boolean {
         if (tracker.isOwner()) return true
-        return (tracker.settings?.get(ALLOW_GROUP_RESHARE_KEY) as? Boolean) == true
+        return tracker.catalogSettings.allowGroupReshare == true
     }
 }

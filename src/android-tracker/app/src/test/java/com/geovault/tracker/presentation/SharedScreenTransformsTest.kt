@@ -254,7 +254,7 @@ class SharedScreenTransformsTest {
     }
 
     @Test
-    fun deriveSharedFilteredSections_appliesOptimisticTrackerAddAndRemove() {
+    fun deriveSharedFilteredSections_appliesPendingTrackerAddAndRemove() {
         val sharedItems = listOf(
             SharedSurfaceItem.TrackerItem(
                 Tracker(id = "remove-me", name = "Remove Me", color = null, is_owner = false, visibility = "shared")
@@ -275,7 +275,7 @@ class SharedScreenTransformsTest {
             discoverOnMapQuery = "",
             discoverIncomingQuery = "",
             publicQuery = "",
-            optimisticTrackerAdds = mapOf(
+            pendingTrackerAdds = mapOf(
                 "add-me" to Tracker(
                     id = "add-me",
                     name = "Add Me",
@@ -284,7 +284,7 @@ class SharedScreenTransformsTest {
                     visibility = "shared",
                 )
             ),
-            optimisticTrackerRemovals = setOf("remove-me"),
+            pendingTrackerRemovals = setOf("remove-me"),
         )
 
         assertEquals(
@@ -316,7 +316,6 @@ class SharedScreenTransformsTest {
             discoverOnMapQuery = "",
             discoverIncomingQuery = "",
             publicQuery = "",
-            optimisticDiscoverOnMapRemovals = setOf("t1"),
         )
 
         assertEquals(listOf("t1"), filtered.discoverOnMyMapTrackers.map { it.id })
@@ -324,7 +323,7 @@ class SharedScreenTransformsTest {
     }
 
     @Test
-    fun deriveSharedFilteredSections_mergesRetainedIncomingAndPublicRows() {
+    fun deriveSharedFilteredSections_mergesQueuedIncomingAndPublicRows() {
         val filtered = deriveSharedFilteredSections(
             sharedItems = emptyList(),
             discoverOnMyMapTrackers = emptyList(),
@@ -340,16 +339,16 @@ class SharedScreenTransformsTest {
             discoverOnMapQuery = "",
             discoverIncomingQuery = "",
             publicQuery = "",
-            retainedIncomingTrackers = listOf(
+            queuedIncomingTrackers = listOf(
                 com.geovault.tracker.AvailableToAddItem(id = "in-b", name = "Incoming B")
             ),
-            retainedIncomingGroups = listOf(
+            queuedIncomingGroups = listOf(
                 com.geovault.tracker.AvailableToAddGroup(id = "ig-b", name = "Incoming Group B")
             ),
-            retainedPublicTrackers = listOf(
+            queuedPublicTrackers = listOf(
                 com.geovault.tracker.AvailableToAddItem(id = "pt-b", name = "Public Tracker B")
             ),
-            retainedPublicGroups = listOf(
+            queuedPublicGroups = listOf(
                 com.geovault.tracker.AvailableToAddGroup(id = "pg-b", name = "Public Group B")
             ),
         )
@@ -361,7 +360,7 @@ class SharedScreenTransformsTest {
     }
 
     @Test
-    fun deriveSharedFilteredSections_retainedRowsDoNotDuplicateExistingRows() {
+    fun deriveSharedFilteredSections_queuedRowsDoNotDuplicateExistingRows() {
         val filtered = deriveSharedFilteredSections(
             sharedItems = emptyList(),
             discoverOnMyMapTrackers = emptyList(),
@@ -381,17 +380,17 @@ class SharedScreenTransformsTest {
             discoverOnMapQuery = "",
             discoverIncomingQuery = "",
             publicQuery = "",
-            retainedIncomingTrackers = listOf(
-                com.geovault.tracker.AvailableToAddItem(id = "in-a", name = "Incoming A (retained)")
+            queuedIncomingTrackers = listOf(
+                com.geovault.tracker.AvailableToAddItem(id = "in-a", name = "Incoming A (queued)")
             ),
-            retainedIncomingGroups = listOf(
-                com.geovault.tracker.AvailableToAddGroup(id = "ig-a", name = "Incoming Group A (retained)")
+            queuedIncomingGroups = listOf(
+                com.geovault.tracker.AvailableToAddGroup(id = "ig-a", name = "Incoming Group A (queued)")
             ),
-            retainedPublicTrackers = listOf(
-                com.geovault.tracker.AvailableToAddItem(id = "pt-a", name = "Public Tracker A (retained)")
+            queuedPublicTrackers = listOf(
+                com.geovault.tracker.AvailableToAddItem(id = "pt-a", name = "Public Tracker A (queued)")
             ),
-            retainedPublicGroups = listOf(
-                com.geovault.tracker.AvailableToAddGroup(id = "pg-a", name = "Public Group A (retained)")
+            queuedPublicGroups = listOf(
+                com.geovault.tracker.AvailableToAddGroup(id = "pg-a", name = "Public Group A (queued)")
             ),
         )
 

@@ -3,6 +3,8 @@ package com.geovault.tracker.data
 import com.geovault.tracker.GeoJsonLineString
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.TrackerGeometryStatus
+import com.geovault.tracker.pointParamsOf
+import com.google.gson.JsonObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -36,7 +38,7 @@ class TrackerGeometryMergePolicyTest {
             color = "#112233",
             ownerEmail = "owner@example.com",
             updatedAt = 100L,
-            pointParams = listOf(mapOf("starttimestamp" to 90L)),
+            pointParams = listOf(pointParamsOf("starttimestamp" to 90L)),
             lastPoint = listOf(10.0, 20.0, 100.0),
         )
         val incoming = tracker(
@@ -57,7 +59,32 @@ class TrackerGeometryMergePolicyTest {
         assertEquals(listOf(10.0, 20.0, 100.0), merged.last_point)
         assertNotNull(merged.geometry)
         assertEquals(listOf(listOf(30.0, 40.0)), merged.geometry?.coordinates)
-        assertEquals(null, merged.point_params)
+        assertEquals(listOf(pointParamsOf("starttimestamp" to 90L)), merged.point_params)
+    }
+
+    @Test
+    fun merged_keepsExistingPointParams_whenIncomingListIsShorterWithoutGeometry() {
+        val existing = tracker(
+            id = "t1",
+            name = "Existing Name",
+            geometryCoords = listOf(listOf(10.0, 20.0)),
+            color = "#112233",
+            pointParams = listOf(
+                pointParamsOf("starttimestamp" to 90L),
+                pointParamsOf("starttimestamp" to 91L),
+            ),
+        )
+        val incoming = tracker(
+            id = "t1",
+            name = "Existing Name",
+            geometryCoords = null,
+            color = "#112233",
+            pointParams = listOf(pointParamsOf("starttimestamp" to 99L)),
+        )
+
+        val merged = TrackerGeometryMergePolicy.merged(existing = existing, incoming = incoming)
+
+        assertEquals(2, merged.point_params?.size)
     }
 
     @Test
@@ -67,7 +94,7 @@ class TrackerGeometryMergePolicyTest {
             name = "Existing Name",
             geometryCoords = listOf(listOf(10.0, 20.0)),
             color = "#112233",
-            pointParams = listOf(mapOf("starttimestamp" to 90L)),
+            pointParams = listOf(pointParamsOf("starttimestamp" to 90L)),
         )
         val incoming = tracker(
             id = "t1",
@@ -79,7 +106,7 @@ class TrackerGeometryMergePolicyTest {
         val merged = TrackerGeometryMergePolicy.merged(existing = existing, incoming = incoming)
 
         assertEquals(listOf(listOf(10.0, 20.0)), merged.geometry?.coordinates)
-        assertEquals(listOf(mapOf("starttimestamp" to 90L)), merged.point_params)
+        assertEquals(listOf(pointParamsOf("starttimestamp" to 90L)), merged.point_params)
     }
 
     @Test
@@ -118,7 +145,7 @@ class TrackerGeometryMergePolicyTest {
             color = "#000000",
             ownerEmail = "old@example.com",
             updatedAt = 10L,
-            pointParams = listOf(mapOf("starttimestamp" to 1L)),
+            pointParams = listOf(pointParamsOf("starttimestamp" to 1L)),
             lastPoint = listOf(1.0, 1.0, 10.0),
         )
         val incoming = tracker(
@@ -128,7 +155,7 @@ class TrackerGeometryMergePolicyTest {
             color = "#ABCDEF",
             ownerEmail = "new@example.com",
             updatedAt = 20L,
-            pointParams = listOf(mapOf("starttimestamp" to 2L)),
+            pointParams = listOf(pointParamsOf("starttimestamp" to 2L)),
             lastPoint = listOf(2.0, 2.0, 20.0),
         )
 
@@ -138,7 +165,7 @@ class TrackerGeometryMergePolicyTest {
         assertEquals("#ABCDEF", merged.color)
         assertEquals("new@example.com", merged.owner_email)
         assertEquals(20L, merged.updated_at)
-        assertEquals(listOf(mapOf("starttimestamp" to 2L)), merged.point_params)
+        assertEquals(listOf(pointParamsOf("starttimestamp" to 2L)), merged.point_params)
         assertEquals(listOf(2.0, 2.0, 20.0), merged.last_point)
         assertEquals(listOf(listOf(2.0, 2.0)), merged.geometry?.coordinates)
     }
@@ -150,7 +177,7 @@ class TrackerGeometryMergePolicyTest {
         color: String?,
         ownerEmail: String? = null,
         updatedAt: Long? = null,
-        pointParams: List<Map<String, Any?>>? = null,
+        pointParams: List<JsonObject>? = null,
         lastPoint: List<Double>? = null,
     ): Tracker {
         return Tracker(

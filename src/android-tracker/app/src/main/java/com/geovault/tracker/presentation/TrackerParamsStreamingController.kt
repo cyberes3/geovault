@@ -2,7 +2,7 @@ package com.geovault.tracker.presentation
 
 import com.geovault.tracker.policy.StreamingTargetPolicy
 import com.geovault.tracker.streaming.LiveStreamSubscriptionRepository
-import com.geovault.tracker.streaming.OwnerLease
+import com.geovault.tracker.streaming.StreamIntent
 import com.geovault.tracker.streaming.StreamingOwner
 
 /**
@@ -38,7 +38,7 @@ internal class TrackerParamsStreamingController(
         val lease = if (id.isEmpty() || StreamingTargetPolicy.isHistoryOnlyView(id, selectedTrackerId)) {
             null
         } else {
-            OwnerLease(
+            StreamIntent(
                 trackerIds = setOf(id),
                 displayName = trackerName?.trim()?.ifBlank { null },
                 locallyRecordedTrackerId = selectedTrackerId.trim().takeIf { trackingRunning },

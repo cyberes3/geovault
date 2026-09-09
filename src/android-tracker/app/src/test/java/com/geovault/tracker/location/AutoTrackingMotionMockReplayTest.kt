@@ -1,13 +1,13 @@
 package com.geovault.tracker.location
 
 import com.geovault.tracker.policy.TrackPointDecision
-import com.geovault.tracker.policy.TrackPointEvent
+import com.geovault.tracker.domain.TrackPoint
 import com.geovault.tracker.policy.TrackPointPolicyEngine
 import com.geovault.tracker.policy.TrackPointRejectReason
 import com.geovault.tracker.policy.TrackPointSource
 import com.geovault.tracker.policy.filter.LocationFilterConfig
 import com.geovault.tracker.policy.filter.MotionProfileTuning
-import com.geovault.tracker.services.TrackingMotionMode
+import com.geovault.tracker.positioning.TrackingMotionMode
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -34,12 +34,12 @@ class AutoTrackingMotionMockReplayTest {
         engine.reset(nowMs = 0L)
 
         val seed = TrackPointPolicyEngine.evaluate(
-            event = TrackPointEvent(
-                source = TrackPointSource.LOCAL_GPS,
-                trackId = trackId,
-                lat = 0.0,
-                lon = -45.0000,
-                timestampMs = 0L,
+            event = TrackPoint(
+                provenance = TrackPointSource.LOCAL_GPS,
+                trackerId = trackId,
+                latitude = 0.0,
+                longitude = -45.0000,
+                timeMs = 0L,
                 accuracyMeters = 3f,
                 gpsSpeedMps = 0f,
                 gpsBearingDeg = 90f,
@@ -96,12 +96,12 @@ class AutoTrackingMotionMockReplayTest {
         evidenceGate: AutoTrackingMotionEvidenceGate,
     ): TrackPointDecision {
         val result = TrackPointPolicyEngine.evaluate(
-            event = TrackPointEvent(
-                source = TrackPointSource.LOCAL_GPS,
-                trackId = trackId,
-                lat = 0.0,
-                lon = lon,
-                timestampMs = timestampMs,
+            event = TrackPoint(
+                provenance = TrackPointSource.LOCAL_GPS,
+                trackerId = trackId,
+                latitude = 0.0,
+                longitude = lon,
+                timeMs = timestampMs,
                 accuracyMeters = 3f,
                 gpsSpeedMps = 23f,
                 gpsBearingDeg = 90f,

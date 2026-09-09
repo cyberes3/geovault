@@ -1,7 +1,9 @@
 package com.geovault.tracker.policy
 
+import com.geovault.tracker.domain.TrackPoint
 import com.geovault.tracker.policy.filter.LocationFilterConfig
 import com.geovault.tracker.policy.filter.LocationFilterPolicy
+import com.geovault.tracker.policy.filter.MovementCandidateConfig
 import com.geovault.tracker.streaming.StreamingConfig
 import java.util.concurrent.atomic.AtomicLong
 
@@ -14,7 +16,6 @@ import java.util.concurrent.atomic.AtomicLong
  */
 object RemoteStreamIngressPolicy {
     private val orderingCounter = AtomicLong(0L)
-    private var subscribedTrackIds: Set<String> = emptySet()
 
     /**
      * Wall-clock timestamp (same clock as [process]'s `nowMs`) of the most recent successful
@@ -34,6 +35,8 @@ object RemoteStreamIngressPolicy {
         maxFutureSkewMs = StreamingConfig.maxFutureSkewMs,
         freshnessTtlMs = StreamingConfig.remoteFreshnessTtlMs,
         normalizeSecondsTimestamps = false,
+        movementCandidate = MovementCandidateConfig.Disabled,
+        staleAnchorMinAgeMs = Long.MAX_VALUE,
     )
 
     /**
@@ -47,10 +50,10 @@ object RemoteStreamIngressPolicy {
         connectedAtMs.set(nowMs)
     }
 
-    fun process(event: TrackPointEvent, nowMs: Long): TrackPointEvent? {
-        val trackId = event.trackId.trim()
+    fun process(event: TrackPoint, nowMs: Long): TrackPoint? {
+        val trackId = event.trackerId.trim()
         return TrackPointCrossSourceState.withLock {
-            val previousByTrack = TrackPointCrossSourceState.previous(event.trackId)
+            val previousByTrack = TrackPointCrossSourceState.previous(event.trackerId)
 
             val decision = TrackPointPolicyEngine.evaluate(
                 event = event,
@@ -68,16 +71,16 @@ object RemoteStreamIngressPolicy {
             }
 
             if (previousByTrack != null) {
-                val duplicateAcrossTrack = canonical.timestampMs == previousByTrack.timestampMs &&
-                    canonical.lon == previousByTrack.lon &&
-                    canonical.lat == previousByTrack.lat
+                val duplicateAcrossTrack = canonical.timeMs == previousByTrack.timeMs &&
+                    canonical.longitude == previousByTrack.longitude &&
+                    canonical.latitude == previousByTrack.latitude
                 if (duplicateAcrossTrack) {
                     RemoteTrackPointAdmissionDiagnostics.recordRejected(
                         RemoteTrackPointAdmissionStage.FRESHNESS_ORDERING, "cross_track_duplicate", trackId
                     )
                     return@withLock null
                 }
-                if (canonical.timestampMs < previousByTrack.timestampMs) {
+                if (canonical.timeMs < previousByTrack.timeMs) {
                     RemoteTrackPointAdmissionDiagnostics.recordRejected(
                         RemoteTrackPointAdmissionStage.FRESHNESS_ORDERING, "cross_track_out_of_order", trackId
                     )
@@ -86,7 +89,7 @@ object RemoteStreamIngressPolicy {
             }
 
             val orderedCanonical = canonical.copy(orderingKey = orderingCounter.incrementAndGet())
-            TrackPointCrossSourceState.update(event.trackId, orderedCanonical)
+            TrackPointCrossSourceState.update(event.trackerId, orderedCanonical)
             orderedCanonical
         }
     }
@@ -103,33 +106,17 @@ object RemoteStreamIngressPolicy {
             .forEach(::resetTrack)
     }
 
-    fun updateSubscribedTracks(trackIds: Collection<String>) {
-        val normalized = trackIds
-            .map { it.trim() }
-            .filter { it.isNotEmpty() }
-            .toSet()
+    fun resetRemoteSession() {
         TrackPointCrossSourceState.withLock {
-            val removed = subscribedTrackIds - normalized
-            subscribedTrackIds = normalized
-            removed.forEach(::resetTrack)
-        }
-    }
-
-    fun startSubscriptionSession(trackIds: Collection<String>) {
-        val normalized = trackIds
-            .map { it.trim() }
-            .filter { it.isNotEmpty() }
-            .toSet()
-        TrackPointCrossSourceState.withLock {
-            val removed = subscribedTrackIds - normalized
-            subscribedTrackIds = normalized
-            (normalized + removed).forEach(::resetTrack)
+            orderingCounter.set(0L)
+            connectedAtMs.set(0L)
+            TrackPointPolicyEngine.resetSource(TrackPointSource.REMOTE_STREAM)
+            TrackPointCrossSourceState.resetSource(TrackPointSource.REMOTE_STREAM)
         }
     }
 
     fun resetForTests() {
         orderingCounter.set(0L)
-        subscribedTrackIds = emptySet()
         connectedAtMs.set(0L)
         TrackPointPolicyEngine.resetAll()
         TrackPointCrossSourceState.resetForTests()

@@ -2,6 +2,7 @@ package com.geovault.tracker.presentation
 
 import com.geovault.tracker.Group
 import com.geovault.tracker.Tracker
+import com.geovault.tracker.TrackerCatalogSettings
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -12,7 +13,7 @@ class TrackersGroupsSearchFiltersTest {
         val trackers = listOf(
             Tracker(id = "owned", name = "Owned", color = null, is_owner = true),
             Tracker(id = "shared", name = "Shared", color = null, is_owner = false),
-            Tracker(id = "hidden", name = "Hidden", color = null, settings = mapOf("hidden" to true), is_owner = true),
+            Tracker(id = "hidden", name = "Hidden", color = null, settings = TrackerCatalogSettings(hidden = true), is_owner = true),
         )
 
         val filtered = filterVisibleOwnerTrackersForSearch(trackers, "")

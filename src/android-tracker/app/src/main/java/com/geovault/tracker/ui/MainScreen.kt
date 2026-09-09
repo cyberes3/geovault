@@ -17,7 +17,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import android.app.Application
+import com.geovault.tracker.di.TrackerAppServices
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.geovault.common.auth.GeoVaultAccountUiState
 import com.geovault.common.maps.core.rememberGeoVaultMainMap
@@ -51,11 +54,7 @@ fun MainScreen(
     onMapRecoveryRequestConsumed: (Long) -> Unit = {},
     onAuthServerUrlChanged: (String) -> Unit,
     onAuthConnect: () -> Unit,
-    onClearInfoMessage: () -> Unit = {},
     onClearUpdateAvailable: () -> Unit = {},
-    onRequestStartTracking: () -> Unit = {},
-    onRequestStopTracking: () -> Unit = {},
-    onRequestManualPoint: () -> Unit = {},
     settingsState: SettingsState,
     accountState: GeoVaultAccountUiState,
     onSettingsServerUrlChanged: (String) -> Unit,
@@ -295,14 +294,21 @@ fun MainScreen(
         onOpenSettings = openSettingsOverlay,
         connectButtonTooltip = connectTooltip,
     )
-    val globalInfoModel = state.infoMessage
-        ?.takeIf { it.isNotBlank() }
-        ?.let { message ->
-            GeoVaultSnackbarModel(
-                id = "tracker-global-${message.hashCode()}",
-                message = message,
-            )
+    val application = LocalContext.current.applicationContext as Application
+    val hostEffects = remember { TrackerAppServices.from(application).uiEffects() }
+    var hostSnackbar by remember { mutableStateOf<GeoVaultSnackbarModel?>(null) }
+    LaunchedEffect(hostEffects) {
+        hostEffects.effects.collect { effect ->
+            hostSnackbar = when (effect) {
+                is TrackerUiEffect.Snackbar -> effect.model
+                is TrackerUiEffect.Message -> GeoVaultSnackbarModel(
+                    id = "tracker-host-${effect.text.hashCode()}",
+                    message = effect.text,
+                )
+            }
         }
+    }
+    val globalInfoModel = hostSnackbar
 
     CompositionLocalProvider(LocalTrackerParamsOverlay provides trackerParamsOverlay) {
         GeoVaultAppShell(
@@ -387,7 +393,9 @@ fun MainScreen(
             snackbarLayer = {
                 GeoVaultAppSnackbarLayer(
                     snackbar = globalInfoModel,
-                    onDismissSnackbar = onClearInfoMessage,
+                    onDismissSnackbar = {
+                        hostSnackbar = null
+                    },
                     update = state.updateAvailable,
                     onDismissUpdate = onClearUpdateAvailable,
                 )
@@ -402,18 +410,16 @@ fun MainScreen(
                         isActive = isActive,
                         auth = auth,
                         isServerAccessible = state.isServerAccessible,
-                        onHostNavigationRequested = onMapHostNavigationRequested,
-                        onRequestTrackerParams = { args -> trackerParamsArgs = args },
+                        onNavigate = { navigation ->
+                            when (navigation) {
+                                is MapNavigation.List -> onMapHostNavigationRequested(navigation.request)
+                                is MapNavigation.Params -> trackerParamsArgs = navigation.args
+                            }
+                        },
                     )
                     TrackerTab.HOME.name -> HomeScreen(
                         auth = auth,
                         isServerAccessible = state.isServerAccessible,
-                        isPreparingToTrack = state.isPreparingToTrack,
-                        infoMessage = state.infoMessage,
-                        onClearInfoMessage = onClearInfoMessage,
-                        onRequestStartTracking = onRequestStartTracking,
-                        onRequestStopTracking = onRequestStopTracking,
-                        onRequestManualPoint = onRequestManualPoint,
                         onRequestTrackerParams = { args -> trackerParamsArgs = args },
                     )
                     TrackerTab.TRACKERS.name -> TrackersScreen(

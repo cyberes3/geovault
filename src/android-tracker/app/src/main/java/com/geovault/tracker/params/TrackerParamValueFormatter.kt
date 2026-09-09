@@ -9,24 +9,6 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-private val PARAM_LABELS = mapOf(
-    "lat" to "Latitude",
-    "lon" to "Longitude",
-    "timestamp" to "Timestamp",
-    "sat" to "Satellites",
-    "desc" to "Description",
-    "alt" to "Altitude",
-    "acc" to "Accuracy",
-    "bearing" to "Bearing",
-    "prov" to "Provider",
-    "spd_kph" to "Speed",
-    "starttimestamp" to "Start Timestamp",
-    "batt" to "Battery",
-    "ischarging" to "Charging",
-    "ser" to "Serial",
-    "dist" to "Distance",
-)
-
 private const val KMH_TO_MPH = 0.621371
 
 class TrackerParamValueFormatter(private val context: Context) {
@@ -34,7 +16,24 @@ class TrackerParamValueFormatter(private val context: Context) {
     private val measurementSystem: MeasurementSystem
         get() = MeasurementSystem.fromContext(context)
 
-    fun labelForKey(key: String): String = PARAM_LABELS[key] ?: key
+    fun labelForKey(key: String): String = when (key) {
+        "lat" -> "Latitude"
+        "lon" -> "Longitude"
+        "timestamp" -> "Timestamp"
+        "sat" -> "Satellites"
+        "desc" -> "Description"
+        "alt" -> "Altitude"
+        "acc" -> "Accuracy"
+        "bearing" -> "Bearing"
+        "prov" -> "Provider"
+        "spd_kph" -> "Speed"
+        "starttimestamp" -> "Start Timestamp"
+        "batt" -> "Battery"
+        "ischarging" -> "Charging"
+        "ser" -> "Serial"
+        "dist" -> "Distance"
+        else -> key
+    }
 
     fun formatDisplay(key: String, value: Any?): String {
         if (value == null) return ""

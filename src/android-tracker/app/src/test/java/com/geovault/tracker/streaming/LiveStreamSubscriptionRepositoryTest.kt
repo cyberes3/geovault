@@ -2,8 +2,6 @@ package com.geovault.tracker.streaming
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
-import com.geovault.tracker.MapStreamingStartResult
-import com.geovault.tracker.MapStreamingStopResult
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
@@ -30,8 +28,9 @@ import org.robolectric.annotation.Config
 class LiveStreamSubscriptionRepositoryTest {
 
     private fun newRepository(
-        gateway: FakeLiveStreamServicePort,
+        host: FakeLiveStreamHostPort,
         scope: kotlinx.coroutines.CoroutineScope,
+        persist: FakeLiveStreamPersistPort = FakeLiveStreamPersistPort(),
         dispatchDebounceMs: Long = 0L,
         bootstrapGraceMs: Long = StreamingConfig.bootstrapGraceMs,
         elapsedRealtimeMs: () -> Long = { 0L },
@@ -39,7 +38,8 @@ class LiveStreamSubscriptionRepositoryTest {
         val app: Context = ApplicationProvider.getApplicationContext()
         return LiveStreamSubscriptionRepository(
             appContext = app,
-            servicePort = gateway,
+            persist = persist,
+            host = host,
             elapsedRealtimeMs = elapsedRealtimeMs,
             dispatchDebounceMs = dispatchDebounceMs,
             bootstrapGraceMs = bootstrapGraceMs,
@@ -47,15 +47,24 @@ class LiveStreamSubscriptionRepositoryTest {
         )
     }
 
+    private fun ports(
+        persisted: Pair<Set<String>, String?> = emptySet<String>() to null,
+        startResult: (Set<String>) -> LiveStreamApplyResult = { ids -> LiveStreamApplyResult.Started(ids) },
+        stopResult: () -> LiveStreamStopResult = { LiveStreamStopResult.Stopped },
+    ): Pair<FakeLiveStreamPersistPort, FakeLiveStreamHostPort> {
+        val persist = FakeLiveStreamPersistPort(persisted)
+        return persist to FakeLiveStreamHostPort(persist, startResult, stopResult)
+    }
+
     @Test
     fun setLease_mergesUnionOfOwnersAndExcludesLocallyRecordedIds() = runTest {
-        val gateway = FakeLiveStreamServicePort()
-        val repository = newRepository(gateway, this)
+        val (persist, gateway) = ports()
+        val repository = newRepository(gateway, this, persist)
 
-        repository.setLease(StreamingOwner.MAP, OwnerLease(trackerIds = setOf("a", "b")))
+        repository.setLease(StreamingOwner.MAP, StreamIntent(trackerIds = setOf("a", "b")))
         repository.setLease(
             StreamingOwner.PARAMS,
-            OwnerLease(trackerIds = setOf("b", "c"), locallyRecordedTrackerId = "c"),
+            StreamIntent(trackerIds = setOf("b", "c"), locallyRecordedTrackerId = "c"),
         )
         advanceUntilIdle()
 
@@ -68,9 +77,9 @@ class LiveStreamSubscriptionRepositoryTest {
 
     @Test
     fun setLease_sameLeaseValueIsNoOpAndDoesNotRedispatch() = runTest {
-        val gateway = FakeLiveStreamServicePort()
-        val repository = newRepository(gateway, this)
-        val lease = OwnerLease(trackerIds = setOf("a"))
+        val (persist, gateway) = ports()
+        val repository = newRepository(gateway, this, persist)
+        val lease = StreamIntent(trackerIds = setOf("a"))
 
         repository.setLease(StreamingOwner.MAP, lease)
         advanceUntilIdle()
@@ -84,10 +93,10 @@ class LiveStreamSubscriptionRepositoryTest {
 
     @Test
     fun setLease_droppingToEmptyDispatchesStop() = runTest {
-        val gateway = FakeLiveStreamServicePort()
-        val repository = newRepository(gateway, this)
+        val (persist, gateway) = ports()
+        val repository = newRepository(gateway, this, persist)
 
-        repository.setLease(StreamingOwner.MAP, OwnerLease(trackerIds = setOf("a")))
+        repository.setLease(StreamingOwner.MAP, StreamIntent(trackerIds = setOf("a")))
         advanceUntilIdle()
         assertEquals(0, gateway.stopCount)
 
@@ -102,15 +111,15 @@ class LiveStreamSubscriptionRepositoryTest {
         // Regression test: with a real (non-zero) debounce, `dispatch()` -- and the
         // `connection` update that comes from actually contacting the service -- doesn't run
         // until after the debounce window. A caller reading `state` synchronously right after
-        // `setLease` (like `MapStreamingSubsystem`'s stream-state collector) must not see a
+        // `setLease` (like `MapSessionEngine`'s stream-state collector) must not see a
         // stale `connection=IDLE` alongside `wantsSubscription=true`, since that combination is
         // indistinguishable from a session that actually ran and ended -- which previously
         // caused that just-set lease to be torn down before the service ever got a chance to
         // start it.
-        val gateway = FakeLiveStreamServicePort()
-        val repository = newRepository(gateway, this, dispatchDebounceMs = 350L)
+        val (persist, gateway) = ports()
+        val repository = newRepository(gateway, this, persist, dispatchDebounceMs = 350L)
 
-        repository.setLease(StreamingOwner.MAP, OwnerLease(trackerIds = setOf("a")))
+        repository.setLease(StreamingOwner.MAP, StreamIntent(trackerIds = setOf("a")))
 
         assertTrue(repository.state.value.wantsSubscription)
         assertFalse(repository.state.value.subscriptionEnded)
@@ -125,7 +134,7 @@ class LiveStreamSubscriptionRepositoryTest {
         // Regression test for a production "streaming never starts" bug: the previous
         // implementation applied the lease-merge update and the STARTING fix-up as two
         // *separate* `_state.update` calls. A collector using plain `collect` (exactly what
-        // `MapStreamingSubsystem`'s stream-state collector does, deliberately, so it never
+        // `MapSessionEngine`'s stream-state collector does, deliberately, so it never
         // misses the real post-stop cleanup) observes every distinct emission -- including the
         // intermediate one in between those two updates, where `wantsSubscription` was already
         // true but `connection` was still the stale IDLE left over from repository construction
@@ -134,12 +143,12 @@ class LiveStreamSubscriptionRepositoryTest {
         // every single time, since the debounce means `dispatch()` never runs fast enough to
         // race ahead of it. This test collects *every* emission (not just the final value) and
         // asserts none of them ever show that broken combination.
-        val gateway = FakeLiveStreamServicePort()
-        val repository = newRepository(gateway, this, dispatchDebounceMs = 350L)
+        val (persist, gateway) = ports()
+        val repository = newRepository(gateway, this, persist, dispatchDebounceMs = 350L)
         val observedStates = mutableListOf<LiveStreamSubscriptionState>()
         val collectorJob = launch { repository.state.collect { observedStates.add(it) } }
 
-        repository.setLease(StreamingOwner.MAP, OwnerLease(trackerIds = setOf("a")))
+        repository.setLease(StreamingOwner.MAP, StreamIntent(trackerIds = setOf("a")))
         advanceUntilIdle()
 
         collectorJob.cancel()
@@ -158,10 +167,10 @@ class LiveStreamSubscriptionRepositoryTest {
         // Without `requestReapply` clearing the dedupe gate, `dispatch()`'s
         // `hasApplied && ids == lastAppliedIds` short-circuit would make a watchdog-triggered
         // reconnect attempt silently do nothing.
-        val gateway = FakeLiveStreamServicePort()
-        val repository = newRepository(gateway, this)
+        val (persist, gateway) = ports()
+        val repository = newRepository(gateway, this, persist)
 
-        repository.setLease(StreamingOwner.MAP, OwnerLease(trackerIds = setOf("a")))
+        repository.setLease(StreamingOwner.MAP, StreamIntent(trackerIds = setOf("a")))
         advanceUntilIdle()
         assertEquals(1, gateway.startedIds.size)
 
@@ -174,8 +183,8 @@ class LiveStreamSubscriptionRepositoryTest {
 
     @Test
     fun clearAllLeases_unconditionallyDispatchesStopEvenWithNoActiveLease() = runTest {
-        val gateway = FakeLiveStreamServicePort()
-        val repository = newRepository(gateway, this)
+        val (persist, gateway) = ports()
+        val repository = newRepository(gateway, this, persist)
 
         repository.clearAllLeases(ClearReason.LOGOUT)
         advanceUntilIdle()
@@ -185,9 +194,9 @@ class LiveStreamSubscriptionRepositoryTest {
 
     @Test
     fun clearAllLeases_clearsLeaseMapSoASubsequentIdenticalLeaseRedispatches() = runTest {
-        val gateway = FakeLiveStreamServicePort()
-        val repository = newRepository(gateway, this)
-        val lease = OwnerLease(trackerIds = setOf("a"))
+        val (persist, gateway) = ports()
+        val repository = newRepository(gateway, this, persist)
+        val lease = StreamIntent(trackerIds = setOf("a"))
 
         repository.setLease(StreamingOwner.MAP, lease)
         advanceUntilIdle()
@@ -207,10 +216,10 @@ class LiveStreamSubscriptionRepositoryTest {
 
     @Test
     fun clearLeasesWithoutDispatch_neverTouchesTheServicePort() = runTest {
-        val gateway = FakeLiveStreamServicePort()
-        val repository = newRepository(gateway, this)
+        val (persist, gateway) = ports()
+        val repository = newRepository(gateway, this, persist)
 
-        repository.setLease(StreamingOwner.MAP, OwnerLease(trackerIds = setOf("a")))
+        repository.setLease(StreamingOwner.MAP, StreamIntent(trackerIds = setOf("a")))
         advanceUntilIdle()
         assertEquals(1, gateway.startedIds.size)
 
@@ -225,8 +234,8 @@ class LiveStreamSubscriptionRepositoryTest {
 
     @Test
     fun seedFromPersistedState_installsBootstrapLeaseAsStartingUntilARealLeaseArrives() = runTest {
-        val gateway = FakeLiveStreamServicePort(persisted = setOf("restored") to "Restored")
-        val repository = newRepository(gateway, this)
+        val (persist, gateway) = ports(persisted = setOf("restored") to "Restored")
+        val repository = newRepository(gateway, this, persist)
 
         repository.seedFromPersistedState()
 
@@ -235,7 +244,7 @@ class LiveStreamSubscriptionRepositoryTest {
 
         // A real lease from any owner consumes/replaces the bootstrap seed rather than merging
         // with it -- see `setLease` clearing `bootstrapLease` whenever a non-null lease lands.
-        repository.setLease(StreamingOwner.MAP, OwnerLease(trackerIds = setOf("real")))
+        repository.setLease(StreamingOwner.MAP, StreamIntent(trackerIds = setOf("real")))
         advanceUntilIdle()
 
         assertEquals(setOf("real"), repository.state.value.mergedTargets)
@@ -253,8 +262,8 @@ class LiveStreamSubscriptionRepositoryTest {
         // and ended. In production no collector exists yet at this point (see
         // `TrackerAppServices`' lazy construction), but this asserts the invariant holds
         // regardless of that wiring.
-        val gateway = FakeLiveStreamServicePort(persisted = setOf("restored") to "Restored")
-        val repository = newRepository(gateway, this)
+        val (persist, gateway) = ports(persisted = setOf("restored") to "Restored")
+        val repository = newRepository(gateway, this, persist)
         val observedStates = mutableListOf<LiveStreamSubscriptionState>()
         val collectorJob = launch { repository.state.collect { observedStates.add(it) } }
 
@@ -272,8 +281,8 @@ class LiveStreamSubscriptionRepositoryTest {
 
     @Test
     fun seedFromPersistedState_isNoOpWhenNothingWasPersisted() = runTest {
-        val gateway = FakeLiveStreamServicePort(persisted = emptySet<String>() to null)
-        val repository = newRepository(gateway, this)
+        val (persist, gateway) = ports(persisted = emptySet<String>() to null)
+        val repository = newRepository(gateway, this, persist)
 
         repository.seedFromPersistedState()
 
@@ -284,10 +293,11 @@ class LiveStreamSubscriptionRepositoryTest {
     @Test
     fun bootstrapLease_expiresAfterGraceWindowElapsesWithNoRealLeaseClaimed() = runTest {
         var nowMs = 0L
-        val gateway = FakeLiveStreamServicePort(persisted = setOf("ghost") to "Ghost")
+        val (persist, gateway) = ports(persisted = setOf("ghost") to "Ghost")
         val repository = newRepository(
             gateway,
             this,
+            persist,
             bootstrapGraceMs = 5_000L,
             elapsedRealtimeMs = { nowMs },
         )
@@ -308,10 +318,10 @@ class LiveStreamSubscriptionRepositoryTest {
 
     @Test
     fun dispatchStart_failureResetsApplyGateAndRecordsFailureReason() = runTest {
-        val gateway = FakeLiveStreamServicePort(startResult = { ids -> MapStreamingStartResult.Failed("boom") })
-        val repository = newRepository(gateway, this)
+        val (persist, gateway) = ports(startResult = { _ -> LiveStreamApplyResult.Failed("boom") })
+        val repository = newRepository(gateway, this, persist)
 
-        repository.setLease(StreamingOwner.MAP, OwnerLease(trackerIds = setOf("a")))
+        repository.setLease(StreamingOwner.MAP, StreamIntent(trackerIds = setOf("a")))
         advanceUntilIdle()
 
         assertEquals("boom", repository.state.value.failureReason)
@@ -328,10 +338,10 @@ class LiveStreamSubscriptionRepositoryTest {
 
     @Test
     fun dispatchStop_failureSetsFailedTransientAndResetsApplyGate() = runTest {
-        val gateway = FakeLiveStreamServicePort(stopResult = { MapStreamingStopResult.Failed("stop_boom") })
-        val repository = newRepository(gateway, this)
+        val (persist, gateway) = ports(stopResult = { LiveStreamStopResult.Failed("stop_boom") })
+        val repository = newRepository(gateway, this, persist)
 
-        repository.setLease(StreamingOwner.MAP, OwnerLease(trackerIds = setOf("a")))
+        repository.setLease(StreamingOwner.MAP, StreamIntent(trackerIds = setOf("a")))
         repository.setLease(StreamingOwner.MAP, null)
         advanceUntilIdle()
 
@@ -341,10 +351,10 @@ class LiveStreamSubscriptionRepositoryTest {
 
     @Test
     fun reportConnectionUpdate_isOrthogonalToLeaseState() = runTest {
-        val gateway = FakeLiveStreamServicePort()
-        val repository = newRepository(gateway, this)
+        val (persist, gateway) = ports()
+        val repository = newRepository(gateway, this, persist)
 
-        repository.setLease(StreamingOwner.MAP, OwnerLease(trackerIds = setOf("a")))
+        repository.setLease(StreamingOwner.MAP, StreamIntent(trackerIds = setOf("a")))
         advanceUntilIdle()
 
         repository.reportConnectionUpdate(ConnectionPhase.RECONNECTING, setOf("a"), "network_lost")
@@ -358,8 +368,8 @@ class LiveStreamSubscriptionRepositoryTest {
 
     @Test
     fun reportConnectionUpdate_hasConnectedThisProcess_latchesTrueOnRunningAndStaysTrue() = runTest {
-        val gateway = FakeLiveStreamServicePort()
-        val repository = newRepository(gateway, this)
+        val (persist, gateway) = ports()
+        val repository = newRepository(gateway, this, persist)
 
         assertFalse(repository.state.value.hasConnectedThisProcess)
 
@@ -390,12 +400,9 @@ class LiveStreamSubscriptionRepositoryTest {
         val firstCallEntered = java.util.concurrent.CountDownLatch(1)
         val releaseFirstCall = java.util.concurrent.CountDownLatch(1)
         val isFirstCall = java.util.concurrent.atomic.AtomicBoolean(true)
-        val gateway = object : LiveStreamServicePort {
-            override fun startStreaming(
-                context: Context,
-                trackerIds: Set<String>,
-                trackerName: String?,
-            ): MapStreamingStartResult {
+        val persist = FakeLiveStreamPersistPort()
+        val gateway = object : LiveStreamHostPort {
+            override fun apply(context: Context): LiveStreamApplyResult {
                 val current = concurrentEntries.incrementAndGet()
                 maxObservedConcurrency.updateAndGet { prev -> maxOf(prev, current) }
                 if (isFirstCall.compareAndSet(true, false)) {
@@ -403,12 +410,12 @@ class LiveStreamSubscriptionRepositoryTest {
                     releaseFirstCall.await(2, java.util.concurrent.TimeUnit.SECONDS)
                 }
                 concurrentEntries.decrementAndGet()
-                return MapStreamingStartResult.Started(trackerIds)
+                return LiveStreamApplyResult.Started(persist.read().first)
             }
 
-            override fun stopStreaming(context: Context): MapStreamingStopResult = MapStreamingStopResult.Stopped
-
-            override fun persistedTargets(context: Context): Pair<Set<String>, String?> = emptySet<String>() to null
+            override fun stop(context: Context): LiveStreamStopResult = LiveStreamStopResult.Stopped
+            override fun reshow(context: Context) = Unit
+            override fun cancelRetry() = Unit
         }
         val app: Context = ApplicationProvider.getApplicationContext()
         val realScope = kotlinx.coroutines.CoroutineScope(
@@ -416,12 +423,13 @@ class LiveStreamSubscriptionRepositoryTest {
         )
         val repository = LiveStreamSubscriptionRepository(
             appContext = app,
-            servicePort = gateway,
+            persist = persist,
+            host = gateway,
             dispatchDebounceMs = 0L,
             scope = realScope,
         )
 
-        repository.setLease(StreamingOwner.MAP, OwnerLease(trackerIds = setOf("a")))
+        repository.setLease(StreamingOwner.MAP, StreamIntent(trackerIds = setOf("a")))
         assertTrue(firstCallEntered.await(2, java.util.concurrent.TimeUnit.SECONDS))
 
         // The first dispatch is now confirmed blocked inside the gateway call. Trigger a second,
@@ -439,31 +447,4 @@ class LiveStreamSubscriptionRepositoryTest {
         assertEquals(1, maxObservedConcurrency.get())
     }
 
-    private class FakeLiveStreamServicePort(
-        private val persisted: Pair<Set<String>, String?> = emptySet<String>() to null,
-        private val startResult: (Set<String>) -> MapStreamingStartResult = { ids -> MapStreamingStartResult.Started(ids) },
-        private val stopResult: () -> MapStreamingStopResult = { MapStreamingStopResult.Stopped },
-    ) : LiveStreamServicePort {
-        val startedIds = mutableListOf<Set<String>>()
-        var startAttempts = 0
-        var stopCount = 0
-
-        override fun startStreaming(
-            context: Context,
-            trackerIds: Set<String>,
-            trackerName: String?,
-        ): MapStreamingStartResult {
-            startAttempts++
-            val result = startResult(trackerIds)
-            if (result is MapStreamingStartResult.Started) startedIds += result.trackerIds
-            return result
-        }
-
-        override fun stopStreaming(context: Context): MapStreamingStopResult {
-            stopCount++
-            return stopResult()
-        }
-
-        override fun persistedTargets(context: Context): Pair<Set<String>, String?> = persisted
-    }
 }

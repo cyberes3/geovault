@@ -2,9 +2,9 @@ package com.geovault.tracker.positioning
 import com.geovault.tracker.positioning.PositioningRuntime
 import android.location.Location
 import android.os.Bundle
-import android.widget.Toast
 import com.geovault.common.logging.GeoVaultCaptureLog
 import com.geovault.tracker.R
+import com.geovault.tracker.di.TrackerAppServices
 import com.geovault.tracker.tracking.TrackingServiceConstants
 import com.geovault.tracker.tracking.TrackingServiceIntents
 import kotlinx.coroutines.Dispatchers
@@ -15,11 +15,9 @@ internal class ManualFixSubsystem(private val rt: PositioningRuntime) {
     fun handleManualSendPointCommand(): Boolean {
         if (!rt.state.isTracking) {
             rt.serviceScope.launch(Dispatchers.Main) {
-                Toast.makeText(
-                    rt.ports.service,
+                emitHostMessage(
                     rt.ports.service.getString(R.string.manual_send_point_requires_active_tracking),
-                    Toast.LENGTH_SHORT
-                ).show()
+                )
             }
             return false
         }
@@ -41,11 +39,7 @@ internal class ManualFixSubsystem(private val rt: PositioningRuntime) {
                 skipAdaptiveTrackingEffects = true
             )
             withContext(Dispatchers.Main) {
-                Toast.makeText(
-                    rt.ports.service,
-                    rt.ports.service.getString(R.string.manual_send_point_sent),
-                    Toast.LENGTH_SHORT
-                ).show()
+                emitHostMessage(rt.ports.service.getString(R.string.manual_send_point_sent))
                 rt.utilities.triggerLightHaptic()
             }
             rt.projection.updateNotificationFromDb(broadcastStats = true)
@@ -74,4 +68,7 @@ internal class ManualFixSubsystem(private val rt: PositioningRuntime) {
         }
     }
 
+    private fun emitHostMessage(message: String) {
+        TrackerAppServices.from(rt.ports.service.application).uiEffects().emitMessage(message)
+    }
 }

@@ -15,8 +15,6 @@ object TrackingServiceIntents {
     const val ACTION_STATIONARY_PING_DUE = "com.geovault.tracker.ACTION_STATIONARY_PING_DUE"
     const val EXTRA_FOREGROUND_SERVICE_START_REQUIRED = "extra_foreground_service_start_required"
     const val EXTRA_BACKGROUND_WAKEUP_SOURCE = "extra_background_wakeup_source"
-    const val ACTION_TRACKING_ERROR = "com.geovault.tracker.ACTION_TRACKING_ERROR"
-    const val EXTRA_TRACKING_ERROR_MESSAGE = "extra_tracking_error_message"
     const val NOTIFICATION_DISMISSED_ACTION = "com.geovault.tracker.TRACKING_NOTIFICATION_DISMISSED"
 
     const val EXTRAS_KEY_PAUSED_FRESHNESS = PausedFreshnessPointFactory.EXTRAS_KEY_PAUSED_FRESHNESS
@@ -99,7 +97,7 @@ object TrackingServiceIntents {
             "explicit_start" -> RuntimeTrigger.EXPLICIT_START
             "process_restart" -> RuntimeTrigger.PROCESS_RESTART
             "watchdog_tick" -> RuntimeTrigger.WATCHDOG_TICK
-            "main_resume_after_kill" -> RuntimeTrigger.MAIN_RESUME_AFTER_KILL
+            "main_resume_after_kill" -> RuntimeTrigger.PROCESS_RESTART
             "main_start_on_launch" -> RuntimeTrigger.MAIN_START_ON_LAUNCH
             else -> RuntimeTrigger.UNKNOWN
         }

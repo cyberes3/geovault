@@ -78,7 +78,7 @@ import com.geovault.tracker.showHueColorPickerDialog
 import com.geovault.tracker.presentation.TrackersGroupsDialog
 import com.geovault.tracker.presentation.TrackerShareVisibility
 import com.geovault.tracker.presentation.TrackerSharingSettingsPolicy
-import com.geovault.tracker.services.TrackingRuntimeStateStore
+import com.geovault.tracker.runtime.TrackerRuntimeStore
 import java.util.Locale
 
 /** Default color shown when opening the create flow; must stay in sync with [TrackersGroupsViewModel.openCreateTrackerDialog]. */
@@ -240,7 +240,8 @@ fun TrackerEditorScreen(
             when (mode) {
                 is TrackerEditorMode.Create -> {
                     val c = checkNotNull(createBindings)
-                    val runtime by TrackingRuntimeStateStore.state.collectAsState()
+                    val document by TrackerRuntimeStore.state.collectAsState()
+                    val runtime = document.recording
                     TrackerCreateFormContent(
                         dialog = mode.dialog,
                         isSaving = isSaving,

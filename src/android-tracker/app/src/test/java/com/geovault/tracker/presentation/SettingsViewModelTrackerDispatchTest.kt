@@ -70,7 +70,6 @@ private class RecordingTrackerSettingsRepository : TrackerSettingsRepository {
         TrackerSettingsState(
             loadState = TrackerSettingsLoadState.Ready,
             settings = TrackerSettings(),
-            wasTrackingBeforeExit = false,
             schemaVersion = TrackerSettingsDefaults.schemaVersion,
             revision = 0L,
         )
@@ -124,10 +123,4 @@ private class RecordingTrackerSettingsRepository : TrackerSettingsRepository {
     override fun setGroupModeFitOnlyActiveTrackers(enabled: Boolean) {
         calls += "setGroupModeFitOnlyActiveTrackers($enabled)"
     }
-
-    override fun wasTrackingBeforeExit(): Boolean = false
-
-    override fun setWasTrackingBeforeExit(value: Boolean) = Unit
-
-    override fun clearWasTrackingBeforeExit() = Unit
 }

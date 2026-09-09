@@ -1,6 +1,5 @@
 package com.geovault.tracker.ui
 
-import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -157,7 +156,6 @@ private sealed interface GroupRowAction {
     data class Edit(val groupId: String) : GroupRowAction
     data class Delete(val groupId: String, val groupName: String) : GroupRowAction
     data class UnsubscribeAllTracks(val groupId: String) : GroupRowAction
-    data class ManageTrackers(val groupId: String) : GroupRowAction
     data class OpenOnMap(val groupId: String) : GroupRowAction
     data class OpenActions(val groupId: String) : GroupRowAction
 }
@@ -244,15 +242,9 @@ fun TrackersScreen(
             )
         }
     }
-    LaunchedEffect(vm) {
-        vm.toastEvents.collect { message ->
-            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
-        }
-    }
     var pendingConfirmAction by remember { mutableStateOf<TrackersConfirmAction?>(null) }
     var showOpenSettingsDiscardConfirm by remember { mutableStateOf(false) }
     var editFlowHasUnsaved by remember { mutableStateOf(false) }
-    var groupMembershipDialog by remember { mutableStateOf<GroupMembershipDialogState?>(null) }
     var pendingNavigationRequest by remember { mutableStateOf<TrackersHostNavigationRequest?>(null) }
     var localNavigationRequest by remember { mutableStateOf<TrackersHostNavigationRequest?>(null) }
     var groupActionsDialog by remember { mutableStateOf<GroupMembersOverlayState?>(null) }
@@ -303,7 +295,6 @@ fun TrackersScreen(
             activeTrackerEditDialog != null ||
             activeCreateTrackerDialog != null ||
             activeGroupEditDialog != null ||
-            groupMembershipDialog != null ||
             groupActionsDialog != null
 
     val onOpenSettingsWithEditGuard: () -> Unit = {
@@ -419,14 +410,6 @@ fun TrackersScreen(
                         groupId = group.id,
                         groupName = group.name,
                         trackIds = group.track_ids.orEmpty(),
-                    )
-                },
-                onManageGroupTrackers = { group ->
-                    val ids = group.track_ids.orEmpty().map { it.trim() }.filter { it.isNotEmpty() }.toSet()
-                    groupMembershipDialog = GroupMembershipDialogState(
-                        group = group,
-                        selectedTrackerIds = ids,
-                        persistedTrackerIds = ids,
                     )
                 },
                 onAcceptGroup = vm::acceptGroupShare,
@@ -574,74 +557,6 @@ fun TrackersScreen(
                     trackerName = activeTrackerEditLoadingDialog.trackerName,
                     onDismiss = dismissEditDialog,
                 )
-            } else if (groupMembershipDialog != null) {
-                val dialogState = groupMembershipDialog!!
-                var showPickerDiscardDialog by remember { mutableStateOf(false) }
-                val hasPendingRemovals = dialogState.persistedTrackerIds.any {
-                    it !in dialogState.selectedTrackerIds
-                }
-                val dismissPickerWithGuard: () -> Unit = {
-                    if (hasPendingRemovals) {
-                        showPickerDiscardDialog = true
-                    } else {
-                        groupMembershipDialog = null
-                    }
-                }
-                Box(modifier = Modifier.fillMaxSize()) {
-                    GroupTrackerPickerScreen(
-                        groupId = dialogState.group.id,
-                        groupName = dialogState.group.name,
-                        allTrackers = state.trackers,
-                        selectedTrackerIds = dialogState.selectedTrackerIds,
-                        isLoading = state.isPickerRefreshing,
-                        addingTrackerIds = state.addingTrackerIds,
-                        onRefreshTrackers = vm::refreshTrackersForPicker,
-                        onSelectionChanged = { nextSelected ->
-                            groupMembershipDialog = dialogState.copy(selectedTrackerIds = nextSelected)
-                        },
-                        onAddTracker = { trackerId ->
-                            if (trackerId in dialogState.selectedTrackerIds ||
-                                trackerId in dialogState.persistedTrackerIds ||
-                                trackerId in state.addingTrackerIds
-                            ) {
-                                return@GroupTrackerPickerScreen
-                            }
-                            vm.addTrackerToGroup(dialogState.group.id, trackerId) {
-                                groupMembershipDialog = groupMembershipDialog?.let { ds ->
-                                    ds.copy(
-                                        selectedTrackerIds = ds.selectedTrackerIds + trackerId,
-                                        persistedTrackerIds = ds.persistedTrackerIds + trackerId,
-                                    )
-                                }
-                            }
-                        },
-                        onIneligibleTrackerTap = vm::notifyReshareNotAllowed,
-                        onDone = {
-                            vm.syncGroupTrackMembership(
-                                groupId = dialogState.group.id,
-                                currentTrackerIds = dialogState.persistedTrackerIds,
-                                targetTrackerIds = dialogState.selectedTrackerIds,
-                            )
-                            groupMembershipDialog = null
-                        },
-                        onDismiss = dismissPickerWithGuard,
-                        onLeaveComposition = { groupMembershipDialog = null },
-                        doneButtonLabel = stringResource(R.string.trackers_dialog_save),
-                    )
-                }
-                if (showPickerDiscardDialog) {
-                    GeoVaultConfirmationDialog(
-                        title = stringResource(R.string.groups_edit_discard_title),
-                        message = stringResource(R.string.groups_edit_discard_message),
-                        onConfirm = {
-                            showPickerDiscardDialog = false
-                            groupMembershipDialog = null
-                        },
-                        onCancel = { showPickerDiscardDialog = false },
-                        confirmText = stringResource(R.string.trackers_edit_discard_confirm),
-                        cancelText = stringResource(R.string.trackers_dialog_cancel),
-                    )
-                }
             } else if (activeGroupEditDialog != null) {
                 Box(modifier = Modifier.fillMaxSize()) {
                     GroupEditScreen(
@@ -650,7 +565,7 @@ fun TrackersScreen(
                         shareRecipientUsers = state.shareRecipientUsers,
                         isShareRecipientSuggestionsLoading = state.isShareRecipientSuggestionsLoading,
                         isPickerRefreshing = state.isPickerRefreshing,
-                        addingTrackerIds = state.addingTrackerIds,
+                        occupiedMembershipIds = state.occupiedMembershipIds,
                         isSaving = state.isLoading,
                         onDismiss = dismissGroupEditDialog,
                         onReloadShareRecipients = vm::refreshShareRecipientSuggestions,
@@ -663,7 +578,7 @@ fun TrackersScreen(
                         onUpdateDraftTrackers = vm::updateGroupDraftTrackers,
                         onAddTracker = { trackerId ->
                             if (trackerId in activeGroupEditDialog.memberTrackIds ||
-                                trackerId in state.addingTrackerIds
+                                trackerId in state.occupiedMembershipIds
                             ) {
                                 return@GroupEditScreen
                             }
@@ -755,7 +670,6 @@ private fun TrackersGroupsAuthenticatedBody(
     onDeleteTracker: (String, String) -> Unit,
     onDeleteGroup: (String, String) -> Unit,
     onUnsubscribeAllGroupTracks: (Group) -> Unit,
-    onManageGroupTrackers: (Group) -> Unit,
     onAcceptGroup: (String) -> Unit,
     onEditTracker: (Tracker) -> Unit,
     onEditGroup: (Group) -> Unit,
@@ -842,7 +756,6 @@ private fun TrackersGroupsAuthenticatedBody(
             is GroupRowAction.Edit -> groupLookup[action.groupId]?.let(onEditGroup)
             is GroupRowAction.Delete -> onDeleteGroup(action.groupId, action.groupName)
             is GroupRowAction.UnsubscribeAllTracks -> groupLookup[action.groupId]?.let(onUnsubscribeAllGroupTracks)
-            is GroupRowAction.ManageTrackers -> groupLookup[action.groupId]?.let(onManageGroupTrackers)
             is GroupRowAction.OpenOnMap -> onOpenGroupOnMap(action.groupId)
             is GroupRowAction.OpenActions -> groupLookup[action.groupId]?.let { onOpenGroupActions(it, null) }
         }
@@ -1166,12 +1079,6 @@ private sealed interface TrackersConfirmAction {
     ) : TrackersConfirmAction
 }
 
-private data class GroupMembershipDialogState(
-    val group: Group,
-    val selectedTrackerIds: Set<String>,
-    val persistedTrackerIds: Set<String>,
-)
-
 @Composable
 private fun TrackersActionConfirmDialog(
     pendingAction: TrackersConfirmAction?,
@@ -1284,7 +1191,7 @@ private fun GroupRowCard(
 }
 
 private fun isVisibleOwnerTracker(tracker: Tracker): Boolean {
-    val hidden = (tracker.settings?.get("hidden") as? Boolean) == true
+    val hidden = tracker.catalogSettings.hidden
     return tracker.isOwner() && !hidden
 }
 

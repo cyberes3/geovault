@@ -1,5 +1,6 @@
 package com.geovault.tracker.ui
 
+import com.geovault.tracker.params.TrackerParamsRouteArgs
 import com.geovault.tracker.presentation.SharedSubTab
 import com.geovault.tracker.presentation.MapListNavigationDestination
 import com.geovault.tracker.presentation.MapListNavigationTarget
@@ -16,6 +17,11 @@ enum class MapHostNavigationTarget {
 enum class MapHostNavigationFocus {
     NONE,
     SCROLL_TO_ITEM,
+}
+
+sealed class MapNavigation {
+    data class List(val request: MapHostNavigationRequest) : MapNavigation()
+    data class Params(val args: TrackerParamsRouteArgs) : MapNavigation()
 }
 
 data class MapHostNavigationRequest(
@@ -42,9 +48,12 @@ data class SharedHostNavigationRequest(
     val focus: MapHostNavigationFocus = MapHostNavigationFocus.NONE,
 )
 
-object MapHostNavigationRequestResolver {
-    fun forTrackers(state: TrackerMapUiState): MapHostNavigationRequest {
-        val preferredTrackerId = preferredTrackerId(state)
+internal object MapHostNavigationRequestResolver {
+    fun forTrackers(
+        state: TrackerMapUiState,
+        selectedTrackerId: String = "",
+    ): MapHostNavigationRequest {
+        val preferredTrackerId = preferredTrackerId(state, selectedTrackerId)
         if (state.mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER && state.currentGroupId.isNotBlank()) {
             return MapHostNavigationRequest(
                 target = MapHostNavigationTarget.GROUPS,
@@ -60,13 +69,17 @@ object MapHostNavigationRequestResolver {
         )
     }
 
-    fun forShared(state: TrackerMapUiState): MapHostNavigationRequest {
+    fun forShared(
+        state: TrackerMapUiState,
+        selectedTrackerId: String = "",
+    ): MapHostNavigationRequest {
+        val preferred = preferredTrackerId(state, selectedTrackerId)
         return MapHostNavigationRequest(
             target = MapHostNavigationTarget.SHARED,
-            trackerId = preferredTrackerId(state),
+            trackerId = preferred,
             groupId = state.currentGroupId.takeIf { state.mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER },
             focus = focusForSelection(
-                preferredTrackerId(state),
+                preferred,
                 state.currentGroupId.takeIf { state.mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER }
             ),
         )
@@ -95,11 +108,10 @@ object MapHostNavigationRequestResolver {
         }
     }
 
-    private fun preferredTrackerId(state: TrackerMapUiState): String? {
+    private fun preferredTrackerId(state: TrackerMapUiState, selectedTrackerId: String): String? {
         val displayedId = state.displayedTrackerId.trim()
         if (displayedId.isNotEmpty()) return displayedId
-        val selectedId = state.runtime.selectedTrackerId.trim()
-        return selectedId.ifEmpty { null }
+        return selectedTrackerId.trim().ifEmpty { null }
     }
 
     private fun focusForSelection(trackerId: String?, groupId: String?): MapHostNavigationFocus {

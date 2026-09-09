@@ -15,7 +15,7 @@ Regression tests for behaviors that must not change when refactoring `positionin
 | Recovery anchor | `RecoveryAnchorStore` save/load/clear round-trip | `positioning/RecoveryAnchorRestartTest` |
 | Upload liveness | Failure posture, skipped results, success timestamps | `UploadLivenessStateTest`, `TrackingServiceUploadCharacterizationTest` |
 | Upload → snapshot timestamps | `lastPointSentAtMs` only advances when visible rows were sent | `QueueUploadOutcomePolicyTest` (wired from `UploadSubsystem.applyQueueUploadResult`) |
-| Runtime store projection | `gpsCollecting` on shared runtime state | `TrackingRuntimeStateStoreTest` |
+| Runtime store projection | `gpsCollecting` on shared runtime state | `TrackerRuntimeStoreRecordingTest` |
 | UI status | `TrackingUiStatusResolver` from runtime snapshot fields | `TrackingUiStatusResolverTest` |
 | Layer boundary | No `com.geovault.common.maps` imports under `positioning/` | `PositioningLayerMapsImportTest` |
 | Session state resets | `resetForStart` / `resetForStop` clear upload, boundaries, adaptive, and job handles | `PositioningSessionStateResetTest` |

@@ -2,7 +2,7 @@ package com.geovault.tracker.replay
 
 import com.geovault.tracker.replay.runtime.CaptureReplaySessionLoader
 import com.geovault.tracker.replay.runtime.PositioningEndToEndReplayDriver
-import com.geovault.tracker.services.TrackingMotionMode
+import com.geovault.tracker.positioning.TrackingMotionMode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher

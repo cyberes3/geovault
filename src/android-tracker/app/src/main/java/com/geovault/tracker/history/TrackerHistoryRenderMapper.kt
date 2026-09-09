@@ -1,7 +1,7 @@
 package com.geovault.tracker.history
 
 import com.geovault.tracker.db.QueuedLocation
-import com.geovault.tracker.presentation.TrackerMapTrailDecimationPolicy
+import com.geovault.tracker.map.MapTrailEngine
 
 object TrackerHistoryRenderMapper {
     fun toQueuedLocations(
@@ -10,7 +10,7 @@ object TrackerHistoryRenderMapper {
     ): List<QueuedLocation> {
         if (snapshot == null) return emptyList()
         val raw = snapshot.points.map { it.toQueuedLocation() }
-        val rendered = TrackerMapTrailDecimationPolicy.fitToCount(raw, trailPointLimit)
+        val rendered = MapTrailEngine.fitToCount(raw, trailPointLimit)
         TrackerHistoryDiagnostics.logRenderDecimation(
             trackerId = snapshot.key.normalizedTrackerId,
             window = snapshot.key.window.normalizedKey,

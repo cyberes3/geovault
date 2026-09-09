@@ -13,8 +13,8 @@ import com.geovault.tracker.positioning.ingest.FixIngestMode
 import com.geovault.tracker.positioning.ingest.TrackerLocationMotionContext
 import com.geovault.tracker.positioning.ingest.TrackerLocationPipeline
 import com.geovault.tracker.positioning.ingest.TrackerLocationPipelineInput
-import com.geovault.tracker.services.LocationIngestCoordinator
-import com.geovault.tracker.services.TrackingMotionMode
+import com.geovault.tracker.positioning.ingest.LocationIngestCoordinator
+import com.geovault.tracker.positioning.TrackingMotionMode
 import com.geovault.tracker.settings.TrackerSettings
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -449,10 +449,6 @@ private class FakeLocationDao : LocationDao {
         return stored.id
     }
 
-    override fun insertAll(locations: List<QueuedLocation>) {
-        locations.forEach { insert(it) }
-    }
-
     override fun getAll(): List<QueuedLocation> = rows.sortedBy { it.time }
 
     override fun getRecentChronological(limit: Int): List<QueuedLocation> =
@@ -509,6 +505,33 @@ private class FakeLocationDao : LocationDao {
         val oldest = rows.sortedBy { it.time }.take(count).map { it.id }.toSet()
         val before = rows.size
         rows.removeAll { it.id in oldest }
+        return before - rows.size
+    }
+
+    override fun deleteOldestCountForTrackerExcluding(
+        trackerId: String,
+        count: Int,
+        excludeIds: List<Long>,
+    ): Int {
+        if (count <= 0) return 0
+        val oldest = rows
+            .filter { it.trackerId == trackerId && it.id !in excludeIds }
+            .sortedBy { it.time }
+            .take(count)
+            .map { it.id }
+            .toSet()
+        val before = rows.size
+        rows.removeAll { it.id in oldest }
+        return before - rows.size
+    }
+
+    override fun deleteOlderThanForTrackerExcluding(
+        trackerId: String,
+        cutoffTimeMs: Long,
+        excludeIds: List<Long>,
+    ): Int {
+        val before = rows.size
+        rows.removeAll { it.trackerId == trackerId && it.time < cutoffTimeMs && it.id !in excludeIds }
         return before - rows.size
     }
 

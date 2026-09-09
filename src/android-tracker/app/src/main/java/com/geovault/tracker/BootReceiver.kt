@@ -8,24 +8,28 @@ import android.os.UserManager
 import com.geovault.common.logging.GeoVaultCaptureLog
 import com.geovault.tracker.di.TrackerAppServices
 import com.geovault.tracker.location.TrackingPermissionGate
-import com.geovault.tracker.runtime.RuntimeCommand
-import com.geovault.tracker.runtime.RuntimeCommandType
-import com.geovault.tracker.runtime.RuntimeTrigger
-import com.geovault.tracker.runtime.TrackingRuntimeController
+import com.geovault.tracker.runtime.RecoveryDecision
+import com.geovault.tracker.runtime.RecoveryInput
+import com.geovault.tracker.runtime.RecoveryPolicy
+import com.geovault.tracker.runtime.RecoverySource
+import com.geovault.tracker.runtime.TrackerRuntimeEngine
+import com.geovault.tracker.runtime.TrackerRuntimeStore
 import com.geovault.tracker.settings.TrackerSettingsLoadState
-import com.geovault.tracker.startup.BootStartupPolicy
-import com.geovault.tracker.startup.BootStartupSnapshot
 
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val bootAction = intent.action
+        if (bootAction !in SUPPORTED_ACTIONS) {
+            GeoVaultCaptureLog.w(TAG, "Boot handling skipped action=$bootAction reason=unsupported_action")
+            return
+        }
         val app = context.applicationContext as? android.app.Application
         if (app == null) {
             GeoVaultCaptureLog.e(TAG, "Boot handling ignored because application context was not Application")
             return
         }
-        val settingsRepository = TrackerAppServices.from(app).trackerSettingsRepository()
-        val settingsState = settingsRepository.getState()
+        val services = TrackerAppServices.from(app)
+        val settingsState = services.trackerSettingsRepository().getState()
         if (!shouldProcessSettingsState(settingsState.loadState)) {
             GeoVaultCaptureLog.w(
                 TAG,
@@ -33,57 +37,48 @@ class BootReceiver : BroadcastReceiver() {
             )
             return
         }
-        val settings = settingsState.settings
-        val startOnBoot = settings.startOnBoot
-        val wasTrackingBeforeExit = settingsState.wasTrackingBeforeExit
-        val trackerId = SelectedTrackerPrefs.selectedTrackerId(context)
+        TrackerRuntimeStore.attach(app)
+        val engine = TrackerRuntimeEngine.get(app)
+        val selectedTrackerId = services.catalogSelectionController().selectedTrackerId(context)
         val hasRequiredPermissions = TrackingPermissionGate.hasRequiredPermissionsForTracking(context)
         val gpsProviderEnabled = isGpsProviderEnabled(context)
         val userUnlocked = isUserUnlocked(context)
         GeoVaultCaptureLog.i(
             TAG,
             "Boot signal action=$bootAction userUnlocked=$userUnlocked " +
-                "startOnBoot=$startOnBoot wasTrackingBeforeExit=$wasTrackingBeforeExit " +
+                "startOnBoot=${settingsState.settings.startOnBoot} " +
+                "shouldBeRunning=${TrackerRuntimeStore.value.shouldBeRunning} " +
                 "hasRequiredPermissions=$hasRequiredPermissions gpsEnabled=$gpsProviderEnabled " +
-                "hasSelectedTracker=${trackerId.isNotBlank()}"
+                "hasSelectedTracker=${selectedTrackerId.isNotBlank()}"
         )
-
-        val decision = BootStartupPolicy.evaluate(
-            BootStartupSnapshot(
-                action = bootAction,
-                startOnBoot = startOnBoot,
-                wasTrackingBeforeExit = wasTrackingBeforeExit,
+        val result = engine.handleRecoverySource(
+            RecoveryInput(
+                source = RecoverySource.Boot,
+                shouldBeRunning = TrackerRuntimeStore.value.shouldBeRunning,
+                restartTrackingIfKilled = true,
+                startOnBoot = settingsState.settings.startOnBoot,
+                serviceRunning = engine.isRunning(),
+                settingsLoadState = settingsState.loadState,
                 userUnlocked = userUnlocked,
                 hasRequiredPermissions = hasRequiredPermissions,
                 gpsProviderEnabled = gpsProviderEnabled,
-                selectedTrackerId = trackerId
-            )
-        )
-
-        if (!decision.shouldStartTracking) {
-            GeoVaultCaptureLog.w(
-                TAG,
-                "Skipping tracking start action=$bootAction blockers=${decision.blockers.joinToString(",") { it.logLabel }}"
-            )
-            return
-        }
-
-        GeoVaultCaptureLog.i(TAG, "Starting TrackingService from action=$bootAction")
-        val launchDecision = TrackingRuntimeController.get(app).handle(
-            RuntimeCommand(
-                type = RuntimeCommandType.START,
-                trigger = RuntimeTrigger.BOOT,
-                reason = "boot:${bootAction ?: "unknown"}"
-            )
+                selectedTrackerId = selectedTrackerId,
+                lastHeartbeatAtMs = TrackerRuntimeStore.value.orchestration.lastHeartbeatAtMs,
+                nowMs = System.currentTimeMillis(),
+            ),
         )
         GeoVaultCaptureLog.i(
             TAG,
-            "Boot launch decision action=${launchDecision.action} reason=${launchDecision.reason} gate=${launchDecision.startGateDecision}"
+            "Boot launch decision action=${result.action} reason=${result.reason} gate=${result.startGateDecision}"
         )
     }
 
     companion object {
         private const val TAG = "BootReceiver"
+        private val SUPPORTED_ACTIONS = setOf(
+            Intent.ACTION_BOOT_COMPLETED,
+            Intent.ACTION_MY_PACKAGE_REPLACED,
+        )
 
         internal fun shouldProcessSettingsState(loadState: TrackerSettingsLoadState): Boolean {
             return loadState == TrackerSettingsLoadState.Ready
@@ -91,24 +86,29 @@ class BootReceiver : BroadcastReceiver() {
 
         fun shouldStartTrackingOnBoot(
             startOnBoot: Boolean,
-            wasTrackingBeforeExit: Boolean,
+            shouldBeRunning: Boolean,
             userUnlocked: Boolean,
             hasRequiredPermissions: Boolean,
             gpsProviderEnabled: Boolean,
             selectedTrackerId: String
         ): Boolean {
-            val decision = BootStartupPolicy.evaluate(
-                BootStartupSnapshot(
-                    action = Intent.ACTION_BOOT_COMPLETED,
+            val decision = RecoveryPolicy.decide(
+                RecoveryInput(
+                    source = RecoverySource.Boot,
+                    shouldBeRunning = shouldBeRunning,
+                    restartTrackingIfKilled = true,
                     startOnBoot = startOnBoot,
-                    wasTrackingBeforeExit = wasTrackingBeforeExit,
+                    serviceRunning = false,
+                    settingsLoadState = TrackerSettingsLoadState.Ready,
                     userUnlocked = userUnlocked,
                     hasRequiredPermissions = hasRequiredPermissions,
                     gpsProviderEnabled = gpsProviderEnabled,
-                    selectedTrackerId = selectedTrackerId
-                )
+                    selectedTrackerId = selectedTrackerId,
+                    lastHeartbeatAtMs = 0L,
+                    nowMs = System.currentTimeMillis(),
+                ),
             )
-            return decision.shouldStartTracking
+            return decision is RecoveryDecision.AttemptStart
         }
 
         fun isGpsProviderEnabled(context: Context): Boolean {

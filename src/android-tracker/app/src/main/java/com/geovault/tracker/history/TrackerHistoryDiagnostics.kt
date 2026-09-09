@@ -62,15 +62,14 @@ object TrackerHistoryDiagnostics {
         result: TrackerHistoryTransactionResult,
         batch: TrackerHistorySourceBatch? = null,
     ) {
-        val level = when {
-            !result.committed && result.reason == "empty_snapshot_deferred" -> LogLevel.WARN
-            !result.committed -> LogLevel.DEBUG
-            batch?.degradedLocalOnly == true -> LogLevel.WARN
-            else -> LogLevel.INFO
+        val level = when (result) {
+            is TrackerHistoryTransactionResult.DeferredEmpty -> LogLevel.WARN
+            is TrackerHistoryTransactionResult.RejectedTrunk -> LogLevel.DEBUG
+            else -> if (batch?.degradedLocalOnly == true) LogLevel.WARN else LogLevel.INFO
         }
         val batchDetail = batch?.let { batchLine(it) }.orEmpty()
-        val message = "map_update history_tx intent=$intent committed=${result.committed} " +
-            "reason=${result.reason} ${snapshotLine(result.snapshot)} $batchDetail"
+        val message = "map_update history_tx intent=$intent published=${result.publishesSnapshot()} " +
+            "kind=${result.kindName()} ${snapshotLine(result.snapshot)} $batchDetail"
         when (level) {
             LogLevel.WARN -> GeoVaultCaptureLog.w(TAG, message)
             LogLevel.DEBUG -> GeoVaultCaptureLog.d(TAG, message)

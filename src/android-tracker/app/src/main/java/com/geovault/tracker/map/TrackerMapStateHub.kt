@@ -11,8 +11,7 @@ import kotlinx.coroutines.flow.asStateFlow
  * and the [TrackerMapRenderPackage] derived from it for the UI layer. Every other piece of shared
  * map state has an owning subsystem; this is the one slice that is genuinely shared by all of
  * them, so it gets its own dedicated, independently-testable home instead of living as anonymous
- * fields on [TrackerMapRuntime] -- the same treatment [TrackerMapCameraCoordinator] already gets
- * for the camera-directive slice. Subsystems still mutate through `uiStateMutable`/
+ * fields on [TrackerMapRuntime]. Subsystems still mutate through `uiStateMutable`/
  * `renderPackageMutable` directly (this hub doesn't gatekeep individual writes), so this is a
  * grouping seam, not a new invariant-enforcing layer.
  */

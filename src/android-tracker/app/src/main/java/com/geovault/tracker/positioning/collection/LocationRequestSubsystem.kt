@@ -11,7 +11,7 @@ import com.geovault.tracker.location.TrackingPermissionGate
 import com.geovault.tracker.positioning.LocationRequestKey
 import com.geovault.tracker.positioning.config.GpsRuntimeState
 import com.geovault.tracker.runtime.PositioningDiagnosticEvent
-import com.geovault.tracker.services.ProviderHealthDecision
+import com.geovault.tracker.positioning.ProviderHealthDecision
 import com.geovault.tracker.tracking.TrackingServiceConstants
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay

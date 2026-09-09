@@ -1,31 +1,27 @@
 package com.geovault.tracker.presentation
 
 import com.geovault.tracker.db.QueuedLocation
-import com.geovault.tracker.policy.TrackPointEvent
+import com.geovault.tracker.domain.TrackPoint
 import com.geovault.tracker.policy.TrackPointSource
-import com.geovault.tracker.services.RecordingRuntime
-import com.geovault.tracker.services.TrackingRuntimeSnapshot
+import com.geovault.tracker.positioning.RecordingRuntime
+import com.geovault.tracker.positioning.TrackingRuntimeSnapshot
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+import com.geovault.tracker.map.MapRenderMath
+import com.geovault.tracker.map.MapTrailEngine
 class TrackerMapSessionEngineTest {
 
     @Test
     fun build_splitsHistoricalAndLiveTrails() {
-        val snapshot = TrackerMapSessionEngine.build(
+        val snapshot = MapRenderMath.buildSession(
             TrackerMapSessionBuildInput(
                 state = TrackerMapUiState(
                     mode = TrackerMapDisplayMode.ALL_QUEUE,
                     runtime = TrackingRuntimeSnapshot(
                         recordingRuntime = RecordingRuntime(sessionActive = true, selectedTrackerId = "local"),
                         selectedTrackerId = "local",
-                    ),
-                    allQueueTrailsByTracker = mapOf(
-                        "local" to listOf(
-                            queued("local", id = 1L, time = 10L, prov = "server_geometry"),
-                            queued("local", id = 0L, time = 20L, prov = "local_gps"),
-                        )
                     ),
                 ),
                 plan = plan(),
@@ -46,14 +42,14 @@ class TrackerMapSessionEngineTest {
 
     @Test
     fun build_keepsNegativeIdServerGeometryHistorical() {
-        val snapshot = TrackerMapSessionEngine.build(
+        val snapshot = MapRenderMath.buildSession(
             TrackerMapSessionBuildInput(
                 state = TrackerMapUiState(mode = TrackerMapDisplayMode.ALL_QUEUE),
                 plan = plan(),
                 localRuntimeOverlayTrails = mapOf(
                     "remote" to listOf(
-                        queued("remote", id = -1L, time = 10L, prov = TrackerMapPointProvenancePolicy.PROVENANCE_SERVER_GEOMETRY),
-                        queued("remote", id = 0L, time = 20L, prov = TrackerMapPointProvenancePolicy.PROVENANCE_REMOTE_STREAM),
+                        queued("remote", id = -1L, time = 10L, prov = MapTrailEngine.PROVENANCE_SERVER_GEOMETRY),
+                        queued("remote", id = 0L, time = 20L, prov = MapTrailEngine.PROVENANCE_REMOTE_STREAM),
                     )
                 ),
             )
@@ -66,12 +62,11 @@ class TrackerMapSessionEngineTest {
 
     @Test
     fun reducePoint_remoteAccepted_updatesSnapshotState() {
-        val initial = TrackerMapSessionEngine.build(
+        val initial = MapRenderMath.buildSession(
             TrackerMapSessionBuildInput(
                 state = TrackerMapUiState(
                     mode = TrackerMapDisplayMode.SINGLE_SESSION,
                     displayedTrackerId = "remote",
-                    streamTargetIds = setOf("remote"),
                     activeStreamedTrackerIds = setOf("remote"),
                 ),
                 plan = plan(
@@ -83,22 +78,22 @@ class TrackerMapSessionEngineTest {
             )
         )
 
-        val result = TrackerMapSessionEngine.reducePoint(
+        val result = MapTrailEngine.reducePoint(
             TrackerMapSessionPointInput(
                 snapshot = initial,
-                point = TrackPointEvent(
-                    source = TrackPointSource.REMOTE_STREAM,
-                    trackId = "remote",
-                    lon = 2.0,
-                    lat = 1.0,
-                    timestampMs = 100L,
+                point = TrackPoint(
+                    provenance = TrackPointSource.REMOTE_STREAM,
+                    trackerId = "remote",
+                    longitude = 2.0,
+                    latitude = 1.0,
+                    timeMs = 100L,
                 ),
                 trailPointLimit = 100,
             )
         )
 
         assertTrue(result.shouldUpdate)
-        assertEquals("remote", result.nextSnapshot.uiState.trail.single().trackerId)
+        assertEquals("remote", result.nextSnapshot.singleTrail.single().trackerId)
         assertEquals("remote", result.nextSnapshot.acceptedRemoteLastPoints.keys.single())
     }
 
@@ -109,14 +104,13 @@ class TrackerMapSessionEngineTest {
                 trackerId = "local",
                 id = 0L,
                 time = 10L,
-                prov = TrackerMapPointProvenancePolicy.PROVENANCE_LOCAL_GPS_RUNTIME,
+                prov = MapTrailEngine.PROVENANCE_LOCAL_GPS_RUNTIME,
             ),
         )
-        val initial = TrackerMapSessionEngine.build(
+        val initial = MapRenderMath.buildSession(
             TrackerMapSessionBuildInput(
                 state = TrackerMapUiState(
                     mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
-                    allQueueTrailsByTracker = mapOf("local" to localTrail),
                 ),
                 plan = plan(
                     mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
@@ -127,15 +121,15 @@ class TrackerMapSessionEngineTest {
             )
         )
 
-        val result = TrackerMapSessionEngine.reducePoint(
+        val result = MapTrailEngine.reducePoint(
             TrackerMapSessionPointInput(
                 snapshot = initial,
-                point = TrackPointEvent(
-                    source = TrackPointSource.REMOTE_STREAM,
-                    trackId = "remote",
-                    lon = 2.0,
-                    lat = 1.0,
-                    timestampMs = 100L,
+                point = TrackPoint(
+                    provenance = TrackPointSource.REMOTE_STREAM,
+                    trackerId = "remote",
+                    longitude = 2.0,
+                    latitude = 1.0,
+                    timeMs = 100L,
                 ),
                 trailPointLimit = 100,
             )
@@ -144,7 +138,7 @@ class TrackerMapSessionEngineTest {
         assertTrue(result.shouldUpdate)
         assertEquals(setOf("local", "remote"), result.nextSnapshot.tracks.keys)
         assertEquals(
-            listOf(TrackerMapPointProvenancePolicy.PROVENANCE_LOCAL_GPS_RUNTIME),
+            listOf(MapTrailEngine.PROVENANCE_LOCAL_GPS_RUNTIME),
             result.nextSnapshot.tracks.getValue("local").renderTrail.map { it.prov },
         )
     }
@@ -153,7 +147,7 @@ class TrackerMapSessionEngineTest {
     fun build_multiTrail_passesThroughOverlayTrailsUnfiltered() {
         val s1 = 1_000L
         val s2 = 2_000L
-        val snapshot = TrackerMapSessionEngine.build(
+        val snapshot = MapRenderMath.buildSession(
             TrackerMapSessionBuildInput(
                 state = TrackerMapUiState(
                     mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
@@ -177,7 +171,7 @@ class TrackerMapSessionEngineTest {
     fun build_multiTrail_keepsAllPointsPerTracker() {
         val s1 = 1_000L
         val s2 = 2_000L
-        val snapshot = TrackerMapSessionEngine.build(
+        val snapshot = MapRenderMath.buildSession(
             TrackerMapSessionBuildInput(
                 state = TrackerMapUiState(mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER),
                 plan = plan(mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER),
@@ -202,19 +196,19 @@ class TrackerMapSessionEngineTest {
     fun build_singleTrail_passesThroughStateTrailUnfiltered() {
         val s1 = 1_000L
         val s2 = 2_000L
-        val snapshot = TrackerMapSessionEngine.build(
+        val snapshot = MapRenderMath.buildSession(
             TrackerMapSessionBuildInput(
                 state = TrackerMapUiState(
                     mode = TrackerMapDisplayMode.SINGLE_SESSION,
                     displayedTrackerId = "active",
-                    trail = listOf(
-                        queued("active", id = -1L, time = 10L, prov = "server_geometry", startTimestampMs = s1),
-                        queued("active", id = 0L, time = 30L, prov = "local_gps", startTimestampMs = s2),
-                    ),
                 ),
                 plan = plan(
                     mode = TrackerMapDisplayMode.SINGLE_SESSION,
                     displayedTrackerId = "active",
+                ),
+                singleTrail = listOf(
+                    queued("active", id = -1L, time = 10L, prov = "server_geometry", startTimestampMs = s1),
+                    queued("active", id = 0L, time = 30L, prov = "local_gps", startTimestampMs = s2),
                 ),
                 localRuntimeOverlayTrails = emptyMap(),
                 nowMs = 1_000_000L,
@@ -236,7 +230,7 @@ class TrackerMapSessionEngineTest {
             queued("active", id = 0L, time = 50L, prov = "local_gps_runtime", startTimestampMs = current),
         )
 
-        val snapshot = TrackerMapSessionEngine.build(
+        val snapshot = MapRenderMath.buildSession(
             TrackerMapSessionBuildInput(
                 state = TrackerMapUiState(
                     mode = TrackerMapDisplayMode.SINGLE_SESSION,
@@ -247,12 +241,12 @@ class TrackerMapSessionEngineTest {
                         selectedTrackerId = "active",
                         sessionStartTimeMs = current,
                     ),
-                    trail = restoredTrail,
                 ),
                 plan = plan(
                     mode = TrackerMapDisplayMode.SINGLE_SESSION,
                     displayedTrackerId = "active",
                 ),
+                singleTrail = restoredTrail,
                 nowMs = 1_000_000L,
             )
         )

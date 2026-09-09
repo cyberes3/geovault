@@ -13,7 +13,7 @@ import com.geovault.tracker.policy.TrackPointSource
 import com.geovault.tracker.positioning.config.GpsRuntimeEvent
 import com.geovault.tracker.positioning.config.GpsRuntimeState
 import com.geovault.tracker.positioning.config.GpsRuntimeStateMachine
-import com.geovault.tracker.services.TrackingMotionMode
+import com.geovault.tracker.positioning.TrackingMotionMode
 import com.geovault.tracker.tracking.TrackingServiceConstants
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
@@ -91,7 +91,7 @@ internal class GpsCollectionSubsystem(private val rt: PositioningRuntime) {
         rt.lifecycle.stopLocationUpdates()
         GeoVaultCaptureLog.w(TrackingServiceConstants.TAG, "GPS provider disabled while tracking reason=$reason")
         rt.deps.runtimeTelemetry.event("gps_provider_disabled", "reason=$reason")
-        rt.projection.syncRuntimeStateStore()
+        rt.projection.commit()
         rt.projection.updateNotificationFromDb(broadcastStats = true)
     }
 
@@ -110,12 +110,12 @@ internal class GpsCollectionSubsystem(private val rt: PositioningRuntime) {
                 return
             }
             GeoVaultCaptureLog.i(TrackingServiceConstants.TAG, "GPS provider re-enabled while paused reason=$reason")
-            rt.projection.syncRuntimeStateStore()
+            rt.projection.commit()
             rt.projection.updateNotificationFromDb(broadcastStats = true)
             return
         }
         if (rt.utilities.isWaitingForProviderState()) {
-            rt.projection.syncRuntimeStateStore()
+            rt.projection.commit()
             rt.projection.updateNotificationFromDb(broadcastStats = true)
             return
         }
@@ -124,12 +124,8 @@ internal class GpsCollectionSubsystem(private val rt: PositioningRuntime) {
             return
         }
         GeoVaultCaptureLog.i(TrackingServiceConstants.TAG, "GPS provider re-enabled, resumed updates reason=$reason")
-        rt.projection.syncRuntimeStateStore()
+        rt.projection.commit()
         rt.projection.updateNotificationFromDb(broadcastStats = true)
-    }
-
-    fun pauseGps() {
-        rt.collection.pauseGpsInternal(force = false)
     }
 
     fun pauseGpsInternal(force: Boolean) {
@@ -159,7 +155,7 @@ internal class GpsCollectionSubsystem(private val rt: PositioningRuntime) {
             reason = "pause_for_motion",
             providerAvailable = rt.utilities.isGpsProviderEnabled()
         )
-        rt.projection.syncRuntimeStateStore()
+        rt.projection.commit()
         rt.projection.updateNotificationFromDb(broadcastStats = true)
     }
 
@@ -246,12 +242,12 @@ internal class GpsCollectionSubsystem(private val rt: PositioningRuntime) {
         rt.state.watchdogJob?.cancel()
         rt.state.watchdogJob = null
         if (rt.state.gpsRuntimeState == GpsRuntimeState.WAITING_FOR_PROVIDER) {
-            rt.projection.syncRuntimeStateStore()
+            rt.projection.commit()
             rt.projection.updateNotificationFromDb(broadcastStats = true)
             return
         }
         if (rt.state.gpsRuntimeState != GpsRuntimeState.LOCKING) {
-            rt.projection.syncRuntimeStateStore()
+            rt.projection.commit()
             rt.projection.updateNotificationFromDb(broadcastStats = true)
             return
         }
@@ -259,7 +255,7 @@ internal class GpsCollectionSubsystem(private val rt: PositioningRuntime) {
             rt.foreground.failActiveTrackingAndStop(rt.locationRequests.resolveLocationRequestFailureMessage())
             return
         }
-        rt.projection.syncRuntimeStateStore()
+        rt.projection.commit()
         rt.projection.updateNotificationFromDb(broadcastStats = true)
     }
 

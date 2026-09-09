@@ -1,7 +1,9 @@
 package com.geovault.tracker.presentation
 
 import com.geovault.tracker.db.QueuedLocation
-import com.geovault.tracker.policy.TrackPointEvent
+import com.geovault.tracker.map.MapRenderMath
+import com.geovault.tracker.map.MapTrailEngine
+import com.geovault.tracker.domain.TrackPoint
 import com.geovault.tracker.policy.TrackPointSource
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -9,7 +11,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Roster filter contract for [TrackerMapSessionEngine.build]: a `null`
+ * Roster filter contract for [MapRenderMath.buildSession]: a `null`
  * [TrackerMapSessionBuildInput.visibleTrackerIds] means "no filter" (used by
  * SINGLE_SESSION and tests that don't supply a roster). A non-null set is applied
  * verbatim, including the empty case, which means "render nothing" — exactly what we
@@ -23,7 +25,7 @@ class TrackerMapSessionEngineRosterFilterTest {
 
     @Test
     fun nullVisibleSet_appliesNoFilter() {
-        val snapshot = TrackerMapSessionEngine.build(
+        val snapshot = MapRenderMath.buildSession(
             TrackerMapSessionBuildInput(
                 state = TrackerMapUiState(mode = TrackerMapDisplayMode.ALL_QUEUE),
                 plan = plan(),
@@ -40,7 +42,7 @@ class TrackerMapSessionEngineRosterFilterTest {
     @Test
     fun emptyVisibleSet_rendersNothing() {
         // "User hid every visible tracker" — must NOT fall back to rendering everything.
-        val snapshot = TrackerMapSessionEngine.build(
+        val snapshot = MapRenderMath.buildSession(
             TrackerMapSessionBuildInput(
                 state = TrackerMapUiState(mode = TrackerMapDisplayMode.ALL_QUEUE),
                 plan = plan(),
@@ -56,7 +58,7 @@ class TrackerMapSessionEngineRosterFilterTest {
 
     @Test
     fun nonEmpty_visibleSet_filtersOutMissingTrackers() {
-        val snapshot = TrackerMapSessionEngine.build(
+        val snapshot = MapRenderMath.buildSession(
             TrackerMapSessionBuildInput(
                 state = TrackerMapUiState(mode = TrackerMapDisplayMode.ALL_QUEUE),
                 plan = plan(),
@@ -74,7 +76,7 @@ class TrackerMapSessionEngineRosterFilterTest {
 
     @Test
     fun visibleSet_thatExcludesAllTrails_yieldsEmptyTracks() {
-        val snapshot = TrackerMapSessionEngine.build(
+        val snapshot = MapRenderMath.buildSession(
             TrackerMapSessionBuildInput(
                 state = TrackerMapUiState(mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER),
                 plan = plan(mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER),
@@ -89,25 +91,25 @@ class TrackerMapSessionEngineRosterFilterTest {
 
     @Test
     fun visibleSet_thatExcludesRemoteHead_yieldsNoTrackForHiddenRemote() {
-        val snapshot = TrackerMapSessionEngine.build(
+        val snapshot = MapRenderMath.buildSession(
             TrackerMapSessionBuildInput(
                 state = TrackerMapUiState(
                     mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
-                    remoteLastPoints = mapOf(
-                        "hidden" to TrackPointEvent(
-                            source = TrackPointSource.REMOTE_STREAM,
-                            trackId = "hidden",
-                            lat = 20.0,
-                            lon = 10.0,
-                            timestampMs = 20L,
-                            accuracyMeters = null,
-                            propsJson = null,
-                        )
-                    ),
                 ),
                 plan = plan(
                     mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
                     acceptedRemoteTrackerIds = setOf("hidden"),
+                ),
+                remoteLastPoints = mapOf(
+                    "hidden" to TrackPoint(
+                        provenance = TrackPointSource.REMOTE_STREAM,
+                        trackerId = "hidden",
+                        latitude = 20.0,
+                        longitude = 10.0,
+                        timeMs = 20L,
+                        accuracyMeters = null,
+                        propsJson = null,
+                    )
                 ),
                 visibleTrackerIds = setOf("visible"),
             )
@@ -120,11 +122,10 @@ class TrackerMapSessionEngineRosterFilterTest {
     @Test
     fun reducePoint_keepsNextSnapshotTracksRosterFiltered() {
         val visibleTrail = listOf(queued("visible", 10L))
-        val initial = TrackerMapSessionEngine.build(
+        val initial = MapRenderMath.buildSession(
             TrackerMapSessionBuildInput(
                 state = TrackerMapUiState(
                     mode = TrackerMapDisplayMode.ALL_QUEUE,
-                    allQueueTrailsByTracker = mapOf("visible" to visibleTrail),
                 ),
                 plan = plan(acceptedRemoteTrackerIds = setOf("visible", "hidden")),
                 localRuntimeOverlayTrails = mapOf("visible" to visibleTrail),
@@ -132,15 +133,15 @@ class TrackerMapSessionEngineRosterFilterTest {
             )
         )
 
-        val result = TrackerMapSessionEngine.reducePoint(
+        val result = MapTrailEngine.reducePoint(
             TrackerMapSessionPointInput(
                 snapshot = initial,
-                point = TrackPointEvent(
-                    source = TrackPointSource.REMOTE_STREAM,
-                    trackId = "hidden",
-                    lat = 20.0,
-                    lon = 20.0,
-                    timestampMs = 20L,
+                point = TrackPoint(
+                    provenance = TrackPointSource.REMOTE_STREAM,
+                    trackerId = "hidden",
+                    latitude = 20.0,
+                    longitude = 20.0,
+                    timeMs = 20L,
                     accuracyMeters = null,
                     propsJson = null,
                 ),

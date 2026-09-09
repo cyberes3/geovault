@@ -1,39 +1,20 @@
 package com.geovault.tracker.presentation
 
 import android.app.Application
-import android.content.Intent
 import com.geovault.common.logging.GeoVaultCaptureLog
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.geovault.common.auth.GeoVaultAuthSession
 import com.geovault.common.auth.GeoVaultAccountUiState
 import com.geovault.common.net.GeoVaultConnectivity
-import com.geovault.common.ui.snackbar.GeoVaultSnackbarModel
 import com.geovault.common.update.GeoVaultAndroidReleaseIdentity
 import com.geovault.common.update.GeoVaultAppUpdatePromptBinding
 import com.geovault.common.update.VersionCheckResult
 import com.geovault.tracker.BuildConfig
-import com.geovault.tracker.SelectedTrackerManager
-import com.geovault.tracker.SelectedTrackerPrefs
-import com.geovault.common.net.GeoVaultApiFailure
-import com.geovault.tracker.TrackerCheckRequest
 import com.geovault.tracker.di.TrackerAppServices
-import com.geovault.tracker.location.TrackingPermissionGate
-import com.geovault.tracker.runtime.RuntimeTrigger
-import com.geovault.tracker.TrackingCommandFacade
-import com.geovault.tracker.R
-import com.geovault.tracker.services.TrackingRuntimeStateStore
-import com.geovault.tracker.settings.TrackerSettingsLoadState
-import com.geovault.tracker.settings.TrackerSettingsRepository
+import com.geovault.tracker.data.TrackerApiFailureMessages
 import com.geovault.tracker.data.TrackerBootstrapOutcome
-import com.geovault.tracker.data.TrackerManagementRepository
-import com.geovault.tracker.data.TrackerSessionWarmup
-import com.geovault.tracker.history.TrackerHistoryIntent
-import com.geovault.tracker.history.TrackerHistoryIntentDispatcher
-import com.geovault.tracker.history.TrackerHistorySourceAdapters
-import com.geovault.tracker.tracking.TrackingService
-import com.geovault.tracker.tracking.TrackingServiceIntents
-import com.geovault.tracker.tracking.TrackingServiceConstants
+import com.geovault.tracker.data.CatalogBootstrap
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
@@ -43,31 +24,20 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
-import kotlin.coroutines.resume
 
 data class MainScreenState(
     val isServerAccessible: Boolean = true,
-    val infoMessage: String? = null,
     val updateAvailable: VersionCheckResult.UpdateAvailable? = null,
     val mapRecoveryRequestToken: Long = 0L,
-    val isPreparingToTrack: Boolean = false,
 )
 
 class MainScreenViewModel(application: Application) : AndroidViewModel(application) {
 
     private val app = application
-    private val trackerSettingsRepository: TrackerSettingsRepository =
-        TrackerAppServices.from(application).trackerSettingsRepository()
-    private val trackerManagementRepository: TrackerManagementRepository =
-        TrackerAppServices.from(application).trackerManagementRepository()
-    private val sessionWarmup: TrackerSessionWarmup =
-        TrackerAppServices.from(application).trackerSessionWarmup()
-    private val historyRepository = TrackerAppServices.from(application).trackerHistoryRepository()
-    private val historyIntentDispatcher = TrackerHistoryIntentDispatcher(historyRepository)
+    private val sessionWarmup: CatalogBootstrap =
+        TrackerAppServices.from(application).catalogBootstrap()
     private val updatePromptBinding = GeoVaultAppUpdatePromptBinding(
         GeoVaultAndroidReleaseIdentity.Tracker.updateCoordinator(
             application = application,
@@ -92,14 +62,9 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     fun consumePendingOpenAllTrackersOnMap() {
         _pendingOpenAllTrackersOnMap.value = false
     }
-    private var startupTrackingAutomationHandled = false
-    private var startupTrackingAutomationJob: Job? = null
     private var startupRefreshHandled = false
     private var startupRefreshJob: Job? = null
-    private var startupSelectedTrackerGeometryHandled = false
-    private var startupSelectedTrackerGeometryJob: Job? = null
     private var resumeBootstrapJob: Job? = null
-    private var preparingStartJob: Job? = null
     private var isLoggedIn: Boolean = false
     private var configuredServerUrl: String = ""
 
@@ -122,7 +87,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
                     true
                 }
                 if (runBootstrap) {
-                    sessionWarmup.runResumeWarmup()
+                    emitGeometryFailureIfNeeded(sessionWarmup.runResumeWarmup())
                 }
             }
         }
@@ -130,15 +95,6 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     init {
         updatePromptBinding.collect(viewModelScope) { prompt ->
             _state.update { it.copy(updateAvailable = prompt) }
-        }
-        viewModelScope.launch {
-            TrackingRuntimeStateStore.state.collect { runtime ->
-                if (_state.value.isPreparingToTrack &&
-                    StartTrackingPreparationPolicy.shouldClearForRuntime(runtime)
-                ) {
-                    _state.update { it.copy(isPreparingToTrack = false) }
-                }
-            }
         }
         viewModelScope.launch {
             state.collect { s ->
@@ -165,75 +121,13 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         launchPostAuthStartupFlowsIfNeeded()
     }
 
-    fun requestStartTracking() {
-        if (preparingStartJob?.isActive == true) return
-        preparingStartJob = viewModelScope.launch {
-            if (!ensureStartupTrackingPreflight()) return@launch
-            _state.update { it.copy(isPreparingToTrack = true, infoMessage = null) }
-            if (!ensureSelectedTrackerReadyForStart(showNoSelectionMessage = true)) {
-                _state.update { it.copy(isPreparingToTrack = false) }
-                return@launch
-            }
-            if (!_state.value.isPreparingToTrack) return@launch
-            val result = TrackingCommandFacade.requestStart(
-                getApplication(),
-                trigger = RuntimeTrigger.EXPLICIT_START,
-                reason = "home_start"
-            )
-            if (StartTrackingPreparationPolicy.shouldClearAfterStartCommand(result)) {
-                _state.update { it.copy(isPreparingToTrack = false) }
-            }
-        }.also { job ->
-            job.invokeOnCompletion { cause ->
-                preparingStartJob = null
-                if (cause != null) {
-                    _state.update { it.copy(isPreparingToTrack = false) }
-                }
-            }
-        }
-    }
-
-    fun requestStopTracking() {
-        if (_state.value.isPreparingToTrack) {
-            preparingStartJob?.cancel()
-            preparingStartJob = null
-            _state.update { it.copy(isPreparingToTrack = false) }
-            return
-        }
-        TrackingCommandFacade.requestStop(getApplication(), reason = "home_stop")
-    }
-
-    fun requestManualPoint() {
-        if (!isTrackingServiceActiveOrStarting()) {
-            _state.update {
-                it.copy(infoMessage = app.getString(R.string.manual_send_point_requires_active_tracking))
-            }
-            return
-        }
-        if (TrackingRuntimeStateStore.state.value.selectedTrackerId.isBlank()) {
-            _state.update {
-                it.copy(infoMessage = app.getString(R.string.no_tracker_selected_go_to_settings))
-            }
-            return
-        }
-        app.startService(
-            Intent(app, TrackingService::class.java).apply {
-                action = TrackingServiceIntents.ACTION_SEND_MANUAL_POINT
-            }
-        )
-    }
-
     fun onHostResumed() {
         launchPostAuthStartupFlowsIfNeeded()
         scheduleResumeBootstrapAfterStartup()
     }
 
     fun showExternalError(message: String) {
-        _state.update { it.copy(infoMessage = message) }
-    }
-
-    fun clearInfoMessage() {
-        _state.update { it.copy(infoMessage = null) }
+        emitHostMessage(message)
     }
 
     fun clearUpdateAvailable() {
@@ -253,83 +147,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     private fun launchPostAuthStartupFlowsIfNeeded() {
         if (!isLoggedIn) return
         launchStartupRefreshIfNeeded()
-        launchStartupSelectedTrackerGeometryPreloadIfNeeded()
-        launchStartupTrackingAutomationIfNeeded()
         launchVersionCheckIfNeeded()
-    }
-
-    /**
-     * Pre-fetch the persisted selected tracker's full geometry as part of post-auth
-     * launch I/O so the trackers cache (`TrackerManagementStateStore`) already holds
-     * server-authoritative geometry by the time the user opens the map. Without this
-     * the geometry fetch is gated on the map surface becoming visible, which produces
-     * a visible loading spinner / 0,0 flash even when launch I/O finished long ago.
-     *
-     * Runs in parallel with the rest of the bootstrap fetches; the repository's
-     * single-flight gate (`tracker-geometry:<id>`) coalesces against any later fetch
-     * triggered by `TrackerMapViewModel`. A failed fetch is logged but does not
-     * affect bootstrap success — a subsequent `ExplicitTrackerLoad` reload will retry.
-     */
-    private fun launchStartupSelectedTrackerGeometryPreloadIfNeeded() {
-        if (startupSelectedTrackerGeometryHandled || startupSelectedTrackerGeometryJob?.isActive == true) return
-        startupSelectedTrackerGeometryJob = viewModelScope.launch {
-            startupSelectedTrackerGeometryHandled = true
-            val selectedId = SelectedTrackerPrefs.selectedTrackerId(app).trim()
-            if (selectedId.isEmpty()) return@launch
-            try {
-                val tracker = trackerManagementRepository.loadTrackerGeometry(selectedId)
-                val batch = TrackerHistorySourceAdapters.filteredServerTrunk(tracker)
-                val runtime = TrackingRuntimeStateStore.state.value
-                val activeSessionStart = runtime.sessionStartTimeMs.takeIf {
-                    runtime.localRecordingActive && it > 0L &&
-                        runtime.locallyRecordedTrackerId.trim() == selectedId
-                }
-                val tx = historyIntentDispatcher.dispatch(
-                    TrackerHistoryIntent.CommitTrunk(
-                        batch = batch,
-                        activeSessionStartMs = activeSessionStart,
-                    ),
-                )
-                GeoVaultCaptureLog.i(
-                    TAG,
-                    "map_update history_preload_startup tracker=$selectedId window=${batch.window.normalizedKey} " +
-                        "committed=${tx.committed} pts=${tx.snapshot.points.size}",
-                )
-            } catch (e: GeoVaultApiFailure) {
-                GeoVaultCaptureLog.w(
-                    "MainScreenViewModel",
-                    "Selected tracker geometry preload failed trackerId=$selectedId error=$e",
-                    e,
-                )
-            }
-        }
-    }
-
-    private fun launchStartupTrackingAutomationIfNeeded() {
-        if (startupTrackingAutomationHandled || startupTrackingAutomationJob?.isActive == true) return
-        startupTrackingAutomationJob = viewModelScope.launch {
-            trackerSettingsRepository.observeState().collect { settingsState ->
-                when (settingsState.loadState) {
-                    TrackerSettingsLoadState.Loading -> Unit
-                    TrackerSettingsLoadState.Error -> {
-                        startupTrackingAutomationHandled = true
-                        this.cancel()
-                    }
-                    TrackerSettingsLoadState.Ready -> {
-                        if (settingsState.wasTrackingBeforeExit) {
-                            trackerSettingsRepository.clearWasTrackingBeforeExit()
-                        }
-                        if (!isTrackingServiceActiveOrStarting() &&
-                            settingsState.settings.startTrackingOnLaunch
-                        ) {
-                            tryStartTrackingOnLaunch()
-                        }
-                        startupTrackingAutomationHandled = true
-                        this.cancel()
-                    }
-                }
-            }
-        }
     }
 
     private fun launchStartupRefreshIfNeeded() {
@@ -359,6 +177,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
                     // Apply immediately so offline overlay / notifier match transport (do not wait for launch I/O).
                     _state.update { it.copy(isServerAccessible = transportReachable) }
                     val outcome = sessionWarmup.runLaunchWarmup()
+                    emitGeometryFailureIfNeeded(outcome)
                     outcome
                 } finally {
                     launchBootstrapMutex.withLock {
@@ -389,7 +208,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
                 // Avoid a flaky probe undoing a validated-network recovery that beat this coroutine.
                 GeoVaultCaptureLog.d(TAG, "transport_probe_on_resume skip_probe already_accessible")
             }
-            sessionWarmup.runResumeWarmup()
+            emitGeometryFailureIfNeeded(sessionWarmup.runResumeWarmup())
         }
     }
 
@@ -409,109 +228,40 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         GeoVaultCaptureLog.d(TAG, "$reason configuredHost=$host len=${raw.length}")
     }
 
-    private suspend fun tryStartTrackingOnLaunch() {
-        if (!ensureStartupTrackingPreflight()) return
-        if (!ensureSelectedTrackerReadyForStart(showNoSelectionMessage = false)) return
-        TrackingCommandFacade.requestStart(
-            context = app,
-            trigger = RuntimeTrigger.MAIN_START_ON_LAUNCH,
-            reason = "main_start_on_launch"
-        )
-    }
-
-    private fun ensureStartupTrackingPreflight(): Boolean {
-        if (!TrackingPermissionGate.hasLocationPermission(app)) {
-            _state.update { it.copy(infoMessage = app.getString(R.string.location_permission_needed_first)) }
-            return false
-        }
-        if (!TrackingPermissionGate.hasBackgroundLocationPermission(app)) {
-            _state.update { it.copy(infoMessage = app.getString(R.string.background_location_permission_required)) }
-            return false
-        }
-        if (!TrackingPermissionGate.hasNotificationPermission(app)) {
-            _state.update { it.copy(infoMessage = app.getString(R.string.notification_permission_required)) }
-            return false
-        }
-        if (!TrackingPermissionGate.hasBatteryOptimizationExemption(app)) {
-            _state.update { it.copy(infoMessage = app.getString(R.string.battery_optimization_exemption_required)) }
-            return false
-        }
-        if (!TrackingPermissionGate.hasExactAlarmPermission(app)) {
-            _state.update { it.copy(infoMessage = app.getString(R.string.exact_alarm_permission_required)) }
-            return false
-        }
-        if (!TrackingPermissionGate.isGpsProviderEnabled(app)) {
-            _state.update { it.copy(infoMessage = app.getString(R.string.gps_provider_required)) }
-            return false
-        }
-        return true
-    }
-
-    private fun isTrackingServiceActiveOrStarting(): Boolean {
-        val runtime = TrackingRuntimeStateStore.state.value
-        return runtime.sessionActive || runtime.startupActive
-    }
-
     private fun launchVersionCheckIfNeeded() {
         updatePromptBinding.onAuthenticated(viewModelScope)
     }
 
     private fun resetPostAuthStartupState() {
         sessionWarmup.resetForSignedOutSession()
-        startupTrackingAutomationHandled = false
         startupRefreshHandled = false
-        startupSelectedTrackerGeometryHandled = false
         updatePromptBinding.onSignedOut()
-        startupTrackingAutomationJob?.cancel()
-        startupTrackingAutomationJob = null
         startupRefreshJob?.cancel()
         startupRefreshJob = null
-        startupSelectedTrackerGeometryJob?.cancel()
-        startupSelectedTrackerGeometryJob = null
         resumeBootstrapJob?.cancel()
         resumeBootstrapJob = null
-        preparingStartJob?.cancel()
-        preparingStartJob = null
         _state.update {
             it.copy(
                 isServerAccessible = true,
                 updateAvailable = null,
                 mapRecoveryRequestToken = 0L,
-                isPreparingToTrack = false
             )
         }
-    }
-
-    private suspend fun ensureSelectedTrackerReadyForStart(showNoSelectionMessage: Boolean): Boolean {
-        val trackerId = TrackingRuntimeStateStore.state.value.selectedTrackerId.trim()
-        if (trackerId.isBlank()) {
-            if (showNoSelectionMessage) {
-                _state.update {
-                    it.copy(infoMessage = app.getString(R.string.no_tracker_selected_go_to_settings))
-                }
-            }
-            return false
-        }
-        val isValid = try {
-            trackerManagementRepository.checkTracker(TrackerCheckRequest(tracker_id = trackerId))
-        } catch (_: GeoVaultApiFailure) {
-            false
-        }
-        if (isValid) return true
-        GeoVaultCaptureLog.w("MainScreenViewModel", "selected tracker invalid on start, clearing selection")
-        SelectedTrackerManager.clearSelectedTrackerAndInvalidateCaches(app)
-        try {
-            trackerManagementRepository.loadTrackers(forceRefresh = true)
-        } catch (e: GeoVaultApiFailure) {
-            GeoVaultCaptureLog.w("MainScreenViewModel", "failed to refresh trackers after invalid selection", e)
-        }
-        _state.update { it.copy(infoMessage = app.getString(R.string.tracker_validation_failed_go_to_settings)) }
-        return false
     }
 
     override fun onCleared() {
         validatedInternetNotifier.stop()
         super.onCleared()
+    }
+
+    private fun emitGeometryFailureIfNeeded(outcome: TrackerBootstrapOutcome) {
+        val failure = outcome.geometryFailure ?: return
+        GeoVaultCaptureLog.w(TAG, "Catalog geometry fetch failed error=$failure", failure)
+        emitHostMessage(TrackerApiFailureMessages.format(app, failure))
+    }
+
+    private fun emitHostMessage(message: String) {
+        TrackerAppServices.from(app).uiEffects().emitMessage(message)
     }
 
     private companion object {

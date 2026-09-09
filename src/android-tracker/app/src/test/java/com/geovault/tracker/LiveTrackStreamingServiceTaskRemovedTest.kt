@@ -5,10 +5,10 @@ import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.geovault.tracker.di.TrackerAppServices
 import com.geovault.tracker.policy.RemoteStreamIngressPolicy
-import com.geovault.tracker.policy.TrackPointEvent
+import com.geovault.tracker.domain.TrackPoint
 import com.geovault.tracker.policy.TrackPointSource
 import com.geovault.tracker.streaming.ConnectionPhase
-import com.geovault.tracker.streaming.OwnerLease
+import com.geovault.tracker.streaming.StreamIntent
 import com.geovault.tracker.streaming.StreamingOwner
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -33,18 +33,16 @@ class LiveTrackStreamingServiceTaskRemovedTest {
     @Test
     fun onTaskRemoved_clearsRemoteStreamAdmissionState() {
         // STALE-ADMISSION-STATE: stopStreamingSession() (invoked via onTaskRemoved) must clear
-        // RemoteStreamIngressPolicy's per-track ordering bookkeeping, since a REUSE/HOT_UPDATE
-        // decision on a later session never calls startSubscriptionSession() itself.
+        // RemoteStreamIngressPolicy's per-track ordering bookkeeping.
         val now = 1_700_000_000_000L
-        RemoteStreamIngressPolicy.startSubscriptionSession(listOf("t1"))
         assertNotNull(
             RemoteStreamIngressPolicy.process(
-                event = TrackPointEvent(
-                    source = TrackPointSource.REMOTE_STREAM,
-                    trackId = "t1",
-                    lon = 10.0,
-                    lat = 20.0,
-                    timestampMs = now,
+                event = TrackPoint(
+                    provenance = TrackPointSource.REMOTE_STREAM,
+                    trackerId = "t1",
+                    longitude = 10.0,
+                    latitude = 20.0,
+                    timeMs = now,
                 ),
                 nowMs = now,
             )
@@ -57,12 +55,12 @@ class LiveTrackStreamingServiceTaskRemovedTest {
         // Without the stop-time reset, this older timestamp would be rejected as out-of-order
         // against the still-live per-track anchor recorded before the stop.
         val acceptedAfterStop = RemoteStreamIngressPolicy.process(
-            event = TrackPointEvent(
-                source = TrackPointSource.REMOTE_STREAM,
-                trackId = "t1",
-                lon = 10.0,
-                lat = 20.0,
-                timestampMs = now - 5_000L,
+            event = TrackPoint(
+                provenance = TrackPointSource.REMOTE_STREAM,
+                trackerId = "t1",
+                longitude = 10.0,
+                latitude = 20.0,
+                timeMs = now - 5_000L,
             ),
             nowMs = now,
         )
@@ -79,7 +77,7 @@ class LiveTrackStreamingServiceTaskRemovedTest {
             .commit()
         val repository = TrackerAppServices.from(context.applicationContext as Application)
             .liveStreamSubscriptionRepository()
-        repository.setLease(StreamingOwner.MAP, OwnerLease(trackerIds = setOf("t1"), displayName = "Tracker 1"))
+        repository.setLease(StreamingOwner.MAP, StreamIntent(trackerIds = setOf("t1"), displayName = "Tracker 1"))
         val controller = Robolectric.buildService(LiveTrackStreamingService::class.java).create()
         val service = controller.get()
 

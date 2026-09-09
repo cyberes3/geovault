@@ -30,8 +30,8 @@ class StreamingTrackPointParserTest {
         )
 
         assertEquals(1, points.size)
-        assertEquals("t1", points.first().trackId)
-        assertEquals(1_710_000_000_000L, points.first().timestampMs)
+        assertEquals("t1", points.first().trackerId)
+        assertEquals(1_710_000_000_000L, points.first().timeMs)
         assertEquals(4.2f, points.first().accuracyMeters ?: -1f, 0.0f)
     }
 
@@ -55,9 +55,9 @@ class StreamingTrackPointParserTest {
         )
 
         assertEquals(2, points.size)
-        assertEquals(-71.0, points[0].lon, 0.0)
-        assertEquals(-72.0, points[1].lon, 0.0)
-        assertEquals(1_710_000_001_000L, points[1].timestampMs)
+        assertEquals(-71.0, points[0].longitude, 0.0)
+        assertEquals(-72.0, points[1].longitude, 0.0)
+        assertEquals(1_710_000_001_000L, points[1].timeMs)
     }
 
     @Test
@@ -78,7 +78,7 @@ class StreamingTrackPointParserTest {
         )
 
         assertEquals(1, points.size)
-        assertEquals(1234L, points.first().timestampMs)
+        assertEquals(1234L, points.first().timeMs)
     }
 
     @Test

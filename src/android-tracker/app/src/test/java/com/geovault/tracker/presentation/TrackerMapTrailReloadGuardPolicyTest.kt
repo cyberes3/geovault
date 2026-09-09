@@ -4,6 +4,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+import com.geovault.tracker.map.MapTrailEngine
 class TrackerMapTrailReloadGuardPolicyTest {
 
     private fun input(
@@ -30,7 +31,7 @@ class TrackerMapTrailReloadGuardPolicyTest {
         // `runtimeRunning` alone (e.g. a different tracker is displayed while this device
         // records) must not block a reload.
         assertTrue(
-            TrackerMapTrailReloadGuardPolicy.shouldProceed(
+            MapTrailEngine.shouldProceedReload(
                 input(runtimeRunning = true, trailSize = 100)
             )
         )
@@ -39,12 +40,12 @@ class TrackerMapTrailReloadGuardPolicyTest {
     @Test
     fun emptyTrailAlwaysProceeds() {
         assertTrue(
-            TrackerMapTrailReloadGuardPolicy.shouldProceed(
+            MapTrailEngine.shouldProceedReload(
                 input(trailSize = 0, runtimeRunning = true)
             )
         )
         assertTrue(
-            TrackerMapTrailReloadGuardPolicy.shouldProceed(
+            MapTrailEngine.shouldProceedReload(
                 input(trailSize = 0)
             )
         )
@@ -53,12 +54,12 @@ class TrackerMapTrailReloadGuardPolicyTest {
     @Test
     fun emptyDisplayedTrackerIdProceeds() {
         assertTrue(
-            TrackerMapTrailReloadGuardPolicy.shouldProceed(
+            MapTrailEngine.shouldProceedReload(
                 input(displayedTrackerId = "", runtimeRunning = true, trailSize = 100)
             )
         )
         assertTrue(
-            TrackerMapTrailReloadGuardPolicy.shouldProceed(
+            MapTrailEngine.shouldProceedReload(
                 input(displayedTrackerId = "   ", runtimeRunning = true, trailSize = 100)
             )
         )
@@ -71,7 +72,7 @@ class TrackerMapTrailReloadGuardPolicyTest {
         // displayed trail was the actively-recorded tracker's own live-updating queue.
         // There is no longer any input capable of bypassing it.
         assertFalse(
-            TrackerMapTrailReloadGuardPolicy.shouldProceed(
+            MapTrailEngine.shouldProceedReload(
                 input(
                     runtimeRunning = true,
                     trailSize = 10,
@@ -87,7 +88,7 @@ class TrackerMapTrailReloadGuardPolicyTest {
     @Test
     fun runtimeRunningMultiServerProceeds() {
         assertTrue(
-            TrackerMapTrailReloadGuardPolicy.shouldProceed(
+            MapTrailEngine.shouldProceedReload(
                 input(
                     mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
                     runtimeRunning = true,
@@ -105,7 +106,7 @@ class TrackerMapTrailReloadGuardPolicyTest {
     @Test
     fun singleServerProceedsWhenTrailExists() {
         assertTrue(
-            TrackerMapTrailReloadGuardPolicy.shouldProceed(
+            MapTrailEngine.shouldProceedReload(
                 input(trailSize = 10)
             )
         )
@@ -114,7 +115,7 @@ class TrackerMapTrailReloadGuardPolicyTest {
     @Test
     fun noStreamingNoTrackingProceeds() {
         assertTrue(
-            TrackerMapTrailReloadGuardPolicy.shouldProceed(
+            MapTrailEngine.shouldProceedReload(
                 input(runtimeRunning = false, trailSize = 10)
             )
         )
@@ -123,7 +124,7 @@ class TrackerMapTrailReloadGuardPolicyTest {
     @Test
     fun displayedTrackerIdWhitespaceTrimmed() {
         assertTrue(
-            TrackerMapTrailReloadGuardPolicy.shouldProceed(
+            MapTrailEngine.shouldProceedReload(
                 input(
                     displayedTrackerId = "  tracker1  ",
                     trailSize = 10,
@@ -135,7 +136,7 @@ class TrackerMapTrailReloadGuardPolicyTest {
     @Test
     fun groupModeStreamingProceedsForMultiServerReload() {
         assertTrue(
-            TrackerMapTrailReloadGuardPolicy.shouldProceed(
+            MapTrailEngine.shouldProceedReload(
                 input(
                     mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
                     displayedTrackerId = "tracker1",

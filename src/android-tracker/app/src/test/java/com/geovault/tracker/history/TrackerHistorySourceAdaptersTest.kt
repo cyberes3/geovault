@@ -2,7 +2,9 @@ package com.geovault.tracker.history
 
 import com.geovault.tracker.GeoJsonLineString
 import com.geovault.tracker.Tracker
+import com.geovault.tracker.TrackerCatalogSettings
 import com.geovault.tracker.TrackerGeometryStatus
+import com.geovault.tracker.pointParamsOf
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -15,7 +17,7 @@ class TrackerHistorySourceAdaptersTest {
             id = "tracker-1",
             name = "Tracker",
             color = null,
-            settings = mapOf("recent_data_window" to "1h"),
+            settings = TrackerCatalogSettings(recentDataWindow = "1h"),
             geometry = GeoJsonLineString(
                 type = "LineString",
                 coordinates = listOf(
@@ -24,8 +26,8 @@ class TrackerHistorySourceAdaptersTest {
                 ),
             ),
             point_params = listOf(
-                mapOf("starttimestamp" to 1000L, "acc" to 4.5),
-                mapOf("starttimestamp" to 1000L, "acc" to 3.5),
+                pointParamsOf("starttimestamp" to 1000L, "acc" to 4.5),
+                pointParamsOf("starttimestamp" to 1000L, "acc" to 3.5),
             ),
             geometry_status = TrackerGeometryStatus(
                 window = "1h",
@@ -54,7 +56,7 @@ class TrackerHistorySourceAdaptersTest {
                 type = "LineString",
                 coordinates = listOf(listOf(-106.0, 35.0, 1_000_000L.toDouble())),
             ),
-            point_params = listOf(mapOf("spd_kph" to 36.0)),
+            point_params = listOf(pointParamsOf("spd_kph" to 36.0)),
         )
 
         val batch = TrackerHistorySourceAdapters.filteredServerTrunk(tracker)

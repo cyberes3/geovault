@@ -5,6 +5,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+import com.geovault.tracker.map.MapRenderMath
 class TrackerMapLockFabPolicyTest {
 
     private fun input(
@@ -23,7 +24,7 @@ class TrackerMapLockFabPolicyTest {
 
     @Test
     fun resolve_singleSessionWithDisplayedTracker_returnsSelectionLockUnlocked() {
-        val behavior = TrackerMapLockFabPolicy.resolve(
+        val behavior = MapRenderMath.resolveLockFab(
             input(
                 mode = TrackerMapDisplayMode.SINGLE_SESSION,
                 displayedTrackerId = "tracker-1",
@@ -37,7 +38,7 @@ class TrackerMapLockFabPolicyTest {
 
     @Test
     fun resolve_singleSessionWithMatchingSelectionLock_returnsSelectionLockLocked() {
-        val behavior = TrackerMapLockFabPolicy.resolve(
+        val behavior = MapRenderMath.resolveLockFab(
             input(
                 mode = TrackerMapDisplayMode.SINGLE_SESSION,
                 displayedTrackerId = "tracker-1",
@@ -50,7 +51,7 @@ class TrackerMapLockFabPolicyTest {
 
     @Test
     fun resolve_singleSessionWithMismatchedSelectionLock_returnsSelectionLockUnlocked() {
-        val behavior = TrackerMapLockFabPolicy.resolve(
+        val behavior = MapRenderMath.resolveLockFab(
             input(
                 mode = TrackerMapDisplayMode.SINGLE_SESSION,
                 displayedTrackerId = "tracker-1",
@@ -63,7 +64,7 @@ class TrackerMapLockFabPolicyTest {
 
     @Test
     fun resolve_singleSessionTrimsDisplayedAndSelectionLockIdsBeforeComparing() {
-        val behavior = TrackerMapLockFabPolicy.resolve(
+        val behavior = MapRenderMath.resolveLockFab(
             input(
                 mode = TrackerMapDisplayMode.SINGLE_SESSION,
                 displayedTrackerId = "  tracker-1  ",
@@ -77,7 +78,7 @@ class TrackerMapLockFabPolicyTest {
 
     @Test
     fun resolve_singleSessionWithBlankDisplayedTrackerId_returnsFollowLock() {
-        val behavior = TrackerMapLockFabPolicy.resolve(
+        val behavior = MapRenderMath.resolveLockFab(
             input(
                 mode = TrackerMapDisplayMode.SINGLE_SESSION,
                 displayedTrackerId = "",
@@ -91,7 +92,7 @@ class TrackerMapLockFabPolicyTest {
     fun resolve_singleSessionWithWhitespaceOnlyDisplayedTrackerId_returnsFollowLock() {
         // Whitespace-only ids must be treated the same as blank -- the trimmed check is what
         // decides between the SelectionLock and FollowLock branches.
-        val behavior = TrackerMapLockFabPolicy.resolve(
+        val behavior = MapRenderMath.resolveLockFab(
             input(
                 mode = TrackerMapDisplayMode.SINGLE_SESSION,
                 displayedTrackerId = "   ",
@@ -103,7 +104,7 @@ class TrackerMapLockFabPolicyTest {
 
     @Test
     fun resolve_allQueue_returnsLiveActiveFitRegardlessOfDisplayedTracker() {
-        val behaviorWithTracker = TrackerMapLockFabPolicy.resolve(
+        val behaviorWithTracker = MapRenderMath.resolveLockFab(
             input(
                 mode = TrackerMapDisplayMode.ALL_QUEUE,
                 displayedTrackerId = "tracker-1",
@@ -112,7 +113,7 @@ class TrackerMapLockFabPolicyTest {
         )
         assertEquals(TrackerMapLockFabBehavior.LiveActiveFit(isEnabled = true), behaviorWithTracker)
 
-        val behaviorWithoutTracker = TrackerMapLockFabPolicy.resolve(
+        val behaviorWithoutTracker = MapRenderMath.resolveLockFab(
             input(
                 mode = TrackerMapDisplayMode.ALL_QUEUE,
                 displayedTrackerId = "",
@@ -124,7 +125,7 @@ class TrackerMapLockFabPolicyTest {
 
     @Test
     fun resolve_groupPlaceholder_returnsLiveActiveFitRegardlessOfDisplayedTracker() {
-        val behaviorWithTracker = TrackerMapLockFabPolicy.resolve(
+        val behaviorWithTracker = MapRenderMath.resolveLockFab(
             input(
                 mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
                 displayedTrackerId = "tracker-1",
@@ -133,7 +134,7 @@ class TrackerMapLockFabPolicyTest {
         )
         assertEquals(TrackerMapLockFabBehavior.LiveActiveFit(isEnabled = true), behaviorWithTracker)
 
-        val behaviorWithoutTracker = TrackerMapLockFabPolicy.resolve(
+        val behaviorWithoutTracker = MapRenderMath.resolveLockFab(
             input(
                 mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
                 displayedTrackerId = "",

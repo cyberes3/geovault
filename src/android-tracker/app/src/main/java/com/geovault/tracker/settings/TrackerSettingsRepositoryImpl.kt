@@ -41,15 +41,13 @@ class TrackerSettingsRepositoryImpl(
 
     override fun observeSettings(): Flow<TrackerSettings> = state.asStateFlow().map { it.settings }
 
-    override fun wasTrackingBeforeExit(): Boolean = state.value.wasTrackingBeforeExit
-
     override fun dumpDebugState(reason: String) {
         val current = state.value
         logEvent(
             name = "debug_dump",
             reason = reason,
             opId = null,
-            extra = "loadState=${current.loadState} schema=${current.schemaVersion} revision=${current.revision} wasTrackingBeforeExit=${current.wasTrackingBeforeExit} settings=${settingsSummary(current.settings)}"
+            extra = "loadState=${current.loadState} schema=${current.schemaVersion} revision=${current.revision} settings=${settingsSummary(current.settings)}"
         )
         repoScope.launch {
             runCatching { dataStore.readRecord() }
@@ -58,7 +56,7 @@ class TrackerSettingsRepositoryImpl(
                         name = "debug_dump_durable",
                         reason = reason,
                         opId = null,
-                        extra = "schema=${record.schemaVersion} wasTrackingBeforeExit=${record.wasTrackingBeforeExit} settings=${settingsSummary(record.settings)}"
+                        extra = "schema=${record.schemaVersion} settings=${settingsSummary(record.settings)}"
                     )
                 }
                 .onFailure { error ->
@@ -93,56 +91,6 @@ class TrackerSettingsRepositoryImpl(
 
     override fun setGroupModeFitOnlyActiveTrackers(enabled: Boolean) =
         enqueueMutation("set_group_mode_fit_only_active_trackers") { it.copy(groupModeFitOnlyActiveTrackers = enabled) }
-
-    override fun setWasTrackingBeforeExit(value: Boolean) {
-        val current = state.value
-        if (current.isReady && current.wasTrackingBeforeExit == value) {
-            logEvent(
-                name = "intent_ignored",
-                reason = "set_was_tracking_before_exit",
-                opId = null,
-                extra = "cause=no_op current=$value"
-            )
-            return
-        }
-        val opId = nextOpId()
-        enqueueCommand(
-            SettingsCommand(
-                name = "set_was_tracking_before_exit",
-                opId = opId,
-                operation = {
-                    dataStore.updateRecord(reason = "set_was_tracking_before_exit") { current ->
-                        current.copy(wasTrackingBeforeExit = value)
-                    }
-                }
-            )
-        )
-    }
-
-    override fun clearWasTrackingBeforeExit() {
-        val current = state.value
-        if (current.isReady && !current.wasTrackingBeforeExit) {
-            logEvent(
-                name = "intent_ignored",
-                reason = "clear_was_tracking_before_exit",
-                opId = null,
-                extra = "cause=no_op current=false"
-            )
-            return
-        }
-        val opId = nextOpId()
-        enqueueCommand(
-            SettingsCommand(
-                name = "clear_was_tracking_before_exit",
-                opId = opId,
-                operation = {
-                    dataStore.updateRecord(reason = "clear_was_tracking_before_exit") { current ->
-                        current.copy(wasTrackingBeforeExit = false)
-                    }
-                }
-            )
-        )
-    }
 
     private fun enqueueMutation(
         name: String,
@@ -209,7 +157,6 @@ class TrackerSettingsRepositoryImpl(
                 val nextState = TrackerSettingsState(
                     loadState = TrackerSettingsLoadState.Ready,
                     settings = normalized,
-                    wasTrackingBeforeExit = record.wasTrackingBeforeExit,
                     schemaVersion = record.schemaVersion,
                     revision = state.value.revision + 1L
                 )
@@ -217,7 +164,7 @@ class TrackerSettingsRepositoryImpl(
                 logEvent(
                     name = "state_observed",
                     reason = "datastore_record",
-                    extra = "loadState=${nextState.loadState} schema=${nextState.schemaVersion} revision=${nextState.revision} wasTrackingBeforeExit=${nextState.wasTrackingBeforeExit} settings=${settingsSummary(nextState.settings)}"
+                    extra = "loadState=${nextState.loadState} schema=${nextState.schemaVersion} revision=${nextState.revision} settings=${settingsSummary(nextState.settings)}"
                 )
                 if (!initializationComplete.isCompleted) {
                     initializationComplete.complete(Unit)
@@ -237,7 +184,12 @@ class TrackerSettingsRepositoryImpl(
     }
 
     private suspend fun initializeStorage() {
-        val record = dataStore.readRecord()
+        val document = dataStore.readDocument()
+        if (document.wasTrackingBeforeExit) {
+            com.geovault.tracker.runtime.TrackerRuntimeStore.migrateLegacyLatch(true)
+            dataStore.clearWasTrackingBeforeExit()
+        }
+        val record = document.toRecord()
         logEvent(
             name = "initialize_storage",
             reason = "schema_check",

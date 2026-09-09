@@ -70,7 +70,6 @@ data class TrackersGroupsUiState(
     val isPickerRefreshing: Boolean = false,
     val isPullRefreshing: Boolean = false,
     val hasCompletedInitialLoad: Boolean = false,
-    val userMessage: String? = null,
     val dialog: TrackersGroupsDialog = TrackersGroupsDialog.Hidden,
-    val addingTrackerIds: Set<String> = emptySet(),
+    val occupiedMembershipIds: Set<String> = emptySet(),
 )

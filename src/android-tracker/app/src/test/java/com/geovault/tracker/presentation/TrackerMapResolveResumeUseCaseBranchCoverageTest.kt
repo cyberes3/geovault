@@ -1,15 +1,14 @@
 package com.geovault.tracker.presentation
 
+import com.geovault.tracker.map.MapSessionEngine
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class TrackerMapResolveResumeUseCaseBranchCoverageTest {
 
-    private val resolver = TrackerMapResolveResumeUseCase()
-
     @Test
     fun resolve_mapNotReady_returnsNoOp() {
-        val decision = resolver.resolve(baseInput(mapReady = false))
+        val decision = MapSessionEngine.resolveResume(baseInput(mapReady = false))
         assertEquals(TrackerMapResumeDecision.NoOp, decision)
     }
 
@@ -19,7 +18,7 @@ class TrackerMapResolveResumeUseCaseBranchCoverageTest {
         // (which already excludes the locally-recorded tracker upstream) is taken verbatim. The
         // selected tracker is NOT scrubbed out at the resume layer because group mode is an
         // explicit multi-tracker subscription that may legitimately include it.
-        val decision = resolver.resolve(
+        val decision = MapSessionEngine.resolveResume(
             baseInput(
                 trackingRunning = true,
                 mapViewContext = TrackerMapViewContext.GROUP,
@@ -34,7 +33,7 @@ class TrackerMapResolveResumeUseCaseBranchCoverageTest {
     @Test
     fun resolve_trackingGroup_usesFallbackGroupIdsIncludingSelected() {
         // GROUP STREAMING: same rationale — the fallback group set keeps the selected tracker.
-        val decision = resolver.resolve(
+        val decision = MapSessionEngine.resolveResume(
             baseInput(
                 trackingRunning = true,
                 mapViewContext = TrackerMapViewContext.GROUP,
@@ -48,7 +47,7 @@ class TrackerMapResolveResumeUseCaseBranchCoverageTest {
 
     @Test
     fun resolve_trackingSingle_noIdsAndNoPending_clearsState() {
-        val decision = resolver.resolve(
+        val decision = MapSessionEngine.resolveResume(
             baseInput(
                 trackingRunning = true,
                 selectedTrackerId = "",
@@ -61,7 +60,7 @@ class TrackerMapResolveResumeUseCaseBranchCoverageTest {
 
     @Test
     fun resolve_trackingSingle_displayedInOtherStream_restartsDisplayedStreaming() {
-        val decision = resolver.resolve(
+        val decision = MapSessionEngine.resolveResume(
             baseInput(
                 trackingRunning = true,
                 selectedTrackerId = "selected",
@@ -75,7 +74,7 @@ class TrackerMapResolveResumeUseCaseBranchCoverageTest {
 
     @Test
     fun resolve_nonTrackingGroup_withoutStreams_returnsNoStreaming() {
-        val decision = resolver.resolve(
+        val decision = MapSessionEngine.resolveResume(
             baseInput(
                 trackingRunning = false,
                 mapViewContext = TrackerMapViewContext.GROUP,
@@ -88,7 +87,7 @@ class TrackerMapResolveResumeUseCaseBranchCoverageTest {
 
     @Test
     fun resolve_initialNonTrackingSingleNoTrail_usesBootstrapWhenAlreadyStreamed() {
-        val decision = resolver.resolve(
+        val decision = MapSessionEngine.resolveResume(
             baseInput(
                 trackingRunning = false,
                 selectedTrackerId = "selected",
@@ -104,7 +103,7 @@ class TrackerMapResolveResumeUseCaseBranchCoverageTest {
 
     @Test
     fun resolve_initialNonTrackingSingleWithNoTrail_loadsRuntime() {
-        val decision = resolver.resolve(
+        val decision = MapSessionEngine.resolveResume(
             baseInput(
                 trackingRunning = false,
                 selectedTrackerId = "selected",
@@ -119,7 +118,7 @@ class TrackerMapResolveResumeUseCaseBranchCoverageTest {
 
     @Test
     fun resolve_resumeNonTrackingSingleWithNoTrail_doesNotLoadHistory() {
-        val decision = resolver.resolve(
+        val decision = MapSessionEngine.resolveResume(
             baseInput(
                 trackingRunning = false,
                 selectedTrackerId = "selected",

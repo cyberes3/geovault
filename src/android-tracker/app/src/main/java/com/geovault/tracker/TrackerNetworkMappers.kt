@@ -11,9 +11,9 @@ fun TrackerDto.toDomainModel(): Tracker {
         id = id,
         name = name,
         color = color,
-        settings = settings?.toMapAny(),
+        settings = settings?.toCatalogSettings(),
         geometry = geometry?.let { GeoJsonLineString(type = it.type, coordinates = it.coordinates) },
-        point_params = point_params?.map { it.toMapAny() },
+        point_params = point_params,
         geometry_status = geometry_status?.toDomainModel(),
         last_point = last_point,
         bbox = bbox,
@@ -40,7 +40,7 @@ fun List<TrackerDto>.toDomainModels(): List<Tracker> = map { it.toDomainModel() 
 fun TrackerCoordinatesResponseDto.toDomainModel(): TrackerCoordinatesResponse {
     return TrackerCoordinatesResponse(
         coordinates = coordinates,
-        point_params = point_params?.map { it.toMapAny() }
+        point_params = point_params
     )
 }
 
@@ -54,14 +54,66 @@ private fun TrackerGeometryStatusDto.toDomainModel(): TrackerGeometryStatus {
     )
 }
 
-private fun JsonObject.toMapAny(): Map<String, Any?> = entrySet().associate { (key, value) ->
+internal fun JsonObject.toCatalogSettings(): TrackerCatalogSettings {
+    return TrackerCatalogSettings(
+        hidden = jsonBooleanLoose("hidden") == true,
+        recentDataWindow = jsonString("recent_data_window"),
+        allowGroupReshare = jsonBooleanStrict("allow_group_reshare"),
+        color = jsonString("color"),
+    )
+}
+
+private fun JsonObject.jsonString(key: String): String? {
+    val element = get(key) ?: return null
+    if (element.isJsonNull || !element.isJsonPrimitive) return null
+    return element.asString.trim().ifBlank { null }
+}
+
+private fun JsonObject.jsonBooleanStrict(key: String): Boolean? {
+    val element = get(key) ?: return null
+    if (element.isJsonNull || !element.isJsonPrimitive) return null
+    val primitive = element.asJsonPrimitive
+    return if (primitive.isBoolean) primitive.asBoolean else null
+}
+
+private fun JsonObject.jsonBooleanLoose(key: String): Boolean? {
+    val element = get(key) ?: return null
+    if (element.isJsonNull || !element.isJsonPrimitive) return null
+    val primitive = element.asJsonPrimitive
+    if (primitive.isBoolean) return primitive.asBoolean
+    if (primitive.isNumber) return primitive.asInt != 0
+    if (primitive.isString) {
+        return when (primitive.asString.trim().lowercase()) {
+            "true", "1", "yes" -> true
+            "false", "0", "no" -> false
+            else -> null
+        }
+    }
+    return null
+}
+
+internal fun JsonObject.toLooseMap(): Map<String, Any?> = entrySet().associate { (key, value) ->
     key to value.toAnyValue()
+}
+
+fun pointParamsOf(vararg pairs: Pair<String, Any?>): JsonObject {
+    val json = JsonObject()
+    for ((key, value) in pairs) {
+        when (value) {
+            null -> json.add(key, JsonNull.INSTANCE)
+            is Boolean -> json.addProperty(key, value)
+            is Number -> json.addProperty(key, value)
+            is String -> json.addProperty(key, value)
+            else -> json.addProperty(key, value.toString())
+        }
+    }
+    return json
 }
 
 private fun JsonElement.toAnyValue(): Any? {
     return when (this) {
         is JsonNull -> null
-        is JsonObject -> toMapAny()
+        is JsonObject -> toLooseMap()
         is JsonArray -> map { it.toAnyValue() }
         is JsonPrimitive -> toPrimitiveValue()
         else -> null

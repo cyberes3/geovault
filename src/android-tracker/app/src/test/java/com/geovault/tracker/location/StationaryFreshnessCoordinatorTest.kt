@@ -2,7 +2,7 @@ package com.geovault.tracker.location
 
 import android.location.Location
 import androidx.test.core.app.ApplicationProvider
-import com.geovault.tracker.services.TrackingMotionMode
+import com.geovault.tracker.positioning.TrackingMotionMode
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy

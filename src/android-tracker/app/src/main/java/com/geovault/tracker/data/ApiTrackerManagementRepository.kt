@@ -1,6 +1,5 @@
 package com.geovault.tracker.data
 
-import android.app.Application
 import android.content.Context
 import com.geovault.common.auth.GeoVaultAuthSession
 import com.geovault.common.concurrent.SingleFlightGate
@@ -27,7 +26,6 @@ import com.geovault.tracker.TrackerCoordinatesResponse
 import com.geovault.tracker.TrackerCreateRequest
 import com.geovault.tracker.TrackerSettingsRequest
 import com.geovault.tracker.UsersResponse
-import com.geovault.tracker.di.TrackerAppServices
 import com.geovault.tracker.toDomainModel
 import com.geovault.tracker.toDomainModels
 import kotlinx.coroutines.CancellationException
@@ -42,35 +40,25 @@ import kotlin.concurrent.withLock
 
 class ApiTrackerManagementRepository(
     private val appContext: Context,
-    private val stateStore: TrackerManagementStateStore,
+    private val catalog: CatalogStateStore,
     scope: CoroutineScope,
-) : TrackerManagementRepository, GroupManagementRepository {
+) : TrackerManagementRepository, GroupManagementRepository, CatalogTransport {
     private companion object {
         const val TAG = "ApiTrackerMgmtRepo"
     }
 
     private val cacheMutex = ReentrantLock()
-    @Volatile private var trackersCache: List<Tracker>? = null
-    @Volatile private var groupsCache: List<Group>? = null
-    @Volatile private var availableToAddCache: AvailableToAddResponse? = null
-    @Volatile private var mapVisibilityCache: MapVisibilityResponse? = null
     private val apiCache = GeoVaultHttp.CachedApiHolder<TrackerApi>()
     private val readRequestGate = SingleFlightGate<String, Any>(scope)
 
     override suspend fun loadTrackers(forceRefresh: Boolean): List<Tracker> {
         if (!forceRefresh) {
-            val cachedTrackers = cacheMutex.withLock { trackersCache }
-            if (cachedTrackers != null) {
-                return cachedTrackers
-            }
+            catalog.cachedTrackers()?.let { return it }
         }
         @Suppress("UNCHECKED_CAST")
         return readRequestGate.run("trackers") {
             if (!forceRefresh) {
-                val cachedTrackers = cacheMutex.withLock { trackersCache }
-                if (cachedTrackers != null) {
-                    return@run cachedTrackers as Any
-                }
+                catalog.cachedTrackers()?.let { return@run it as Any }
             }
             val incoming = executeApiCall { api -> api.getTrackers().execute() }.toDomainModels()
             // GEOMETRY-PRESERVATION: the trackers list endpoint returns metadata only
@@ -78,21 +66,18 @@ class ApiTrackerManagementRepository(
             // snapshot onto the existing tracker (when present) so geometry fields survive
             // the bulk refresh untouched.
             val merged = cacheMutex.withLock {
-                val existingById = (trackersCache ?: stateStore.trackers.value).associateBy { it.id }
+                val existingById = (catalog.cachedTrackers() ?: catalog.trackers.value).associateBy { it.id }
                 incoming.map { TrackerGeometryMergePolicy.merged(existing = existingById[it.id], incoming = it) }
             }
-            val canonical = stateStore.canonicalizeTrackers(merged)
-            cacheMutex.withLock {
-                trackersCache = canonical
-            }
-            stateStore.publishTrackers(canonical)
+            val canonical = catalog.canonicalizeTrackers(merged)
+            catalog.replaceTrackers(canonical)
             canonical as Any
         } as List<Tracker>
     }
 
     override suspend fun loadAvailableToAdd(forceRefresh: Boolean): AvailableToAddResponse {
         if (!forceRefresh) {
-            val cachedAvailable = cacheMutex.withLock { availableToAddCache }
+            val cachedAvailable = catalog.state.value.availableToAdd
             if (cachedAvailable != null) {
                 return cachedAvailable
             }
@@ -100,13 +85,13 @@ class ApiTrackerManagementRepository(
         @Suppress("UNCHECKED_CAST")
         return readRequestGate.run("available-to-add") {
             if (!forceRefresh) {
-                val cachedAvailable = cacheMutex.withLock { availableToAddCache }
+                val cachedAvailable = catalog.state.value.availableToAdd
                 if (cachedAvailable != null) {
                     return@run cachedAvailable as Any
                 }
             }
             val response = executeApiCall { api -> api.getAvailableToAdd().execute() }
-            cacheMutex.withLock { availableToAddCache = response }
+            catalog.setAvailableToAdd(response)
             response as Any
         } as AvailableToAddResponse
     }
@@ -117,18 +102,9 @@ class ApiTrackerManagementRepository(
             GeoVaultCaptureLog.d(TAG, "Loading tracker details trackerId=$trackerId")
             try {
                 val tracker = executeApiCall { api -> api.getTracker(trackerId).execute() }.toDomainModel()
-                cacheMutex.withLock {
-                    trackersCache = trackersCache
-                        ?.filterNot { it.id == trackerId }
-                        .orEmpty()
-                        .plus(tracker)
-                        .distinctBy { it.id }
-                        .let(stateStore::canonicalizeTrackers)
-                }
-                stateStore.publishTracker(tracker)
                 GeoVaultCaptureLog.d(
                     TAG,
-                    "Loaded tracker details trackerId=$trackerId recentDataWindow=${tracker.settings?.get("recent_data_window")} hidden=${tracker.settings?.get("hidden")}"
+                    "Loaded tracker details trackerId=$trackerId recentDataWindow=${tracker.catalogSettings.recentDataWindow} hidden=${tracker.catalogSettings.hidden}"
                 )
                 tracker as Any
             } catch (e: GeoVaultApiFailure) {
@@ -143,18 +119,11 @@ class ApiTrackerManagementRepository(
         return readRequestGate.run("tracker-geometry:$trackerId") {
             val incoming = executeApiCall { api -> api.getTrackerGeometry(trackerId).execute() }.toDomainModel()
             val merged = cacheMutex.withLock {
-                val existing = trackersCache?.firstOrNull { it.id == incoming.id }
-                    ?: stateStore.trackers.value.firstOrNull { it.id == incoming.id }
+                val existing = catalog.tracker(incoming.id)
                 val mergedTracker = TrackerGeometryMergePolicy.merged(existing = existing, incoming = incoming)
-                trackersCache = trackersCache
-                    ?.filterNot { it.id == mergedTracker.id }
-                    .orEmpty()
-                    .plus(mergedTracker)
-                    .distinctBy { it.id }
-                    .let(stateStore::canonicalizeTrackers)
+                catalog.upsertTracker(mergedTracker)
                 mergedTracker
             }
-            stateStore.publishTracker(merged)
             GeoVaultCaptureLog.i(
                 TAG,
                 "map_update geometry_status tracker=${merged.id} status=${merged.geometry_status} " +
@@ -183,25 +152,16 @@ class ApiTrackerManagementRepository(
                 api -> api.getTrackersGeometry(TrackerBulkGeometryRequest(tracker_ids = normalizedIds)).execute()
             }.toDomainModels()
             val mergedTrackers = cacheMutex.withLock {
-                val existingById = trackersCache
-                    ?.associateBy { it.id }
-                    .orEmpty() +
-                    stateStore.trackers.value.associateBy { it.id }
+                val existingById = (catalog.cachedTrackers() ?: catalog.trackers.value).associateBy { it.id }
                 val mergedById = incomingTrackers.associate { incoming ->
                     incoming.id to TrackerGeometryMergePolicy.merged(
                         existing = existingById[incoming.id],
                         incoming = incoming
                     )
                 }
-                trackersCache = trackersCache
-                    ?.filterNot { it.id in mergedById.keys }
-                    .orEmpty()
-                    .plus(mergedById.values)
-                    .distinctBy { it.id }
-                    .let(stateStore::canonicalizeTrackers)
+                mergedById.values.forEach { catalog.upsertTracker(it) }
                 mergedById.values.toList()
             }
-            mergedTrackers.forEach { tracker -> stateStore.publishTracker(tracker) }
             mergedTrackers.forEach { tracker ->
                 GeoVaultCaptureLog.i(
                     TAG,
@@ -216,35 +176,29 @@ class ApiTrackerManagementRepository(
     override suspend fun createTracker(request: TrackerCreateRequest): Tracker {
         val tracker = executeApiCall { api -> api.createTracker(request).execute() }.toDomainModel()
         cacheMutex.withLock {
-            trackersCache = trackersCache.orEmpty().plus(tracker).let(stateStore::canonicalizeTrackers)
-            availableToAddCache = null
+            catalog.upsertTracker(tracker)
+            catalog.setAvailableToAdd(null)
         }
-        stateStore.publishTracker(tracker)
         return tracker
     }
 
     override suspend fun updateTrackerSettings(
         trackerId: String,
         request: TrackerSettingsRequest,
-        publishToStore: Boolean
     ): Tracker {
         GeoVaultCaptureLog.d(TAG, "Updating tracker settings trackerId=$trackerId request=$request")
         try {
             val incoming = executeApiCall { api -> api.postTrackerSettings(trackerId, request).execute() }.toDomainModel()
             val tracker = cacheMutex.withLock {
-                val existing = trackersCache?.firstOrNull { it.id == trackerId }
-                    ?: stateStore.trackers.value.firstOrNull { it.id == trackerId }
+                val existing = catalog.tracker(trackerId)
                 val merged = TrackerGeometryMergePolicy.merged(existing = existing, incoming = incoming)
-                trackersCache = trackersCache
-                    ?.map { if (it.id == trackerId) merged else it }
-                    ?.let(stateStore::canonicalizeTrackers)
-                availableToAddCache = null
+                catalog.upsertTracker(merged)
+                catalog.setAvailableToAdd(null)
                 merged
             }
-            stateStore.publishTracker(tracker, emitEvent = publishToStore)
             GeoVaultCaptureLog.d(
                 TAG,
-                "Updated tracker settings trackerId=$trackerId persistedRecentDataWindow=${tracker.settings?.get("recent_data_window")} persistedHidden=${tracker.settings?.get("hidden")}"
+                "Updated tracker settings trackerId=$trackerId persistedRecentDataWindow=${tracker.catalogSettings.recentDataWindow} persistedHidden=${tracker.catalogSettings.hidden}"
             )
             return tracker
         } catch (e: GeoVaultApiFailure) {
@@ -256,51 +210,53 @@ class ApiTrackerManagementRepository(
     override suspend fun deleteTracker(trackerId: String) {
         executeNoBodyCall { api -> api.deleteTracker(trackerId).execute() }
         cacheMutex.withLock {
-            trackersCache = trackersCache?.filterNot { it.id == trackerId }
-            availableToAddCache = null
+            catalog.removeTracker(trackerId)
+            catalog.setAvailableToAdd(null)
         }
-        stateStore.deleteTracker(trackerId)
     }
 
     override suspend fun clearTrackerHistory(trackerId: String) {
         executeNoBodyCall { api -> api.clearTrackerHistory(trackerId).execute() }
         cacheMutex.withLock {
-            trackersCache = null
-            availableToAddCache = null
+            val existing = catalog.tracker(trackerId)
+            if (existing != null) {
+                catalog.upsertTracker(
+                    existing.copy(
+                        geometry = null,
+                        point_params = emptyList(),
+                        last_point = null,
+                        bbox = null,
+                        geometry_status = null,
+                    ),
+                )
+            }
+            catalog.setAvailableToAdd(null)
         }
-        stateStore.publishHistoryCleared(trackerId)
+        catalog.publishHistoryCleared(trackerId)
     }
 
     override suspend fun leaveShareWithMe(trackerId: String) {
         executeNoBodyCall { api -> api.leaveShareWithMe(trackerId).execute() }
         cacheMutex.withLock {
-            trackersCache = trackersCache?.filterNot { it.id == trackerId }
-            availableToAddCache = null
+            catalog.removeTracker(trackerId)
+            catalog.setAvailableToAdd(null)
         }
-        stateStore.deleteTracker(trackerId)
     }
 
     override suspend fun unsubscribeTracker(trackerId: String) {
         executeNoBodyCall { api -> api.unsubscribeTracker(trackerId).execute() }
         cacheMutex.withLock {
-            trackersCache = trackersCache?.filterNot { it.id == trackerId }
-            availableToAddCache = null
+            catalog.removeTracker(trackerId)
+            catalog.setAvailableToAdd(null)
         }
-        stateStore.deleteTracker(trackerId)
     }
 
     override suspend fun subscribeTracker(trackerId: String): Tracker {
         val tracker = executeApiCall { api -> api.subscribeTracker(trackerId).execute() }.toDomainModel()
         cacheMutex.withLock {
-            trackersCache = trackersCache
-                ?.filterNot { it.id == trackerId }
-                .orEmpty()
-                .plus(tracker)
-                .distinctBy { it.id }
-                .let(stateStore::canonicalizeTrackers)
-            availableToAddCache = null
+            catalog.upsertTracker(tracker)
+            catalog.setAvailableToAdd(null)
         }
-        stateStore.publishTracker(tracker)
         return tracker
     }
 
@@ -309,21 +265,13 @@ class ApiTrackerManagementRepository(
     }
 
     override fun clearSelectedTrackerCaches() {
-        trackersCache = null
-        groupsCache = null
-        availableToAddCache = null
-        mapVisibilityCache = null
         apiCache.clear()
         readRequestGate.clear()
-        stateStore.clearAll()
-        TrackerAppServices.from(appContext.applicationContext as Application)
-            .trackerHistoryRepository()
-            .reset()
+        catalog.clearAll()
     }
 
     override fun getTrackerFromCache(trackerId: String): Tracker? {
-        return cacheMutex.withLock { trackersCache?.firstOrNull { it.id == trackerId } }
-            ?: stateStore.trackers.value.firstOrNull { it.id == trackerId }
+        return catalog.tracker(trackerId)
     }
 
     override suspend fun fetchTrackerKml(trackerId: String): ByteArray {
@@ -342,34 +290,22 @@ class ApiTrackerManagementRepository(
 
     override suspend fun loadMapVisibility(forceRefresh: Boolean): MapVisibilityResponse {
         if (!forceRefresh) {
-            val cachedMapVisibility = cacheMutex.withLock { mapVisibilityCache }
-            if (cachedMapVisibility != null) {
-                return cachedMapVisibility
-            }
+            catalog.cachedMapVisibility()?.let { return it }
         }
         @Suppress("UNCHECKED_CAST")
         return readRequestGate.run("map-visibility") {
             if (!forceRefresh) {
-                val cachedMapVisibility = cacheMutex.withLock { mapVisibilityCache }
-                if (cachedMapVisibility != null) {
-                    return@run cachedMapVisibility as Any
-                }
+                catalog.cachedMapVisibility()?.let { return@run it as Any }
             }
             val response = executeApiCall { api -> api.getMapVisibility().execute() }
-            cacheMutex.withLock {
-                mapVisibilityCache = response
-            }
-            stateStore.publishMapVisibility(response)
+            catalog.replaceMapVisibility(response)
             response as Any
         } as MapVisibilityResponse
     }
 
     override suspend fun patchMapVisibility(request: MapVisibilityRequest): MapVisibilityResponse {
         val response = executeApiCall { api -> api.patchMapVisibility(request).execute() }
-        cacheMutex.withLock {
-            mapVisibilityCache = response
-        }
-        stateStore.publishMapVisibility(response)
+        catalog.replaceMapVisibility(response)
         return response
     }
 
@@ -381,90 +317,61 @@ class ApiTrackerManagementRepository(
 
     override suspend fun loadGroups(forceRefresh: Boolean): List<Group> {
         if (!forceRefresh) {
-            val cachedGroups = cacheMutex.withLock { groupsCache }
-            if (cachedGroups != null) {
-                return cachedGroups
-            }
+            catalog.cachedGroups()?.let { return it }
         }
         @Suppress("UNCHECKED_CAST")
         return readRequestGate.run("groups") {
             if (!forceRefresh) {
-                val cachedGroups = cacheMutex.withLock { groupsCache }
-                if (cachedGroups != null) {
-                    return@run cachedGroups as Any
-                }
+                catalog.cachedGroups()?.let { return@run it as Any }
             }
             val sortedGroups = executeApiCall { api -> api.getGroups().execute() }
                 .sortedWith(NaturalSort.byName(Locale.getDefault()) { it.name })
-            cacheMutex.withLock {
-                groupsCache = sortedGroups
-            }
-            stateStore.publishGroups(sortedGroups)
+            catalog.replaceGroups(sortedGroups)
             sortedGroups as Any
         } as List<Group>
     }
 
     override suspend fun loadGroup(groupId: String): Group {
         val group = executeApiCall { api -> api.getGroup(groupId).execute() }
-        cacheMutex.withLock {
-            groupsCache = groupsCache
-                ?.filterNot { it.id == groupId }
-                .orEmpty()
-                .plus(group)
-                .distinctBy { it.id }
-                .sortedWith(NaturalSort.byName(Locale.getDefault()) { it.name })
-        }
-        stateStore.publishGroup(group)
+        catalog.upsertGroup(group)
         return group
     }
 
     override suspend fun createGroup(name: String): Group {
         val group = executeApiCall { api -> api.createGroup(GroupCreateRequest(name)).execute() }
         cacheMutex.withLock {
-            groupsCache = groupsCache
-                .orEmpty()
-                .plus(group)
-                .sortedWith(NaturalSort.byName(Locale.getDefault()) { it.name })
-            availableToAddCache = null
+            catalog.upsertGroup(group)
+            catalog.setAvailableToAdd(null)
         }
-        stateStore.publishGroup(group)
         return group
     }
 
     override suspend fun patchGroup(
         groupId: String,
         request: GroupPatchRequest,
-        publishToStore: Boolean
     ): Group {
         val group = executeApiCall { api -> api.patchGroup(groupId, request).execute() }
         cacheMutex.withLock {
-            groupsCache = groupsCache
-                ?.map { if (it.id == groupId) group else it }
-                ?.sortedWith(NaturalSort.byName(Locale.getDefault()) { it.name })
-            availableToAddCache = null
+            catalog.upsertGroup(group)
+            catalog.setAvailableToAdd(null)
         }
-        stateStore.publishGroup(group, emitEvent = publishToStore)
         return group
     }
 
     override suspend fun deleteGroup(groupId: String) {
         executeNoBodyCall { api -> api.deleteGroup(groupId).execute() }
         cacheMutex.withLock {
-            groupsCache = groupsCache?.filterNot { it.id == groupId }
-            availableToAddCache = null
+            catalog.removeGroup(groupId)
+            catalog.setAvailableToAdd(null)
         }
-        stateStore.deleteGroup(groupId)
     }
 
     override suspend fun addGroupTrack(groupId: String, trackId: String): Group {
         val group = executeApiCall { api -> api.addGroupTrack(groupId, GroupAddTrackRequest(trackId)).execute() }
         cacheMutex.withLock {
-            groupsCache = groupsCache
-                ?.map { if (it.id == groupId) group else it }
-                ?.sortedWith(NaturalSort.byName(Locale.getDefault()) { it.name })
-            availableToAddCache = null
+            catalog.upsertGroup(group)
+            catalog.setAvailableToAdd(null)
         }
-        stateStore.publishGroup(group)
         return group
     }
 
@@ -476,23 +383,17 @@ class ApiTrackerManagementRepository(
     override suspend fun leaveGroup(groupId: String) {
         executeNoBodyCall { api -> api.leaveGroup(groupId).execute() }
         cacheMutex.withLock {
-            groupsCache = groupsCache?.filterNot { it.id == groupId }
-            availableToAddCache = null
+            catalog.removeGroup(groupId)
+            catalog.setAvailableToAdd(null)
         }
-        stateStore.deleteGroup(groupId)
     }
 
     override suspend fun acceptGroupShare(groupId: String): Group {
         val group = executeApiCall { api -> api.acceptGroupShare(groupId).execute() }
         cacheMutex.withLock {
-            groupsCache = groupsCache
-                .orEmpty()
-                .filterNot { it.id == groupId }
-                .plus(group)
-                .sortedWith(NaturalSort.byName(Locale.getDefault()) { it.name })
-            availableToAddCache = null
+            catalog.upsertGroup(group)
+            catalog.setAvailableToAdd(null)
         }
-        stateStore.publishGroup(group)
         return group
     }
 

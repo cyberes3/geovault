@@ -1,5 +1,6 @@
 package com.geovault.tracker.policy
 
+import com.geovault.tracker.domain.TrackPoint
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -8,14 +9,14 @@ class TrackerParamsPointAcceptancePolicyTest {
 
     @Test
     fun trackingLocalTracker_acceptsLocalOnly() {
-        val local = TrackPointEvent(
-            source = TrackPointSource.LOCAL_GPS,
-            trackId = "t1",
-            lon = 1.0,
-            lat = 2.0,
-            timestampMs = 1_000L,
+        val local = TrackPoint(
+            provenance = TrackPointSource.LOCAL_GPS,
+            trackerId = "t1",
+            longitude = 1.0,
+            latitude = 2.0,
+            timeMs = 1_000L,
         )
-        val remote = local.copy(source = TrackPointSource.REMOTE_STREAM)
+        val remote = local.copy(provenance = TrackPointSource.REMOTE_STREAM)
         assertTrue(
             TrackerParamsPointAcceptancePolicy.shouldAcceptForParams(
                 event = local,
@@ -36,14 +37,14 @@ class TrackerParamsPointAcceptancePolicyTest {
 
     @Test
     fun nonTracking_acceptsRemoteOnly() {
-        val local = TrackPointEvent(
-            source = TrackPointSource.LOCAL_GPS,
-            trackId = "t2",
-            lon = 1.0,
-            lat = 2.0,
-            timestampMs = 1_000L,
+        val local = TrackPoint(
+            provenance = TrackPointSource.LOCAL_GPS,
+            trackerId = "t2",
+            longitude = 1.0,
+            latitude = 2.0,
+            timeMs = 1_000L,
         )
-        val remote = local.copy(source = TrackPointSource.REMOTE_STREAM)
+        val remote = local.copy(provenance = TrackPointSource.REMOTE_STREAM)
         assertFalse(
             TrackerParamsPointAcceptancePolicy.shouldAcceptForParams(
                 event = local,
@@ -64,12 +65,12 @@ class TrackerParamsPointAcceptancePolicyTest {
 
     @Test
     fun wrongTracker_rejected() {
-        val event = TrackPointEvent(
-            source = TrackPointSource.REMOTE_STREAM,
-            trackId = "other",
-            lon = 1.0,
-            lat = 2.0,
-            timestampMs = 1L,
+        val event = TrackPoint(
+            provenance = TrackPointSource.REMOTE_STREAM,
+            trackerId = "other",
+            longitude = 1.0,
+            latitude = 2.0,
+            timeMs = 1L,
         )
         assertFalse(
             TrackerParamsPointAcceptancePolicy.shouldAcceptForParams(

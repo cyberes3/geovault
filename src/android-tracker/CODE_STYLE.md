@@ -48,9 +48,20 @@ This document defines how we write code and evolve the tracker app going forward
 ## Dependency Injection
 
 - New collaborators should be constructor-injected first.
-- Use Hilt modules for bindings/provides, not ad-hoc singleton access.
+- Use `TrackerAppServices` as the composition root (same pattern as Places/Uploader). Do not introduce Hilt.
 - Keep DI graph explicit and stable.
 - Avoid default constructor fallbacks that hide missing bindings.
+
+## Vocabulary
+
+- **Rule** — Pure function, no `Context`, no mutation
+- **Reducer** — `(state, event) → state`
+- **Session** — Mutable lifecycle owner for one run
+- **Port** — Android/platform edge
+- **Store** — Sole writer of a `StateFlow`
+- **Engine** — Named cluster of related Rules (map/motion/admission/stream)
+
+Stop creating new `*Policy` / `*Coordinator` / `*Facade` / `*Helper` / `*Orchestrator` types. Allowed leftovers: `MotionOrchestrator`, `TrackerMapRuntime`.
 
 ## Repository And Data Access
 
@@ -79,7 +90,7 @@ This document defines how we write code and evolve the tracker app going forward
 - Do not reintroduce callback pyramids for screen orchestration. Use suspend APIs and lifecycle scopes.
 - Do not put repository/network/data policy logic inside fragments or activities.
 - Do not use `runOnUiThread` handoffs to glue nested async callbacks for core flows.
-- Do not instantiate critical collaborators ad hoc when they should come from Hilt.
+- Do not instantiate critical collaborators ad hoc when they should come from `TrackerAppServices`.
 - Do not add hidden mutable global state for runtime/service coordination.
 - Do not create service start/stop paths with ambiguous behavior under rapid toggles.
 - Do not bypass typed error/result handling with silent null/boolean-only failure paths.

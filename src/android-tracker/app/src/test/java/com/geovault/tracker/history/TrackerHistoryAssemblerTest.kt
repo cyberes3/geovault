@@ -31,7 +31,7 @@ class TrackerHistoryAssemblerTest {
             )
         )
 
-        assertTrue(result.committed)
+        assertTrue(result is TrackerHistoryTransactionResult.Composed)
         assertFalse(result.snapshot.complete)
         assertEquals(listOf(10_000L, 20_000L, 30_000L), result.snapshot.points.map { it.timestampMs })
         assertEquals(listOf(30_000L), result.snapshot.overlay.map { it.timestampMs })
@@ -61,7 +61,7 @@ class TrackerHistoryAssemblerTest {
             )
         )
 
-        assertTrue(result.committed)
+        assertTrue(result is TrackerHistoryTransactionResult.Composed)
         assertEquals(listOf(60_000L), result.snapshot.points.map { it.timestampMs })
     }
 
@@ -131,8 +131,7 @@ class TrackerHistoryAssemblerTest {
             ),
         )
 
-        assertTrue(result.committed)
-        assertEquals("composed", result.reason)
+        assertTrue(result is TrackerHistoryTransactionResult.Composed)
         assertEquals(listOf(60_000L), result.snapshot.points.map { it.timestampMs })
         assertTrue(result.snapshot.trunk.isEmpty())
         assertEquals(listOf(60_000L), result.snapshot.overlay.map { it.timestampMs })
@@ -167,7 +166,7 @@ class TrackerHistoryAssemblerTest {
             ),
         )
 
-        assertTrue(result.committed)
+        assertTrue(result is TrackerHistoryTransactionResult.Composed)
         assertEquals(listOf(50L, 60L, 70L, 80L), result.snapshot.points.map { it.timestampMs })
     }
 
@@ -194,8 +193,7 @@ class TrackerHistoryAssemblerTest {
             ),
         )
 
-        assertEquals(false, result.committed)
-        assertEquals("empty_snapshot_deferred", result.reason)
+        assertTrue(result is TrackerHistoryTransactionResult.DeferredEmpty)
         assertEquals(previous.points.size, result.snapshot.points.size)
     }
 
@@ -223,8 +221,7 @@ class TrackerHistoryAssemblerTest {
             ),
         )
 
-        assertTrue(result.committed)
-        assertEquals("forced_empty_commit", result.reason)
+        assertTrue(result is TrackerHistoryTransactionResult.ForcedEmpty)
         assertTrue(result.snapshot.points.isEmpty())
     }
 
@@ -258,7 +255,7 @@ class TrackerHistoryAssemblerTest {
             ),
         )
 
-        assertTrue(result.committed)
+        assertTrue(result is TrackerHistoryTransactionResult.Composed)
         assertTrue(result.snapshot.renderWindowFilterSkipped)
         assertEquals(2, result.snapshot.points.size)
     }

@@ -13,8 +13,8 @@ import com.geovault.tracker.positioning.config.GpsRuntimeState
 import com.geovault.tracker.positioning.config.PositioningDensity
 import com.geovault.tracker.positioning.config.PositioningPresetValues
 import com.geovault.tracker.positioning.config.PositioningPresets
-import com.geovault.tracker.services.LocationIngestResult
-import com.geovault.tracker.services.TrackingMotionMode
+import com.geovault.tracker.positioning.ingest.LocationIngestResult
+import com.geovault.tracker.positioning.TrackingMotionMode
 import com.geovault.tracker.settings.TrackerSettings
 import com.geovault.tracker.tracking.TrackingServiceConstants
 import kotlinx.coroutines.cancel
@@ -103,7 +103,7 @@ internal class PositioningContextBuilder(private val rt: PositioningRuntime) {
     }
 
     fun resolvePointEmissionTrouble(
-        result: com.geovault.tracker.services.LocationIngestResult,
+        result: com.geovault.tracker.positioning.ingest.LocationIngestResult,
         nowMs: Long,
         motionMode: TrackingMotionMode,
         effectiveAccuracyThresholdMeters: Float,
@@ -135,7 +135,7 @@ internal class PositioningContextBuilder(private val rt: PositioningRuntime) {
 
     fun maybeLogFreshnessProbeDecision(
         decision: FreshnessRecoveryDecision,
-        result: com.geovault.tracker.services.LocationIngestResult,
+        result: com.geovault.tracker.positioning.ingest.LocationIngestResult,
         nowMs: Long,
         motionMode: TrackingMotionMode,
     ) {

@@ -5,6 +5,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+import com.geovault.tracker.map.MapTrailEngine
 class TrackerMapTrailDecimationPolicyTest {
 
     private fun point(
@@ -31,13 +32,13 @@ class TrackerMapTrailDecimationPolicyTest {
 
     @Test
     fun emptyInputReturnsEmpty() {
-        assertEquals(emptyList<QueuedLocation>(), TrackerMapTrailDecimationPolicy.fitToCount(emptyList(), 10))
+        assertEquals(emptyList<QueuedLocation>(), MapTrailEngine.fitToCount(emptyList(), 10))
     }
 
     @Test
     fun targetZeroReturnsEmpty() {
         val pts = (1..3L).map { point(it, startTimestampMs = 100L) }
-        assertEquals(emptyList<QueuedLocation>(), TrackerMapTrailDecimationPolicy.fitToCount(pts, 0))
+        assertEquals(emptyList<QueuedLocation>(), MapTrailEngine.fitToCount(pts, 0))
     }
 
     @Test
@@ -46,13 +47,13 @@ class TrackerMapTrailDecimationPolicyTest {
             point(1, startTimestampMs = 100L),
             point(2, startTimestampMs = 100L),
         )
-        assertEquals(pts, TrackerMapTrailDecimationPolicy.fitToCount(pts, 4000))
+        assertEquals(pts, MapTrailEngine.fitToCount(pts, 4000))
     }
 
     @Test
     fun singleSessionOverTargetUsesTakeLast() {
         val pts = (1..10L).map { point(it, startTimestampMs = 100L) }
-        val out = TrackerMapTrailDecimationPolicy.fitToCount(pts, 5)
+        val out = MapTrailEngine.fitToCount(pts, 5)
         assertEquals(5, out.size)
         // Single-session fast path mirrors `takeLast` to avoid surprise re-decimation.
         assertEquals(pts.takeLast(5), out)
@@ -63,7 +64,7 @@ class TrackerMapTrailDecimationPolicyTest {
         // Session A: 6 points, Session B: 6 points. Cap at 6 total -> both sessions keep 3 each.
         val a = (1..6L).map { point(it, startTimestampMs = 100L) }
         val b = (10..15L).map { point(it, startTimestampMs = 1000L) }
-        val out = TrackerMapTrailDecimationPolicy.fitToCount(a + b, 6)
+        val out = MapTrailEngine.fitToCount(a + b, 6)
         assertTrue("size should be <= target, got ${out.size}", out.size <= 6)
         assertTrue("keeps A first", out.contains(a.first()))
         assertTrue("keeps A last", out.contains(a.last()))
@@ -75,7 +76,7 @@ class TrackerMapTrailDecimationPolicyTest {
     fun twoSessions_overTarget_resultIsAtMostTarget() {
         val a = (1..50L).map { point(it, startTimestampMs = 100L) }
         val b = (60..70L).map { point(it, startTimestampMs = 1000L) }
-        val out = TrackerMapTrailDecimationPolicy.fitToCount(a + b, 8)
+        val out = MapTrailEngine.fitToCount(a + b, 8)
         assertTrue("size should be <= target, got ${out.size}", out.size <= 8)
         assertTrue("keeps A first", out.contains(a.first()))
         assertTrue("keeps A last", out.contains(a.last()))
@@ -90,7 +91,7 @@ class TrackerMapTrailDecimationPolicyTest {
         // but the small session always retains both anchors.
         val big = (1..100L).map { point(it, startTimestampMs = 100L) }
         val small = (200..204L).map { point(it, startTimestampMs = 1000L) }
-        val out = TrackerMapTrailDecimationPolicy.fitToCount(big + small, 50)
+        val out = MapTrailEngine.fitToCount(big + small, 50)
         val fromBig = out.count { it.startTimestampMs == 100L }
         val fromSmall = out.count { it.startTimestampMs == 1000L }
         assertTrue("size <= 50 (got ${out.size})", out.size <= 50)
@@ -105,7 +106,7 @@ class TrackerMapTrailDecimationPolicyTest {
         // ascending here) — downstream renderers rely on this.
         val a = (1..40L).map { point(it, startTimestampMs = 100L) }
         val b = (60..90L).map { point(it, startTimestampMs = 1000L) }
-        val out = TrackerMapTrailDecimationPolicy.fitToCount(a + b, 30)
+        val out = MapTrailEngine.fitToCount(a + b, 30)
         val times = out.map { it.time }
         assertEquals(times.sorted(), times)
     }

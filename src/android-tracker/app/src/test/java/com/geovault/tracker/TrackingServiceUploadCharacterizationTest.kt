@@ -1,9 +1,9 @@
 package com.geovault.tracker
 
 import com.geovault.tracker.location.SyncFailureClass
-import com.geovault.tracker.services.QueueUploadResult
-import com.geovault.tracker.services.QueueUploadSkipReason
-import com.geovault.tracker.services.UploadLivenessState
+import com.geovault.tracker.positioning.QueueUploadResult
+import com.geovault.tracker.positioning.QueueUploadSkipReason
+import com.geovault.tracker.positioning.UploadLivenessState
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue

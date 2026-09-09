@@ -3,6 +3,7 @@ package com.geovault.tracker.presentation
 import com.geovault.tracker.Group
 import com.geovault.tracker.MapVisibilityResponse
 import com.geovault.tracker.Tracker
+import com.geovault.tracker.TrackerCatalogSettings
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -63,7 +64,7 @@ class HiddenMapItemsPolicyTest {
                 name = "Hidden Owner",
                 color = null,
                 is_owner = true,
-                settings = mapOf("hidden" to true)
+                settings = TrackerCatalogSettings(hidden = true)
             ),
         )
 
@@ -74,5 +75,34 @@ class HiddenMapItemsPolicyTest {
         )
 
         assertEquals(setOf("t1"), visible)
+    }
+
+    @Test
+    fun buildUnhideItemRequest_removesOnlyTargetedId() {
+        val visibility = MapVisibilityResponse(
+            hidden_track_ids = listOf("t1", "t2"),
+            hidden_group_ids = listOf("g1", "g2")
+        )
+
+        val unhideTracker = HiddenMapItemsPolicy.buildUnhideItemRequest(
+            mapVisibility = visibility,
+            item = HiddenMapItem(id = "t1", name = "Tracker", type = HiddenMapItemType.TRACKER)
+        )
+        assertEquals(listOf("t2"), unhideTracker.hidden_track_ids)
+        assertEquals(listOf("g1", "g2"), unhideTracker.hidden_group_ids)
+
+        val unhideGroup = HiddenMapItemsPolicy.buildUnhideItemRequest(
+            mapVisibility = visibility,
+            item = HiddenMapItem(id = "g2", name = "Group", type = HiddenMapItemType.GROUP)
+        )
+        assertEquals(listOf("t1", "t2"), unhideGroup.hidden_track_ids)
+        assertEquals(listOf("g1"), unhideGroup.hidden_group_ids)
+    }
+
+    @Test
+    fun buildUnhideAllRequest_clearsBothLists() {
+        val request = HiddenMapItemsPolicy.buildUnhideAllRequest()
+        assertEquals(true, request.hidden_track_ids.isNullOrEmpty())
+        assertEquals(true, request.hidden_group_ids.isNullOrEmpty())
     }
 }

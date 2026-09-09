@@ -51,4 +51,24 @@ class MapHostNavigationRequestTest {
         assertEquals("g42", resolved.groupId)
         assertEquals(MapHostNavigationFocus.SCROLL_TO_ITEM, resolved.focus)
     }
+
+    @Test
+    fun mapNavigation_listAndParamsAreOneEvent() {
+        val list = MapNavigation.List(MapHostNavigationRequest(target = MapHostNavigationTarget.TRACKERS))
+        val params = MapNavigation.Params(
+            com.geovault.tracker.params.TrackerParamsRouteArgs(
+                trackerId = "t1",
+                seed = com.geovault.tracker.params.TrackerParamsSeed(
+                    displayName = "T1",
+                    lastUpdateMs = null,
+                    latitude = null,
+                    longitude = null,
+                    initialParams = null,
+                    isOwner = true,
+                ),
+            )
+        )
+        assertEquals(MapHostNavigationTarget.TRACKERS, list.request.target)
+        assertEquals("t1", params.args.trackerId)
+    }
 }

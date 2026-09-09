@@ -10,8 +10,8 @@ import com.geovault.tracker.policy.TrackPointQuality
 import com.geovault.tracker.policy.TrackPointRejectReason
 import com.geovault.tracker.positioning.config.GpsRuntimeEvent
 import com.geovault.tracker.positioning.config.GpsRuntimeState
-import com.geovault.tracker.services.FastLockTriggerInput
-import com.geovault.tracker.services.TrackingRuntimeOrchestrator
+import com.geovault.tracker.positioning.FastLockTriggerInput
+import com.geovault.tracker.positioning.LocationUpdateGate
 import com.geovault.tracker.tracking.TrackingServiceConstants
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
@@ -28,7 +28,7 @@ internal class FastGpsLockSubsystem(private val rt: PositioningRuntime) {
         }
         val accuracyFilterMeters = rt.contextBuilder.currentPositioningRuntimeContext().effectiveAccuracyThresholdMeters
         if (
-            !TrackingRuntimeOrchestrator.shouldAttemptFastLock(
+            !LocationUpdateGate.shouldAttemptFastLock(
                 FastLockTriggerInput(
                     isTracking = rt.state.isTracking,
                     isFastGpsLockWindowActive = rt.state.isFastGpsLockWindowActive,

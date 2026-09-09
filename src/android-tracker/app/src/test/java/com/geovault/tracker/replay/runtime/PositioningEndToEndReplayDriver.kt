@@ -1,12 +1,12 @@
 package com.geovault.tracker.replay.runtime
 
-import com.geovault.tracker.SelectedTrackerPrefs
+import com.geovault.tracker.data.CatalogSelectionController
 import com.geovault.tracker.policy.TrackPointCrossSourceState
 import com.geovault.tracker.policy.TrackPointPolicyEngine
 import com.geovault.tracker.positioning.PositioningAndroidPorts
 import com.geovault.tracker.positioning.PositioningRuntime
 import com.geovault.tracker.runtime.RuntimeTelemetryStore
-import com.geovault.tracker.services.TrackingMotionMode
+import com.geovault.tracker.positioning.TrackingMotionMode
 import com.geovault.tracker.tracking.TrackingService
 import kotlinx.coroutines.runBlocking
 import org.robolectric.Robolectric
@@ -34,7 +34,7 @@ internal class PositioningEndToEndReplayDriver(
         val service = Robolectric.buildService(TrackingService::class.java).get()
         val appContext = service.applicationContext
         RuntimeTelemetryStore.deleteStore(appContext)
-        SelectedTrackerPrefs.setSelectedTracker(
+        CatalogSelectionController.persistSelection(
             context = appContext,
             trackerId = session.trackId,
             trackerName = "Replay Tracker",

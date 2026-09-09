@@ -3,7 +3,7 @@ package com.geovault.tracker.positioning
 import android.location.Location
 import com.geovault.tracker.location.SyncFailureClass
 import com.geovault.tracker.positioning.config.GpsRuntimeState
-import com.geovault.tracker.services.UploadLivenessState
+import com.geovault.tracker.positioning.UploadLivenessState
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -76,7 +76,7 @@ class PositioningSessionStateResetTest {
                 accuracyMeters = 5f,
                 radiusMeters = 10f,
                 source = "test",
-                motionMode = com.geovault.tracker.services.TrackingMotionMode.WALKING,
+                motionMode = com.geovault.tracker.positioning.TrackingMotionMode.WALKING,
             )
             isFastGpsLockWindowActive = true
             lowAccuracyFallbackEmitCountThisSession = 2

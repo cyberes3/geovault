@@ -1,13 +1,11 @@
 package com.geovault.tracker.streaming
 
+import com.geovault.tracker.location.StreamingFailureClass
 import java.util.concurrent.TimeUnit
 
 /**
- * Single source of truth for every streaming-domain timeout/TTL/backoff constant. Values are
- * tracker-domain-specific (not extracted to android-common) but were previously scattered as
- * magic numbers across [LiveTrackStreamingService], [LiveStreamSubscriptionRepository], and the
- * remote-point admission policies. Centralizing them here means every threshold that shapes
- * "does streaming look broken" behavior is documented and testable in one place.
+ * Single source of truth for streaming-domain timeout/TTL/backoff constants. Values stay in the
+ * tracker app (Survey and NGS do not share this socket).
  */
 object StreamingConfig {
     /** OkHttp read timeout for the live-track websocket; also the outer bound OkHttp itself would use to notice a truly dead socket. */
@@ -85,31 +83,55 @@ object StreamingConfig {
 
     /**
      * Delay before [com.geovault.common.coroutines.launchSupervisedCollector] restarts one of
-     * [com.geovault.tracker.map.MapStreamingSubsystem]'s always-on collectors after it throws.
+     * [com.geovault.tracker.map.MapSessionEngine]'s always-on collectors after it throws.
      * Short enough that a transient one-off exception doesn't leave the map visibly stalled, but
      * long enough that a collector which fails immediately on every restart (a real, persistent
      * bug) doesn't spin-loop.
      */
+    fun nextReconnectDelayMs(
+        reconnectAttempt: Int,
+        failureClass: StreamingFailureClass,
+        jitterFraction: Double = 0.0,
+        jitterRandom: () -> Double = Math::random,
+    ): Long {
+        val baseDelayMs = when (failureClass) {
+            StreamingFailureClass.TRANSIENT -> {
+                val clamped = reconnectAttempt.coerceIn(1, 8)
+                (transientRetryBaseDelayMs * (1L shl (clamped - 1))).coerceAtMost(transientRetryMaxDelayMs)
+            }
+            StreamingFailureClass.AUTH -> authRetryDelayMs
+            StreamingFailureClass.PERMANENT -> return Long.MAX_VALUE
+        }
+        if (jitterFraction <= 0.0) return baseDelayMs
+        val multiplier = 1.0 + (jitterRandom() * 2.0 - 1.0) * jitterFraction
+        return (baseDelayMs * multiplier).toLong().coerceAtLeast(0L)
+    }
+
+    fun classifyAuthFailure(reconnectAttempt: Int): StreamingFailureClass {
+        return if (reconnectAttempt >= maxAuthRetryAttempts) {
+            StreamingFailureClass.PERMANENT
+        } else {
+            StreamingFailureClass.AUTH
+        }
+    }
+
     val collectorRestartDelayMs: Long = TimeUnit.SECONDS.toMillis(2)
 
-    /** How often [com.geovault.tracker.map.MapStreamingSubsystem] logs a streaming heartbeat while a subscription is wanted. */
+    /** How often [com.geovault.tracker.map.MapSessionEngine] logs a streaming heartbeat while a subscription is wanted. */
     val heartbeatIntervalMs: Long = TimeUnit.SECONDS.toMillis(60)
 
     /**
      * How long the streaming connection must be continuously unhealthy (not [ConnectionPhase.RUNNING])
      * while a subscription is wanted, with a usable network present, before
-     * [com.geovault.tracker.presentation.StreamingBatteryOptimizationHintPolicy] suggests the user
-     * check their OEM's battery-optimization settings.
+     * [com.geovault.tracker.map.MapSessionEngine] suggests the user check their OEM's
+     * battery-optimization settings.
      */
     val batteryOptimizationHintUnhealthyThresholdMs: Long = TimeUnit.MINUTES.toMillis(3)
 
     /**
-     * A single geometry reload network fetch (see [com.geovault.tracker.map.MapTrailReloadSubsystem])
-     * taking at least this long is only diagnostically interesting -- worth a breadcrumb -- when it
-     * happens while a recording session is active for the same tracker, since that is exactly the
-     * "stalled local map" failure mode this plan set out to catch. Comfortably below the harder
-     * [com.geovault.tracker.presentation.MapGeometryReloadCircuitBreaker.NETWORK_TIMEOUT_MS] cutoff so
-     * it fires as an early warning rather than only alongside an outright timeout failure.
+     * A single geometry reload network fetch taking at least this long is only diagnostically
+     * interesting -- worth a breadcrumb -- when it happens while a recording session is active
+     * for the same tracker.
      */
     val reloadNetworkSlowDuringRecordingThresholdMs: Long = TimeUnit.SECONDS.toMillis(5)
 }

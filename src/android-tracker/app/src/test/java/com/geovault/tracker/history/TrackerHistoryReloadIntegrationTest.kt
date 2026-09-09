@@ -144,6 +144,15 @@ class TrackerHistoryReloadIntegrationTest {
         )
         assertFalse(batch.complete)
         assertTrue(batch.degradedLocalOnly)
+        val repository = TrackerHistoryRepository()
+        TrackerHistoryIntentDispatcher(repository).dispatch(
+            TrackerHistoryIntent.CommitTrunk(
+                batch = batch,
+                activeSessionStartMs = null,
+            ),
+        )
+        assertEquals(null, repository.lastTrunkFetchedAtMs("t1"))
+        assertTrue(repository.snapshotFor(TrackerHistoryKey("t1", TrackerHistoryWindow("all")))!!.degradedLocalOnly)
     }
 
     @Test
@@ -219,7 +228,7 @@ class TrackerHistoryReloadIntegrationTest {
                 activeSessionStartMs = activeSessionStartMs,
             ),
         )
-        assertTrue(clipped.committed)
+        assertTrue(clipped is TrackerHistoryTransactionResult.Composed)
         assertEquals(listOf(1_200L), repository.snapshotFor(TrackerHistoryKey(trackerId, window))!!.points.map { it.timestampMs })
     }
 
@@ -267,8 +276,11 @@ class TrackerHistoryReloadIntegrationTest {
                 activeSessionStartMs = activeSessionStartMs,
             )
         )
-        assertFalse(ignored.committed)
-        assertEquals("stale_trunk_before_active_session", ignored.reason)
+        assertTrue(ignored is TrackerHistoryTransactionResult.RejectedTrunk)
+        assertEquals(
+            "stale_trunk_before_active_session",
+            (ignored as TrackerHistoryTransactionResult.RejectedTrunk).rejectReason,
+        )
         assertTrue(repository.snapshotFor(TrackerHistoryKey(trackerId, window))!!.points.isEmpty())
 
         dispatcher.dispatch(

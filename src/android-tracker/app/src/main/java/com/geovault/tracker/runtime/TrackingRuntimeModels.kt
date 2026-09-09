@@ -16,34 +16,10 @@ enum class RuntimeTrigger {
     PROCESS_RESTART,
     BOOT,
     WATCHDOG_TICK,
-    MAIN_RESUME_AFTER_KILL,
     MAIN_START_ON_LAUNCH,
     RESHOW_FOREGROUND,
     TASK_REMOVED,
     UNKNOWN
-}
-
-enum class RuntimeCommandType {
-    START,
-    STOP,
-    RECOVER,
-    RESHOW_FOREGROUND,
-    HEARTBEAT,
-    TASK_REMOVED
-}
-
-data class RuntimeCommand(
-    val type: RuntimeCommandType,
-    val trigger: RuntimeTrigger,
-    val reason: String
-)
-
-data class WatchdogRecoveryRequest(
-    val restartTrackingIfKilled: Boolean,
-    val wasTrackingBeforeExit: Boolean
-) {
-    val shouldAttemptRecovery: Boolean
-        get() = restartTrackingIfKilled && wasTrackingBeforeExit
 }
 
 enum class RuntimeFailureClass {
@@ -75,13 +51,3 @@ enum class RuntimeActionType {
     RESHOW_FOREGROUND,
     NOOP
 }
-
-data class RuntimeAction(
-    val type: RuntimeActionType,
-    val reason: String
-)
-
-data class RuntimeDecision(
-    val action: RuntimeAction,
-    val nextState: RuntimeState
-)

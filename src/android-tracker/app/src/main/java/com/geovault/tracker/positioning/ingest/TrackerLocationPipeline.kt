@@ -8,15 +8,15 @@ import com.geovault.tracker.location.FreshnessRecoveryInput
 import com.geovault.tracker.location.PositioningRecoveryConfig
 import com.geovault.tracker.location.RecoveryAnchorState
 import com.geovault.tracker.location.RepeatedOutlierSuppressor
-import com.geovault.tracker.policy.TrackPointEvent
+import com.geovault.tracker.domain.TrackPoint
 import com.geovault.tracker.policy.TrackPointPolicyEngine
 import com.geovault.tracker.policy.TrackPointRejectReason
 import com.geovault.tracker.policy.TrackPointSource
 import com.geovault.tracker.policy.filter.FilterReason
 import com.geovault.tracker.policy.filter.LocationFilterConfig
-import com.geovault.tracker.services.LocationIngestCoordinator
-import com.geovault.tracker.services.LocationIngestResult
-import com.geovault.tracker.services.TrackingMotionMode
+import com.geovault.tracker.positioning.ingest.LocationIngestCoordinator
+import com.geovault.tracker.positioning.ingest.LocationIngestResult
+import com.geovault.tracker.positioning.TrackingMotionMode
 import com.geovault.tracker.settings.TrackerSettings
 
 enum class FixIngestMode {
@@ -217,14 +217,14 @@ class TrackerLocationPipeline(
         ).suppress
     }
 
-    private fun buildCurrentPositionSeedEvent(input: TrackerLocationPipelineInput): TrackPointEvent {
+    private fun buildCurrentPositionSeedEvent(input: TrackerLocationPipelineInput): TrackPoint {
         val loc = input.location
-        return TrackPointEvent(
-            source = TrackPointSource.LOCAL_GPS,
-            trackId = input.trackId,
-            lon = loc.longitude,
-            lat = loc.latitude,
-            timestampMs = input.nowMs,
+        return TrackPoint(
+            provenance = TrackPointSource.LOCAL_GPS,
+            trackerId = input.trackId,
+            longitude = loc.longitude,
+            latitude = loc.latitude,
+            timeMs = input.nowMs,
             accuracyMeters = if (loc.hasAccuracy()) loc.accuracy else null,
             elapsedRealtimeNanos = loc.elapsedRealtimeNanos.takeIf { it > 0L }
                 ?: input.nowElapsedRealtimeNanos,

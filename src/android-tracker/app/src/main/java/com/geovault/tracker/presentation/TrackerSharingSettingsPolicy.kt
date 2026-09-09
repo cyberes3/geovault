@@ -85,14 +85,14 @@ object TrackerSharingSettingsPolicy {
         tracker: Tracker,
         name: String = tracker.name,
         color: String? = tracker.color,
-        recentDataWindow: String? = tracker.settingsString("recent_data_window"),
+        recentDataWindow: String? = tracker.catalogSettings.recentDataWindow,
         visibility: String? = tracker.visibility,
         shareParamsWithRecipients: Boolean? = tracker.share_params_with_recipients,
         shareParamsWithWorld: Boolean? = tracker.share_params_with_world,
         sharedWithEmails: List<String>? = tracker.shared_with_emails,
         worldShareEnabled: Boolean = isWorldShareEnabled(tracker),
-        hidden: Boolean? = tracker.settingsBoolean("hidden"),
-        allowGroupReshare: Boolean? = tracker.settingsBoolean("allow_group_reshare"),
+        hidden: Boolean? = tracker.catalogSettings.hidden,
+        allowGroupReshare: Boolean? = tracker.catalogSettings.allowGroupReshare,
     ): TrackerSettingsRequest {
         val effectiveVisibility = visibility?.trim()?.lowercase()
         val sharedEmailsForRequest = if (effectiveVisibility == TrackerShareVisibility.SHARED.apiValue) {
@@ -119,6 +119,3 @@ object TrackerSharingSettingsPolicy {
     }
 }
 
-private fun Tracker.settingsString(key: String): String? = settings?.get(key) as? String
-
-private fun Tracker.settingsBoolean(key: String): Boolean? = settings?.get(key) as? Boolean

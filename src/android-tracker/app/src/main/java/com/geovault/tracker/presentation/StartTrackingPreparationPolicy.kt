@@ -1,7 +1,7 @@
 package com.geovault.tracker.presentation
 
 import com.geovault.tracker.runtime.RuntimeCommandResult
-import com.geovault.tracker.services.TrackingRuntimeSnapshot
+import com.geovault.tracker.positioning.TrackingRuntimeSnapshot
 
 internal object StartTrackingPreparationPolicy {
     @JvmStatic

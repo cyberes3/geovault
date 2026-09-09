@@ -1,38 +1,26 @@
 package com.geovault.tracker.map
 
-import com.geovault.tracker.SelectedTrackerManager
+import com.geovault.tracker.data.CatalogState
 import com.geovault.tracker.presentation.TrackerMapCameraDirective
+import com.geovault.tracker.streaming.StreamingOwner
 import com.geovault.tracker.presentation.TrackerMapGroupModeOption
-import com.geovault.tracker.presentation.TrackerMapGroupModePolicy
 import com.geovault.tracker.presentation.TrackerMapGroupModeSelection
 import com.geovault.tracker.presentation.TrackerMapRenderPackage
 import com.geovault.tracker.presentation.TrackerMapSessionIntent
-import com.geovault.tracker.presentation.TrackerMapSessionProjector
-import com.geovault.tracker.presentation.TrackerMapSessionRequestDeduper
 import com.geovault.tracker.presentation.TrackerMapStreamingPlan
-import com.geovault.tracker.presentation.TrackerMapTrailLoaderOps
 import com.geovault.tracker.presentation.TrackerMapUiState
 import com.geovault.tracker.presentation.HiddenMapItemsPolicy
 import com.geovault.tracker.presentation.TrackerMapDisplayIds
 import com.geovault.tracker.presentation.TrackerMapDisplayMode
-import com.geovault.tracker.presentation.TrackerMapHistoryUiSync
-import com.geovault.tracker.services.TrackingRuntimeSnapshot
+import com.geovault.tracker.positioning.TrackingRuntimeSnapshot
+import com.geovault.tracker.runtime.TrackerRuntimeStore
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
- * Composition root for the map feature: constructs and wires [dependencies], [stateHub], the
- * [cameraCoordinator]/[trailCommitLock] coordinators, and every per-concern subsystem instance,
- * then exposes the handful of stateless computations (`projectSession`,
- * `resolveGroupModeSelection`, `visibleMapRosterTrackerIds`, `resolveGroupModeOptions`,
- * `currentActiveSessionStartMs`, `activeSessionStartMsForRuntime`, `recomputeStaleRollingWindows`)
- * that are genuinely called from several subsystems with no single natural owner among them.
- *
- * This class holds only composition (dependencies, shared reactive state, coordinators,
- * subsystem instances) and stateless multi-consumer helpers. Do not add new mutable bookkeeping
- * fields here -- they belong on the subsystem that owns them. If a value is written from exactly
- * one subsystem, it lives as private state on that subsystem, with a narrow accessor method
- * exposed only if another subsystem genuinely needs to read it (see e.g.
- * [MapContextSubsystem.isMapReady], [MapTrailReloadSubsystem.invalidateLoadedSeed]).
+ * Map composition factory: shared dependencies, reactive state, and the three engines.
+ * Session, trail, and render behavior live on the engines.
  */
 internal class TrackerMapRuntime(
     internal val ports: TrackerMapPorts,
@@ -41,56 +29,46 @@ internal class TrackerMapRuntime(
 
     internal val stateHub = TrackerMapStateHub()
     internal val uiState: StateFlow<TrackerMapUiState> = stateHub.uiState
-    internal val renderPackage: StateFlow<TrackerMapRenderPackage> = stateHub.renderPackage
-    internal val cameraCoordinator = TrackerMapCameraCoordinator()
-    internal val cameraDirective: StateFlow<TrackerMapCameraDirective> = cameraCoordinator.directive
-    internal val cameraGenerationFlow: StateFlow<Long> = cameraCoordinator.generationFlow
-    internal fun cameraGeneration(): Long = cameraCoordinator.generation
+    private val trailCommitMutex = Mutex()
+    internal val isTrailCommitLocked: Boolean get() = trailCommitMutex.isLocked
+    internal suspend fun <T> withTrailCommit(block: suspend () -> T): T =
+        trailCommitMutex.withLock { block() }
 
-    internal val trailCommitLock = TrailCommitCoordinator()
-    internal val pendingReloadCameraFit = PendingReloadCameraFit()
-    internal val sessionRequestDeduper = TrackerMapSessionRequestDeduper(ports.viewModelScope)
-    internal val streamingPlanCache = TrackerMapStreamingPlanCache()
-    internal lateinit var trailLoaderOps: TrackerMapTrailLoaderOps
-
-    internal lateinit var context: MapContextSubsystem
-    internal lateinit var display: MapTrailDisplaySubsystem
-    internal lateinit var reload: MapTrailReloadSubsystem
-    internal lateinit var streaming: MapStreamingSubsystem
-    internal lateinit var streamRosterResolver: StreamRosterResolver
-    internal lateinit var streamTargetReconciler: StreamTargetReconciler
-    internal lateinit var trackPointReducer: TrackPointReducer
+    internal val sessionEngine = MapSessionEngine()
+    internal val trailEngine = MapTrailEngine()
+    internal val renderEngine = MapRenderEngine()
+    internal val renderPackage: StateFlow<TrackerMapRenderPackage> = renderEngine.renderPackage
+    internal val cameraDirective: StateFlow<TrackerMapCameraDirective> = renderEngine.cameraDirective
+    internal val cameraGenerationFlow: StateFlow<Long> = renderEngine.cameraGenerationFlow
+    internal fun cameraGeneration(): Long = renderEngine.cameraGeneration
 
     internal fun start() {
-        SelectedTrackerManager.syncRuntimeSelectedTracker(ports.application)
-        wireSubsystems()
-        trailLoaderOps = TrackerMapTrailLoaderOps(
-            loadSingleServer = { trackerId, existingTrailMinTimeMs ->
-                reload.loadSingleTrackerTrailFromServer(trackerId, existingTrailMinTimeMs)
-            },
-            loadMultiServer = { trackerIds, existingMultiMinTimes ->
-                reload.loadTrailsForTrackerIds(trackerIds, existingMultiMinTimes)
-            },
-            loadQueue = { trackerId -> reload.loadQueueTrail(trackerId) },
-        )
-        streaming.startCollectors()
-        streamRosterResolver.refreshStreamTargets()
+        trailEngine.start(this)
+        renderEngine.start(this)
+        sessionEngine.start(this)
     }
 
-    private fun wireSubsystems() {
-        context = MapContextSubsystem(this)
-        display = MapTrailDisplaySubsystem(this)
-        reload = MapTrailReloadSubsystem(this)
-        streamRosterResolver = StreamRosterResolver(this)
-        streamTargetReconciler = StreamTargetReconciler(this)
-        trackPointReducer = TrackPointReducer(this)
-        streaming = MapStreamingSubsystem(this)
+    internal fun catalog(): CatalogState = dependencies.catalogStateStore.state.value
+
+    internal fun catalogSelectedTrackerId(): String = catalog().selectedTrackerId.trim()
+
+    internal fun catalogSelectedTrackerName(): String {
+        val id = catalogSelectedTrackerId()
+        if (id.isEmpty()) return ""
+        return catalog().trackers.firstOrNull { it.id.trim() == id }?.name?.trim().orEmpty()
     }
 
-    internal fun trackerRosterForMapChip() = dependencies.trackerManagementStateStore.trackers.value
+    internal fun recording(): TrackingRuntimeSnapshot = TrackerRuntimeStore.value.recording
+
+    internal fun displayedTrackerId(state: TrackerMapUiState = stateHub.uiStateMutable.value): String {
+        return TrackerMapDisplayIds.effectiveDisplayedTrackerId(state, catalogSelectedTrackerId())
+    }
+
+    internal fun trackerRosterForMapChip() = catalog().trackers
 
     internal fun onCleared() {
-        streaming.close()
+        sessionEngine.close()
+        dependencies.liveStreamSubscriptionRepository.setLease(StreamingOwner.MAP, null)
     }
 
     internal fun projectSession(
@@ -98,10 +76,12 @@ internal class TrackerMapRuntime(
         groupSelection: TrackerMapGroupModeSelection = resolveGroupModeSelection(state),
         visibleRosterTrackerIds: Set<String> = visibleMapRosterTrackerIds(),
     ): TrackerMapStreamingPlan {
-        return TrackerMapSessionProjector.project(
+        return MapSessionEngine.project(
             TrackerMapSessionIntent(
                 mode = state.mode,
-                runtime = state.runtime,
+                runtime = recording(),
+                selectedTrackerId = catalogSelectedTrackerId(),
+                selectedTrackerName = catalogSelectedTrackerName(),
                 displayedTrackerId = state.displayedTrackerId,
                 displayedTrackerName = state.displayedTrackerName,
                 rosterTrackerIds = visibleRosterTrackerIds,
@@ -115,72 +95,76 @@ internal class TrackerMapRuntime(
         if (state.mode != TrackerMapDisplayMode.GROUP_PLACEHOLDER) {
             return TrackerMapGroupModeSelection(groupId = null, trackerIds = emptySet())
         }
-        val visibility = dependencies.trackerManagementStateStore.mapVisibility.value
+        val catalog = catalog()
+        val visibility = catalog.mapVisibility
         val hiddenGroupIds = visibility?.hidden_group_ids.orEmpty().toSet()
         val hiddenTrackIds = visibility?.hidden_track_ids.orEmpty().toSet()
-        val hiddenOwnerTrackerIds = HiddenMapItemsPolicy.hiddenOwnerTrackerIds(dependencies.trackerManagementStateStore.trackers.value)
-        val preferredTrackerId = TrackerMapDisplayIds.effectiveDisplayedTrackerId(state).ifBlank { state.runtime.selectedTrackerId }
-        return TrackerMapGroupModePolicy.resolveSelection(
-            groups = dependencies.trackerManagementStateStore.groups.value,
+        val hiddenOwnerTrackerIds = HiddenMapItemsPolicy.hiddenOwnerTrackerIds(catalog.trackers)
+        val preferredTrackerId = TrackerMapDisplayIds.effectiveDisplayedTrackerId(
+            state,
+            catalogSelectedTrackerId(),
+        )
+        return MapSessionEngine.resolveGroupSelection(
+            groups = catalog.groups,
             hiddenGroupIds = hiddenGroupIds,
             hiddenTrackIds = hiddenTrackIds,
             hiddenOwnerTrackerIds = hiddenOwnerTrackerIds,
-            rosterTrackerIds = dependencies.trackerManagementStateStore.trackers.value.mapTo(mutableSetOf()) { it.id.trim() },
+            rosterTrackerIds = catalog.trackers.mapTo(mutableSetOf()) { it.id.trim() },
             preferredGroupId = state.currentGroupId,
             preferredTrackerId = preferredTrackerId,
         )
     }
 
     internal fun visibleMapRosterTrackerIds(): Set<String> {
-        val trackers = dependencies.trackerManagementStateStore.trackers.value
+        val catalog = catalog()
         return HiddenMapItemsPolicy.visibleTrackerIdsForMap(
-            rosterTrackerIds = trackers.map { it.id },
-            mapVisibility = dependencies.trackerManagementStateStore.mapVisibility.value,
-            trackers = trackers,
+            rosterTrackerIds = catalog.trackers.map { it.id },
+            mapVisibility = catalog.mapVisibility,
+            trackers = catalog.trackers,
         )
     }
 
     internal fun resolveGroupModeOptions(): List<TrackerMapGroupModeOption> {
-        val visibility = dependencies.trackerManagementStateStore.mapVisibility.value
+        val catalog = catalog()
+        val visibility = catalog.mapVisibility
         val hiddenGroupIds = visibility?.hidden_group_ids.orEmpty().toSet()
         val hiddenTrackIds = visibility?.hidden_track_ids.orEmpty().toSet()
-        val hiddenOwnerTrackerIds = HiddenMapItemsPolicy.hiddenOwnerTrackerIds(dependencies.trackerManagementStateStore.trackers.value)
-        return TrackerMapGroupModePolicy.resolveEligibleGroups(
-            groups = dependencies.trackerManagementStateStore.groups.value,
+        val hiddenOwnerTrackerIds = HiddenMapItemsPolicy.hiddenOwnerTrackerIds(catalog.trackers)
+        return MapSessionEngine.resolveEligibleGroups(
+            groups = catalog.groups,
             hiddenGroupIds = hiddenGroupIds,
             hiddenTrackIds = hiddenTrackIds,
             hiddenOwnerTrackerIds = hiddenOwnerTrackerIds,
-            rosterTrackerIds = dependencies.trackerManagementStateStore.trackers.value.mapTo(mutableSetOf()) { it.id.trim() },
+            rosterTrackerIds = catalog.trackers.mapTo(mutableSetOf()) { it.id.trim() },
         )
     }
 
     internal fun currentActiveSessionStartMs(): Long? {
-        return activeSessionStartMsForRuntime(stateHub.uiStateMutable.value.runtime)
+        return activeSessionStartMsForRuntime(recording())
     }
 
     internal fun activeSessionStartMsForRuntime(runtime: TrackingRuntimeSnapshot): Long? {
-        return TrackerMapHistoryUiSync.activeSessionStartMsForTracker(
+        return MapTrailEngine.activeSessionStartMsForTracker(
             runtime = runtime,
             trackerId = runtime.locallyRecordedTrackerId,
         )
     }
 
     internal fun activeSessionStartMsForTracker(trackerId: String): Long? {
-        return TrackerMapHistoryUiSync.activeSessionStartMsForTracker(
-            runtime = stateHub.uiStateMutable.value.runtime,
+        return MapTrailEngine.activeSessionStartMsForTracker(
+            runtime = recording(),
             trackerId = trackerId,
         )
     }
 
     /**
-     * IDLE-ROLLING-WINDOW STALENESS: see [TrackerHistoryRepository.recomputeStaleRollingWindows].
-     * Called both periodically (from [MapStreamingSubsystem.startCollectors]'s ticker) and on
-     * resume ([MapContextSubsystem.onHostResumed]) so a "last N hours"-style filter re-excludes
-     * points that aged out of the window while the tracker was idle, not only while new points
-     * are actively arriving.
+     * IDLE-ROLLING-WINDOW STALENESS: see [com.geovault.tracker.history.TrackerHistoryRepository.recomputeStaleRollingWindows].
+     * Called both periodically (from [MapSessionEngine]'s ticker) and on resume so a
+     * "last N hours"-style filter re-excludes points that aged out of the window while the
+     * tracker was idle, not only while new points are actively arriving.
      */
     internal fun recomputeStaleRollingWindows(): Boolean {
-        val locallyRecordedTrackerId = stateHub.uiStateMutable.value.runtime.locallyRecordedTrackerId.trim()
+        val locallyRecordedTrackerId = recording().locallyRecordedTrackerId.trim()
         val activeSessionStartMs = currentActiveSessionStartMs()
         val changedKeys = dependencies.historyRepository.recomputeStaleRollingWindows(
             activeSessionStartMsFor = { trackerId ->

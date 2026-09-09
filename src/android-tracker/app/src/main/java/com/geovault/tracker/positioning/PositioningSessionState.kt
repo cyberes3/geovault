@@ -5,8 +5,8 @@ import com.geovault.tracker.location.RecoveryAnchorState
 import com.geovault.tracker.location.SyncFailureClass
 import com.geovault.tracker.location.TrackingControlState
 import com.geovault.tracker.positioning.config.GpsRuntimeState
-import com.geovault.tracker.services.TrackingRuntimeSnapshot
-import com.geovault.tracker.services.UploadLivenessState
+import com.geovault.tracker.positioning.TrackingRuntimeSnapshot
+import com.geovault.tracker.positioning.UploadLivenessState
 import kotlinx.coroutines.Job
 import java.util.concurrent.atomic.AtomicLong
 

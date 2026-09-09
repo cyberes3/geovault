@@ -2,8 +2,6 @@ package com.geovault.tracker.streaming
 
 import android.content.Context
 import android.os.SystemClock
-import com.geovault.tracker.MapStreamingStartResult
-import com.geovault.tracker.MapStreamingStopResult
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -17,10 +15,7 @@ import kotlinx.coroutines.launch
 
 /**
  * Single application-scoped owner of "what should be streaming" and "what is actually
- * streaming" for the live-track websocket, replacing the previously fragmented
- * `LiveTrackStreamingTargetCoordinator` + `LiveStreamRuntimeStateStore` +
- * `LiveTrackStreamingReconciler`'s lease flag + `TrackerParamsStreamingController`'s session
- * state.
+ * streaming" for the live-track websocket.
  *
  * Design:
  * - [setLease] lets each [StreamingOwner] (Map, Params) declare its own independent intent; the
@@ -42,27 +37,27 @@ import kotlinx.coroutines.launch
  *   whichever comes first — bounding how long a session nobody has claimed can be kept alive.
  * - [requestReapply] is the single, unconditional entry point for "force a restart even with
  *   identical target ids" — used by the liveness watchdog, by resume-from-background, and by
- *   dispatch-failure recovery. This removes the asymmetry where only one caller could reset the
- *   old coordinator's apply-dedupe gate.
- * - [reportConnectionUpdate] is the only way the connection-health axis changes; called
- *   exclusively by [com.geovault.tracker.LiveTrackStreamingService] from its lifecycle
- *   transitions. Lease state and connection-health state are intentionally orthogonal: a caller
- *   can want a subscription while the connection is RECONNECTING.
+ *   dispatch-failure recovery.
+ * - [reportConnectionHealth] is the only writer of the connection-health axis. Lease state and
+ *   connection-health are orthogonal: a caller can want a subscription while RECONNECTING.
  */
 internal class LiveStreamSubscriptionRepository(
     private val appContext: Context,
-    private val servicePort: LiveStreamServicePort = DefaultLiveStreamServicePort,
+    persist: LiveStreamPersistPort? = null,
+    host: LiveStreamHostPort? = null,
     private val elapsedRealtimeMs: () -> Long = SystemClock::elapsedRealtime,
     private val dispatchDebounceMs: Long = StreamingConfig.dispatchDebounceMs,
     private val bootstrapGraceMs: Long = StreamingConfig.bootstrapGraceMs,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
 ) {
+    private val persist: LiveStreamPersistPort = persist ?: SharedPrefsLiveStreamPersistPort(appContext)
+    private val host: LiveStreamHostPort = host ?: DefaultLiveStreamHostPort(appContext, this.persist)
     private val lock = Any()
     private val _state = MutableStateFlow(LiveStreamSubscriptionState())
     val state: StateFlow<LiveStreamSubscriptionState> = _state.asStateFlow()
 
-    private val leases = mutableMapOf<StreamingOwner, OwnerLease>()
-    private var bootstrapLease: OwnerLease? = null
+    private val leases = mutableMapOf<StreamingOwner, StreamIntent>()
+    private var bootstrapLease: StreamIntent? = null
     private var bootstrapDeadlineElapsedMs: Long = 0L
     private var hasApplied = false
     private var lastAppliedIds: Set<String> = emptySet()
@@ -76,11 +71,11 @@ internal class LiveStreamSubscriptionRepository(
      * was persisted (fresh install / clean logout).
      */
     fun seedFromPersistedState() {
-        val (ids, name) = runCatching { servicePort.persistedTargets(appContext) }
+        val (ids, name) = runCatching { persist.read() }
             .getOrDefault(emptySet<String>() to null)
         if (ids.isEmpty()) return
         val (leasesSnapshot, bootstrap) = synchronized(lock) {
-            bootstrapLease = OwnerLease(trackerIds = ids, displayName = name)
+            bootstrapLease = StreamIntent(trackerIds = ids, displayName = name)
             bootstrapDeadlineElapsedMs = elapsedRealtimeMs() + bootstrapGraceMs
             leases.toMap() to bootstrapLease
         }
@@ -105,7 +100,7 @@ internal class LiveStreamSubscriptionRepository(
     }
 
     /** Replaces [owner]'s lease. `null` drops it. A no-op (no dispatch) if the value is unchanged. */
-    fun setLease(owner: StreamingOwner, lease: OwnerLease?) {
+    fun setLease(owner: StreamingOwner, lease: StreamIntent?) {
         val changed = synchronized(lock) {
             val previous = leases[owner]
             if (previous == lease) return@synchronized false
@@ -116,7 +111,7 @@ internal class LiveStreamSubscriptionRepository(
         if (!changed) return
         // PENDING-START RACE: this must land as a *single* `_state` emission, not
         // `publishLeaseState()` followed by a separate STARTING fix-up. `StateFlow` collectors
-        // that use plain `collect` (as `MapStreamingSubsystem`'s stream-state collector
+        // that use plain `collect` (as `MapSessionEngine`'s stream-state collector
         // deliberately does) observe every distinct emission, so a two-step update would let
         // them see the intermediate value in between: leases already reflect the new lease
         // (`wantsSubscription=true`) but `connection` is still the stale `IDLE`/
@@ -163,7 +158,7 @@ internal class LiveStreamSubscriptionRepository(
      * stop path, which is already tearing itself down via [servicePort] directly — dispatching
      * again here would just be a redundant, racy stop command against a service mid-shutdown.
      */
-    fun clearLeasesWithoutDispatch() {
+    internal fun clearLeasesWithoutDispatch() {
         synchronized(lock) {
             // Bumping the generation here (not just cancelling the job) is what actually matters:
             // see the [dispatch] doc for why cancellation alone can't stop an in-flight tick.
@@ -174,6 +169,43 @@ internal class LiveStreamSubscriptionRepository(
             hasApplied = false
         }
         publishLeaseState()
+    }
+
+    fun reportConnectionHealth(health: ConnectionHealth) {
+        reportConnectionUpdate(
+            connection = health.phase,
+            activeTargets = health.activeTargets,
+            failureReason = health.failureReason,
+        )
+    }
+
+    fun pruneInvalidTargets(validIds: Set<String>) {
+        val changed = synchronized(lock) {
+            var mutated = false
+            val owners = leases.keys.toList()
+            for (owner in owners) {
+                val lease = leases[owner] ?: continue
+                val pruned = lease.trackerIds.intersect(validIds)
+                if (pruned == lease.trackerIds) continue
+                mutated = true
+                if (pruned.isEmpty()) {
+                    leases.remove(owner)
+                } else {
+                    leases[owner] = lease.copy(trackerIds = pruned)
+                }
+            }
+            bootstrapLease?.let { seed ->
+                val pruned = seed.trackerIds.intersect(validIds)
+                if (pruned != seed.trackerIds) {
+                    mutated = true
+                    bootstrapLease = if (pruned.isEmpty()) null else seed.copy(trackerIds = pruned)
+                }
+            }
+            mutated
+        }
+        if (!changed) return
+        publishLeaseState()
+        scheduleDispatch(immediate = true, reason = "prune")
     }
 
     /** Called exclusively by [com.geovault.tracker.LiveTrackStreamingService] to report the connection-health axis. */
@@ -215,17 +247,12 @@ internal class LiveStreamSubscriptionRepository(
 
     /**
      * Runs entirely inside [lock] so two dispatch ticks racing on [scope]'s multi-threaded IO
-     * dispatcher can never execute concurrently. [Job.cancel] in [scheduleDispatch] is only
-     * cooperative -- since this function and everything it calls ([dispatchStart]/[dispatchStop],
-     * which call the synchronous [servicePort]) is plain non-suspending code with no suspension
-     * point to honor cancellation at, a "cancelled" tick that already started running here would
-     * otherwise keep running to completion on its own thread fully in parallel with a newer tick.
-     * That previously let a stale, superseded tracker-id set win the race and clobber a fresher
-     * dispatch (a plausible cause of a streamed tracker silently going stale), or double-fire
-     * [servicePort] start/stop. Serializing on [lock] makes the [generation] check-and-act atomic:
-     * whichever tick loses the race re-reads up-to-the-moment state under the same lock and either
-     * finds [dispatchGeneration] has moved on, or finds [hasApplied]/[lastAppliedIds] already
-     * reflect what it was about to do, and no-ops either way.
+     * dispatcher cannot execute concurrently. [Job.cancel] in [scheduleDispatch] is only
+     * cooperative -- [dispatchStart]/[dispatchStop] are non-suspending -- so a cancelled tick that
+     * already entered here would otherwise finish in parallel with a newer tick. Serializing on
+     * [lock] makes the [generation] check-and-act atomic: the losing tick re-reads state under the
+     * same lock and no-ops if [dispatchGeneration] moved or [hasApplied]/[lastAppliedIds] already
+     * match.
      */
     private fun dispatch(reason: String?, generation: Long) {
         synchronized(lock) {
@@ -247,8 +274,8 @@ internal class LiveStreamSubscriptionRepository(
     }
 
     private fun dispatchStop(ids: Set<String>, name: String?) {
-        when (val result = servicePort.stopStreaming(appContext)) {
-            MapStreamingStopResult.Stopped -> {
+        when (val result = host.stop(appContext)) {
+            LiveStreamStopResult.Stopped -> {
                 synchronized(lock) {
                     hasApplied = true
                     lastAppliedIds = ids
@@ -256,7 +283,7 @@ internal class LiveStreamSubscriptionRepository(
                 }
                 _state.update { it.copy(lastDispatchedCommand = DispatchedCommand(ids, name)) }
             }
-            is MapStreamingStopResult.Failed -> {
+            is LiveStreamStopResult.Failed -> {
                 synchronized(lock) { hasApplied = false }
                 _state.update { it.copy(connection = ConnectionPhase.FAILED_TRANSIENT, failureReason = result.reason) }
             }
@@ -264,22 +291,23 @@ internal class LiveStreamSubscriptionRepository(
     }
 
     private fun dispatchStart(ids: Set<String>, name: String?) {
-        when (val result = servicePort.startStreaming(appContext, ids, name)) {
-            is MapStreamingStartResult.Started -> {
+        persist.commit(ids, name)
+        when (val result = host.apply(appContext)) {
+            is LiveStreamApplyResult.Started -> {
                 synchronized(lock) {
                     hasApplied = true
-                    lastAppliedIds = result.trackerIds
+                    lastAppliedIds = ids
                     lastAppliedName = name
                 }
-                _state.update { it.copy(lastDispatchedCommand = DispatchedCommand(result.trackerIds, name)) }
+                _state.update { it.copy(lastDispatchedCommand = DispatchedCommand(ids, name)) }
             }
-            is MapStreamingStartResult.Failed -> {
-                val stopResult = servicePort.stopStreaming(appContext)
+            is LiveStreamApplyResult.Failed -> {
+                val stopResult = host.stop(appContext)
                 synchronized(lock) { hasApplied = false }
-                val stoppedCleanly = stopResult == MapStreamingStopResult.Stopped
+                val stoppedCleanly = stopResult == LiveStreamStopResult.Stopped
                 val failureReason = when (stopResult) {
-                    MapStreamingStopResult.Stopped -> result.reason
-                    is MapStreamingStopResult.Failed -> "${result.reason}; stop_failed:${stopResult.reason}"
+                    LiveStreamStopResult.Stopped -> result.reason
+                    is LiveStreamStopResult.Failed -> "${result.reason}; stop_failed:${stopResult.reason}"
                 }
                 _state.update { current ->
                     current.copy(
@@ -299,3 +327,4 @@ internal class LiveStreamSubscriptionRepository(
         }
     }
 }
+

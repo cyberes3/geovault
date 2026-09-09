@@ -4,12 +4,12 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+import com.geovault.tracker.map.MapRenderMath
 class TrackerMapCameraLockPolicyTest {
-    private val policy = TrackerMapUserLocationPolicy()
-
+    
     @Test
     fun recordingDoesNotBanPuckWhenViewingAnotherTracker() {
-        val decision = policy.evaluate(
+        val decision = MapRenderMath.evaluateUserLocation(
             TrackerMapUserLocationInput(
                 isMapActive = true,
                 hasLocationPermission = true,
@@ -27,7 +27,7 @@ class TrackerMapCameraLockPolicyTest {
 
     @Test
     fun ownRecordedTrackerOnScreenHidesPuck() {
-        val decision = policy.evaluate(
+        val decision = MapRenderMath.evaluateUserLocation(
             TrackerMapUserLocationInput(
                 isMapActive = true,
                 hasLocationPermission = true,

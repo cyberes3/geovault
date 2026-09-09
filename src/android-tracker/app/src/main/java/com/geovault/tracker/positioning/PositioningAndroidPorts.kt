@@ -8,7 +8,7 @@ import android.content.pm.ServiceInfo
 import android.os.VibrationEffect
 import android.os.VibratorManager
 import androidx.core.content.ContextCompat
-import com.geovault.tracker.SelectedTrackerPrefs
+import com.geovault.tracker.di.TrackerAppServices
 import com.geovault.tracker.tracking.TrackingService
 import com.geovault.tracker.tracking.TrackingServiceConstants
 
@@ -17,9 +17,11 @@ internal class PositioningAndroidPorts(
 ) {
     val context: Context get() = service.applicationContext
 
-    fun selectedTrackerId(): String = SelectedTrackerPrefs.selectedTrackerId(service)
+    fun selectedTrackerId(): String =
+        TrackerAppServices.from(service.application).catalogSelectionController().selectedTrackerId(service)
 
-    fun selectedTrackerName(): String = SelectedTrackerPrefs.selectedTrackerName(service)
+    fun selectedTrackerName(): String =
+        TrackerAppServices.from(service.application).catalogSelectionController().selectedTrackerName(service)
 
     fun notificationId(): Int = TrackingServiceConstants.NOTIFICATION_ID
 

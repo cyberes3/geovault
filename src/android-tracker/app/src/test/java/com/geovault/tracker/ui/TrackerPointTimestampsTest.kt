@@ -1,6 +1,7 @@
 package com.geovault.tracker.ui
 
 import com.geovault.tracker.Tracker
+import com.geovault.tracker.pointParamsOf
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -14,8 +15,8 @@ class TrackerPointTimestampsTest {
             name = "Tracker",
             color = null,
             point_params = listOf(
-                mapOf("starttimestamp" to 1_700_000_000L),
-                mapOf("timestamp" to 1_700_000_123_000L),
+                pointParamsOf("starttimestamp" to 1_700_000_000L),
+                pointParamsOf("timestamp" to 1_700_000_123_000L),
             ),
         )
 
@@ -28,7 +29,7 @@ class TrackerPointTimestampsTest {
             id = "t1",
             name = "Tracker",
             color = null,
-            point_params = listOf(mapOf("battery" to 95)),
+            point_params = listOf(pointParamsOf("battery" to 95)),
         )
 
         assertNull(TrackerPointTimestamps.lastPointParamsMs(tracker))

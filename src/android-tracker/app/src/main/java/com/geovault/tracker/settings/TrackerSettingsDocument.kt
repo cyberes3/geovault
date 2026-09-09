@@ -35,7 +35,6 @@ data class TrackerSettingsDocument(
 
     fun toRecord(): TrackerSettingsRecord = TrackerSettingsRecord(
         settings = toSettings(),
-        wasTrackingBeforeExit = wasTrackingBeforeExit,
         schemaVersion = TrackerSettingsDefaults.schemaVersion,
     )
 
@@ -57,7 +56,7 @@ data class TrackerSettingsDocument(
 
         fun fromSettings(
             settings: TrackerSettings,
-            wasTrackingBeforeExit: Boolean,
+            wasTrackingBeforeExit: Boolean = false,
         ): TrackerSettingsDocument = TrackerSettingsDocument(
             startOnBoot = settings.startOnBoot,
             startTrackingOnLaunch = settings.startTrackingOnLaunch,
@@ -72,7 +71,7 @@ data class TrackerSettingsDocument(
         )
 
         fun fromRecord(record: TrackerSettingsRecord): TrackerSettingsDocument =
-            fromSettings(record.settings, record.wasTrackingBeforeExit)
+            fromSettings(record.settings)
 
         fun fromLegacy(blob: GeoVaultLegacySettingsBlob): TrackerSettingsDocument {
             val defaults = TrackerSettingsDefaults.baseline

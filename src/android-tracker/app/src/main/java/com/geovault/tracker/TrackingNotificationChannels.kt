@@ -18,4 +18,19 @@ object TrackingNotificationChannels {
         }
         manager.createNotificationChannel(channel)
     }
+
+    const val STREAMING_CHANNEL_ID = "live_track_streaming"
+
+    fun ensureStreamingChannel(context: Context) {
+        val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val channel = NotificationChannel(
+            STREAMING_CHANNEL_ID,
+            context.getString(R.string.live_track_streaming_channel),
+            NotificationManager.IMPORTANCE_LOW,
+        ).apply {
+            description = context.getString(R.string.live_track_streaming_channel_description)
+            setShowBadge(false)
+        }
+        manager.createNotificationChannel(channel)
+    }
 }

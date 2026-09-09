@@ -2,13 +2,13 @@ package com.geovault.tracker.location
 
 import com.geovault.common.geo.GeoMath
 import com.geovault.tracker.policy.TrackPointDecision
-import com.geovault.tracker.policy.TrackPointEvent
+import com.geovault.tracker.domain.TrackPoint
 import com.geovault.tracker.policy.TrackPointPolicyEngine
 import com.geovault.tracker.policy.TrackPointSource
 import com.geovault.tracker.policy.filter.FilterReason
 import com.geovault.tracker.policy.filter.LocationFilterConfig
 import com.geovault.tracker.policy.filter.MotionProfileTuning
-import com.geovault.tracker.services.TrackingMotionMode
+import com.geovault.tracker.positioning.TrackingMotionMode
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -148,7 +148,7 @@ class AutoTrackingMotionFilterIntegrationTest {
             streakPreserveWindowMs = 10_000L,
         )
         engine.reset(nowMs = 0L)
-        var previousAccepted: TrackPointEvent? = null
+        var previousAccepted: TrackPoint? = null
         val acceptedReasons = mutableListOf<String?>()
         val acceptedDistances = mutableListOf<Double>()
 
@@ -186,10 +186,10 @@ class AutoTrackingMotionFilterIntegrationTest {
                 result.canonicalEvent?.let { event ->
                     previousAccepted?.let { previous ->
                         acceptedDistances += GeoMath.haversineMeters(
-                            previous.lat,
-                            previous.lon,
-                            event.lat,
-                            event.lon,
+                            previous.latitude,
+                            previous.longitude,
+                            event.latitude,
+                            event.longitude,
                         )
                     }
                     previousAccepted = event
@@ -260,12 +260,12 @@ class AutoTrackingMotionFilterIntegrationTest {
         speedMps: Float = 22f,
     ): TrackPointDecision {
         return TrackPointPolicyEngine.evaluate(
-            event = TrackPointEvent(
-                source = TrackPointSource.LOCAL_GPS,
-                trackId = trackId,
-                lat = lat,
-                lon = lon,
-                timestampMs = timestampMs,
+            event = TrackPoint(
+                provenance = TrackPointSource.LOCAL_GPS,
+                trackerId = trackId,
+                latitude = lat,
+                longitude = lon,
+                timeMs = timestampMs,
                 accuracyMeters = accuracyMeters,
                 gpsSpeedMps = speedMps,
                 gpsBearingDeg = 90f,

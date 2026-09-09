@@ -1,5 +1,6 @@
 package com.geovault.tracker.ui
 
+import android.app.Application
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -73,8 +74,6 @@ import com.geovault.common.ui.components.GeoVaultTabBar
 import com.geovault.common.ui.navigation.GeoVaultRegisterBackHandler
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.common.ui.time.GeoVaultDateTimeFormat
-import com.geovault.common.ui.snackbar.GeoVaultSnackbarHost
-import com.geovault.common.ui.snackbar.GeoVaultSnackbarModel
 import com.geovault.tracker.AvailableToAddGroup
 import com.geovault.tracker.AvailableToAddItem
 import com.geovault.tracker.Group
@@ -82,6 +81,7 @@ import com.geovault.tracker.params.TrackerParamsRouteArgs
 import com.geovault.tracker.params.toTrackerParamsRouteArgs
 import com.geovault.tracker.R
 import com.geovault.tracker.Tracker
+import com.geovault.tracker.di.TrackerAppServices
 import com.geovault.tracker.presentation.OwnershipActionPolicy
 import com.geovault.tracker.presentation.DiscoverOverlayMode
 import com.geovault.tracker.presentation.SharedEditActionPolicy
@@ -91,7 +91,7 @@ import com.geovault.tracker.presentation.SharedSubTab
 import com.geovault.tracker.presentation.SharedViewMode
 import com.geovault.tracker.presentation.SharedUiState
 import com.geovault.tracker.presentation.SharedViewModel
-import com.geovault.tracker.presentation.TrackerAddRemoveKeyPolicy
+import com.geovault.tracker.presentation.CatalogMutation
 import com.geovault.tracker.presentation.TrackerLeaveKind
 import com.geovault.tracker.ui.components.GroupItemCard
 import com.geovault.tracker.ui.components.GroupItemCardModel
@@ -123,7 +123,7 @@ fun SharedScreen(
         if (sharedTabBottomNavStamp == 0) return@LaunchedEffect
         groupActionsDialog = null
     }
-    var snackbarModel by remember { mutableStateOf<GeoVaultSnackbarModel?>(null) }
+    val application = LocalContext.current.applicationContext as Application
     var editSharedTracker by remember { mutableStateOf<Tracker?>(null) }
     var editSharedGroup by remember { mutableStateOf<Group?>(null) }
 
@@ -138,14 +138,6 @@ fun SharedScreen(
     }
     LaunchedEffect(vm) {
         coroutineScope {
-            launch {
-                vm.snackbarEvents.collect { message ->
-                    snackbarModel = GeoVaultSnackbarModel(
-                        id = "shared-${message.hashCode()}-${System.currentTimeMillis()}",
-                        message = message,
-                    )
-                }
-            }
             launch {
                 vm.dismissSharedTrackerEditId.collect { id ->
                     if (editSharedTracker?.id == id) {
@@ -253,10 +245,7 @@ fun SharedScreen(
                 navigationRequest = pendingNavigationRequest,
                 onNavigationRequestHandled = { pendingNavigationRequest = null },
                 onNavigationTargetMissing = { message ->
-                    snackbarModel = GeoVaultSnackbarModel(
-                        id = "shared-nav-missing-${message.hashCode()}-${System.currentTimeMillis()}",
-                        message = message,
-                    )
+                    TrackerAppServices.from(application).uiEffects().emitMessage(message)
                 },
                 onOpenTrackerOnMap = onOpenTrackerOnMap,
                 onOpenGroupOnMap = onOpenGroupOnMap,
@@ -352,12 +341,6 @@ fun SharedScreen(
             TrackerParamsOverlayLayer()
         },
     )
-    GeoVaultSnackbarHost(
-        model = snackbarModel,
-        onDismiss = { snackbarModel = null },
-        onAction = { },
-    )
-
     SharedActionConfirmDialog(
         pendingAction = pendingConfirmAction,
         onDismiss = { pendingConfirmAction = null },
@@ -939,7 +922,7 @@ private fun DiscoverOverlayTabContent(
             }
             items(filteredOnMyMapTrackers, key = { "m-t-${it.id}" }) { item ->
                 val isPendingRemove = pendingRemoveActionKeys.contains(
-                    TrackerAddRemoveKeyPolicy.sharedMutationKey(
+                    CatalogMutation.occupancyKey(
                         SharedAddRemoveOperation.DiscoverOnMapTrackerRemove(item.id)
                     )
                 )
@@ -952,7 +935,7 @@ private fun DiscoverOverlayTabContent(
             }
             items(filteredOnMyMapGroups, key = { "m-g-${it.id}" }) { group ->
                 val isPendingRemove = pendingRemoveActionKeys.contains(
-                    TrackerAddRemoveKeyPolicy.sharedMutationKey(
+                    CatalogMutation.occupancyKey(
                         SharedAddRemoveOperation.DiscoverOnMapGroupRemove(group.id)
                     )
                 )
@@ -970,12 +953,12 @@ private fun DiscoverOverlayTabContent(
             items(filteredIncomingTrackers, key = { "d-t-${it.id}" }) { item ->
                 val isAdded = state.isIncomingTrackerAdded(item.id)
                 val isPending = pendingAddActionKeys.contains(
-                    TrackerAddRemoveKeyPolicy.sharedMutationKey(
+                    CatalogMutation.occupancyKey(
                         SharedAddRemoveOperation.IncomingTrackerAdd(item.id)
                     )
                 )
                 val isPendingRemove = pendingRemoveActionKeys.contains(
-                    TrackerAddRemoveKeyPolicy.sharedMutationKey(
+                    CatalogMutation.occupancyKey(
                         SharedAddRemoveOperation.DiscoverOnMapTrackerRemove(item.id)
                     )
                 )
@@ -993,12 +976,12 @@ private fun DiscoverOverlayTabContent(
             items(filteredIncomingGroups, key = { "d-g-${it.id}" }) { group ->
                 val isAdded = state.isIncomingGroupAdded(group.id)
                 val isPending = pendingAddActionKeys.contains(
-                    TrackerAddRemoveKeyPolicy.sharedMutationKey(
+                    CatalogMutation.occupancyKey(
                         SharedAddRemoveOperation.IncomingGroupAccept(group.id)
                     )
                 )
                 val isPendingRemove = pendingRemoveActionKeys.contains(
-                    TrackerAddRemoveKeyPolicy.sharedMutationKey(
+                    CatalogMutation.occupancyKey(
                         SharedAddRemoveOperation.DiscoverOnMapGroupRemove(group.id)
                     )
                 )
@@ -1076,12 +1059,12 @@ private fun PublicOverlaySurface(
                 }
                 items(filteredPublicTrackers, key = { "p-t-${it.id}" }) { item ->
                     val isPendingAdd = pendingAddActionKeys.contains(
-                        TrackerAddRemoveKeyPolicy.sharedMutationKey(
+                        CatalogMutation.occupancyKey(
                             SharedAddRemoveOperation.PublicTrackerAdd(item.id)
                         )
                     )
                     val isPendingRemove = pendingRemoveActionKeys.contains(
-                        TrackerAddRemoveKeyPolicy.sharedMutationKey(
+                        CatalogMutation.occupancyKey(
                             SharedAddRemoveOperation.PublicTrackerRemove(item.id)
                         )
                     )
@@ -1098,12 +1081,12 @@ private fun PublicOverlaySurface(
                 }
                 items(filteredPublicGroups, key = { "p-g-${it.id}" }) { group ->
                     val isPendingAdd = pendingAddActionKeys.contains(
-                        TrackerAddRemoveKeyPolicy.sharedMutationKey(
+                        CatalogMutation.occupancyKey(
                             SharedAddRemoveOperation.PublicGroupAdd(group.id)
                         )
                     )
                     val isPendingRemove = pendingRemoveActionKeys.contains(
-                        TrackerAddRemoveKeyPolicy.sharedMutationKey(
+                        CatalogMutation.occupancyKey(
                             SharedAddRemoveOperation.PublicGroupRemove(group.id)
                         )
                     )

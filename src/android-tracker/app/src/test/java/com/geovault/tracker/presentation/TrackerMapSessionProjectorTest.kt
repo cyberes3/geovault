@@ -1,7 +1,8 @@
 package com.geovault.tracker.presentation
 
-import com.geovault.tracker.services.TrackingRuntimeSnapshot
-import com.geovault.tracker.services.RecordingRuntime
+import com.geovault.tracker.map.MapSessionEngine
+import com.geovault.tracker.positioning.TrackingRuntimeSnapshot
+import com.geovault.tracker.positioning.RecordingRuntime
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -212,7 +213,7 @@ class TrackerMapSessionProjectorTest {
         groupTrackerIds: Set<String> = emptySet(),
         groupId: String = "g1",
     ): TrackerMapStreamingPlan {
-        return TrackerMapSessionProjector.project(
+        return MapSessionEngine.project(
             TrackerMapSessionIntent(
                 mode = mode,
                 runtime = TrackingRuntimeSnapshot(
@@ -221,8 +222,8 @@ class TrackerMapSessionProjectorTest {
                         sessionActive = runtimeRunning,
                         selectedTrackerId = recordingTrackerId,
                     ),
-                    selectedTrackerId = selectedTrackerId,
                 ),
+                selectedTrackerId = selectedTrackerId,
                 displayedTrackerId = displayedTrackerId,
                 displayedTrackerName = "",
                 rosterTrackerIds = rosterTrackerIds,

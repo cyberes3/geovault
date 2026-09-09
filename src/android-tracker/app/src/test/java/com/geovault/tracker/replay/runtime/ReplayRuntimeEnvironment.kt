@@ -13,14 +13,14 @@ import com.geovault.tracker.positioning.PositioningRuntimeEnvironment
 import com.geovault.tracker.positioning.time.PositioningClock
 import com.geovault.tracker.runtime.RuntimeTelemetry
 import com.geovault.tracker.sensor.SignificantMotionResumeGateway
-import com.geovault.tracker.services.LocationSessionGateway
-import com.geovault.tracker.services.QueueUploadConfig
-import com.geovault.tracker.services.QueueUploadGateway
-import com.geovault.tracker.services.QueueUploadResult
-import com.geovault.tracker.services.QueueUploadScope
-import com.geovault.tracker.services.TrackingNotificationGateway
-import com.geovault.tracker.services.TrackingRuntimeSnapshot
-import com.geovault.tracker.services.TrackingUiStatus
+import com.geovault.tracker.positioning.LocationSessionGateway
+import com.geovault.tracker.positioning.QueueUploadConfig
+import com.geovault.tracker.positioning.QueueUploadGateway
+import com.geovault.tracker.positioning.QueueUploadResult
+import com.geovault.tracker.positioning.QueueUploadScope
+import com.geovault.tracker.positioning.TrackingNotificationGateway
+import com.geovault.tracker.positioning.TrackingRuntimeSnapshot
+import com.geovault.tracker.positioning.TrackingUiStatus
 import com.geovault.tracker.settings.TrackerSettings
 import com.geovault.tracker.settings.TrackerSettingsDefaults
 import com.geovault.tracker.settings.TrackerSettingsLoadState
@@ -95,7 +95,6 @@ private class ReplaySettingsRepository(
         TrackerSettingsState(
             loadState = TrackerSettingsLoadState.Ready,
             settings = initialSettings,
-            wasTrackingBeforeExit = false,
             schemaVersion = TrackerSettingsDefaults.schemaVersion,
             revision = 0L,
         )
@@ -134,16 +133,6 @@ private class ReplaySettingsRepository(
 
     override fun setGroupModeFitOnlyActiveTrackers(enabled: Boolean) =
         update { it.copy(groupModeFitOnlyActiveTrackers = enabled) }
-
-    override fun wasTrackingBeforeExit(): Boolean = flow.value.wasTrackingBeforeExit
-
-    override fun setWasTrackingBeforeExit(value: Boolean) {
-        flow.value = flow.value.copy(wasTrackingBeforeExit = value, revision = flow.value.revision + 1L)
-    }
-
-    override fun clearWasTrackingBeforeExit() {
-        setWasTrackingBeforeExit(false)
-    }
 
     private fun update(transform: (TrackerSettings) -> TrackerSettings) {
         flow.value = flow.value.copy(

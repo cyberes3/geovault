@@ -23,7 +23,7 @@ import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.tracker.R
 
 /**
- * Surfaces [com.geovault.tracker.presentation.StreamingBatteryOptimizationHintPolicy]'s decision
+ * Surfaces [com.geovault.tracker.map.MapSessionEngine]'s battery-optimization hint decision
  * as an actionable, dismissible banner. Without this, an OEM background-killing the streaming
  * socket only shows up as `stream_diag_heartbeat`/`stream_diag_watchdog_reconnect` capture-log
  * breadcrumbs -- informative for us, invisible and unactionable for the user actually

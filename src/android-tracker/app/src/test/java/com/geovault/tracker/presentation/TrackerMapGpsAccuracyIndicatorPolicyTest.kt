@@ -1,16 +1,17 @@
 package com.geovault.tracker.presentation
 
-import com.geovault.tracker.services.RecordingRuntime
-import com.geovault.tracker.services.TrackingRuntimeSnapshot
+import com.geovault.tracker.positioning.RecordingRuntime
+import com.geovault.tracker.positioning.TrackingRuntimeSnapshot
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+import com.geovault.tracker.map.MapRenderMath
 class TrackerMapGpsAccuracyIndicatorPolicyTest {
 
     @Test
     fun resolve_notRunning_hidesIndicator() {
-        val result = TrackerMapGpsAccuracyIndicatorPolicy.resolve(
+        val result = MapRenderMath.resolveGpsAccuracyIndicator(
             TrackingRuntimeSnapshot(
                 isRunning = false,
                 lastAccuracyMeters = 22f,
@@ -23,7 +24,7 @@ class TrackerMapGpsAccuracyIndicatorPolicyTest {
 
     @Test
     fun resolve_running_nullAccuracy_showsIndicator() {
-        val result = TrackerMapGpsAccuracyIndicatorPolicy.resolve(
+        val result = MapRenderMath.resolveGpsAccuracyIndicator(
             TrackingRuntimeSnapshot(
                 isRunning = true,
                 recordingRuntime = RecordingRuntime(sessionActive = true, gpsCollecting = true),
@@ -37,7 +38,7 @@ class TrackerMapGpsAccuracyIndicatorPolicyTest {
 
     @Test
     fun resolve_running_accuracyAtThreshold_hidesIndicator() {
-        val result = TrackerMapGpsAccuracyIndicatorPolicy.resolve(
+        val result = MapRenderMath.resolveGpsAccuracyIndicator(
             TrackingRuntimeSnapshot(
                 isRunning = true,
                 recordingRuntime = RecordingRuntime(sessionActive = true, gpsCollecting = true),
@@ -51,7 +52,7 @@ class TrackerMapGpsAccuracyIndicatorPolicyTest {
 
     @Test
     fun resolve_running_accuracyAboveThreshold_showsIndicator() {
-        val result = TrackerMapGpsAccuracyIndicatorPolicy.resolve(
+        val result = MapRenderMath.resolveGpsAccuracyIndicator(
             TrackingRuntimeSnapshot(
                 isRunning = true,
                 recordingRuntime = RecordingRuntime(sessionActive = true, gpsCollecting = true),

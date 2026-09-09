@@ -9,7 +9,7 @@ import android.location.Location
 import android.location.LocationManager
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
-import com.geovault.tracker.SelectedTrackerPrefs
+import com.geovault.tracker.data.CatalogSelectionController
 import com.geovault.tracker.TrackingLocationPolicy
 import com.geovault.tracker.db.AppDatabase
 import com.geovault.tracker.location.RecoveryAnchorStore
@@ -23,14 +23,14 @@ import com.geovault.tracker.replay.runtime.ReplayPositioningClock
 import com.geovault.tracker.runtime.RuntimeTelemetry
 import com.geovault.tracker.runtime.RuntimeTelemetryStore
 import com.geovault.tracker.sensor.SignificantMotionResumeGateway
-import com.geovault.tracker.services.LocationSessionGateway
-import com.geovault.tracker.services.QueueUploadConfig
-import com.geovault.tracker.services.QueueUploadGateway
-import com.geovault.tracker.services.QueueUploadResult
-import com.geovault.tracker.services.QueueUploadScope
-import com.geovault.tracker.services.TrackingNotificationGateway
-import com.geovault.tracker.services.TrackingRuntimeSnapshot
-import com.geovault.tracker.services.TrackingUiStatus
+import com.geovault.tracker.positioning.LocationSessionGateway
+import com.geovault.tracker.positioning.QueueUploadConfig
+import com.geovault.tracker.positioning.QueueUploadGateway
+import com.geovault.tracker.positioning.QueueUploadResult
+import com.geovault.tracker.positioning.QueueUploadScope
+import com.geovault.tracker.positioning.TrackingNotificationGateway
+import com.geovault.tracker.positioning.TrackingRuntimeSnapshot
+import com.geovault.tracker.positioning.TrackingUiStatus
 import com.geovault.tracker.settings.TrackerSettings
 import com.geovault.tracker.settings.TrackerSettingsDefaults
 import com.geovault.tracker.settings.TrackerSettingsLoadState
@@ -222,7 +222,7 @@ private class Harness(significantMotionAvailable: Boolean) : AutoCloseable {
         )
         val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
         Shadows.shadowOf(locationManager).setProviderEnabled(LocationManager.GPS_PROVIDER, true)
-        SelectedTrackerPrefs.setSelectedTracker(
+        CatalogSelectionController.persistSelection(
             context = context,
             trackerId = "sparse-toggle-test-tracker",
             trackerName = "Sparse Toggle Test",
@@ -373,7 +373,6 @@ private class FakeTrackerSettingsRepository(
         TrackerSettingsState(
             loadState = TrackerSettingsLoadState.Ready,
             settings = initialSettings,
-            wasTrackingBeforeExit = false,
             schemaVersion = TrackerSettingsDefaults.schemaVersion,
             revision = 0L,
         )
@@ -412,16 +411,6 @@ private class FakeTrackerSettingsRepository(
 
     override fun setGroupModeFitOnlyActiveTrackers(enabled: Boolean) =
         update { it.copy(groupModeFitOnlyActiveTrackers = enabled) }
-
-    override fun wasTrackingBeforeExit(): Boolean = flow.value.wasTrackingBeforeExit
-
-    override fun setWasTrackingBeforeExit(value: Boolean) {
-        flow.value = flow.value.copy(wasTrackingBeforeExit = value, revision = flow.value.revision + 1L)
-    }
-
-    override fun clearWasTrackingBeforeExit() {
-        setWasTrackingBeforeExit(false)
-    }
 
     private fun update(transform: (TrackerSettings) -> TrackerSettings) {
         flow.value = flow.value.copy(

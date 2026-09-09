@@ -109,24 +109,23 @@ fun deriveSharedFilteredSections(
     discoverIncomingQuery: String,
     publicQuery: String,
     sharedListQuery: String = "",
-    optimisticTrackerAdds: Map<String, Tracker> = emptyMap(),
-    optimisticTrackerRemovals: Set<String> = emptySet(),
-    optimisticDiscoverOnMapRemovals: Set<String> = emptySet(),
-    retainedIncomingTrackers: List<AvailableToAddItem> = emptyList(),
-    retainedIncomingGroups: List<AvailableToAddGroup> = emptyList(),
-    retainedPublicTrackers: List<AvailableToAddItem> = emptyList(),
-    retainedPublicGroups: List<AvailableToAddGroup> = emptyList(),
+    pendingTrackerAdds: Map<String, Tracker> = emptyMap(),
+    pendingTrackerRemovals: Set<String> = emptySet(),
+    queuedIncomingTrackers: List<AvailableToAddItem> = emptyList(),
+    queuedIncomingGroups: List<AvailableToAddGroup> = emptyList(),
+    queuedPublicTrackers: List<AvailableToAddItem> = emptyList(),
+    queuedPublicGroups: List<AvailableToAddGroup> = emptyList(),
 ): SharedFilteredSections {
-    val sharedItemsWithOptimistic = applyOptimisticSharedItems(
+    val sharedItemsWithPending = applyPendingSharedItems(
         sharedItems = sharedItems,
-        optimisticTrackerAdds = optimisticTrackerAdds,
-        optimisticTrackerRemovals = optimisticTrackerRemovals,
+        pendingTrackerAdds = pendingTrackerAdds,
+        pendingTrackerRemovals = pendingTrackerRemovals,
     )
-    val filteredSharedItems = filterSharedSurfaceItemsForSearch(sharedItemsWithOptimistic, sharedListQuery)
-    val mergedIncomingTrackers = mergeRetainedTrackerItems(incomingTrackers, retainedIncomingTrackers)
-    val mergedIncomingGroups = mergeRetainedGroupItems(incomingGroups, retainedIncomingGroups)
-    val mergedPublicTrackers = mergeRetainedTrackerItems(publicTrackers, retainedPublicTrackers)
-    val mergedPublicGroups = mergeRetainedGroupItems(publicGroups, retainedPublicGroups)
+    val filteredSharedItems = filterSharedSurfaceItemsForSearch(sharedItemsWithPending, sharedListQuery)
+    val mergedIncomingTrackers = mergeQueuedTrackerItems(incomingTrackers, queuedIncomingTrackers)
+    val mergedIncomingGroups = mergeQueuedGroupItems(incomingGroups, queuedIncomingGroups)
+    val mergedPublicTrackers = mergeQueuedTrackerItems(publicTrackers, queuedPublicTrackers)
+    val mergedPublicGroups = mergeQueuedGroupItems(publicGroups, queuedPublicGroups)
     val filteredOnMyMapTrackers = discoverOnMyMapTrackers.filter { item ->
         matchesTrackerSearch(discoverOnMapQuery, item.name, item.owner_email)
     }
@@ -176,34 +175,34 @@ fun filterSharedSurfaceItemsForSearch(
     }
 }
 
-private fun applyOptimisticSharedItems(
+private fun applyPendingSharedItems(
     sharedItems: List<SharedSurfaceItem>,
-    optimisticTrackerAdds: Map<String, Tracker>,
-    optimisticTrackerRemovals: Set<String>,
+    pendingTrackerAdds: Map<String, Tracker>,
+    pendingTrackerRemovals: Set<String>,
 ): List<SharedSurfaceItem> {
     val base = sharedItems.filterNot { item ->
-        item is SharedSurfaceItem.TrackerItem && optimisticTrackerRemovals.contains(item.tracker.id)
+        item is SharedSurfaceItem.TrackerItem && pendingTrackerRemovals.contains(item.tracker.id)
     }
     val existingTrackerIds = base.mapNotNull { (it as? SharedSurfaceItem.TrackerItem)?.tracker?.id }.toSet()
-    val optimisticAddItems = optimisticTrackerAdds.values
+    val pendingAddItems = pendingTrackerAdds.values
         .asSequence()
         .filterNot { tracker ->
-            optimisticTrackerRemovals.contains(tracker.id) || existingTrackerIds.contains(tracker.id)
+            pendingTrackerRemovals.contains(tracker.id) || existingTrackerIds.contains(tracker.id)
         }
         .map { tracker -> SharedSurfaceItem.TrackerItem(tracker) }
         .toList()
-    return (base + optimisticAddItems).sortedWith(
+    return (base + pendingAddItems).sortedWith(
         NaturalSort.byName(Locale.getDefault()) { it.sortName }
     )
 }
 
-private fun mergeRetainedTrackerItems(
+private fun mergeQueuedTrackerItems(
     base: List<AvailableToAddItem>,
-    retained: List<AvailableToAddItem>,
+    queued: List<AvailableToAddItem>,
 ): List<AvailableToAddItem> {
     val byId = LinkedHashMap<String, AvailableToAddItem>()
     base.forEach { item -> byId[normalizeSharedId(item.id)] = item }
-    retained.forEach { item ->
+    queued.forEach { item ->
         val id = normalizeSharedId(item.id)
         if (!byId.containsKey(id)) byId[id] = item
     }
@@ -216,13 +215,13 @@ private fun mergeRetainedTrackerItems(
         )
 }
 
-private fun mergeRetainedGroupItems(
+private fun mergeQueuedGroupItems(
     base: List<AvailableToAddGroup>,
-    retained: List<AvailableToAddGroup>,
+    queued: List<AvailableToAddGroup>,
 ): List<AvailableToAddGroup> {
     val byId = LinkedHashMap<String, AvailableToAddGroup>()
     base.forEach { group -> byId[normalizeSharedId(group.id)] = group }
-    retained.forEach { group ->
+    queued.forEach { group ->
         val id = normalizeSharedId(group.id)
         if (!byId.containsKey(id)) byId[id] = group
     }

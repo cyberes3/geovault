@@ -5,28 +5,29 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+import com.geovault.tracker.map.MapTrailEngine
 class TrackerMapPointProvenancePolicyTest {
 
     @Test
     fun isLiveOverlay_negativeIdServerGeometry_isHistorical() {
         val point = queued(
             id = -1L,
-            prov = TrackerMapPointProvenancePolicy.PROVENANCE_SERVER_GEOMETRY,
+            prov = MapTrailEngine.PROVENANCE_SERVER_GEOMETRY,
         )
 
-        assertFalse(TrackerMapPointProvenancePolicy.isLiveOverlay(point))
+        assertFalse(MapTrailEngine.isLiveOverlay(point))
     }
 
     @Test
     fun isLiveOverlay_runtimeLocalAndRemoteStream_areLive() {
         assertTrue(
-            TrackerMapPointProvenancePolicy.isLiveOverlay(
-                queued(id = 0L, prov = TrackerMapPointProvenancePolicy.PROVENANCE_LOCAL_GPS_RUNTIME)
+            MapTrailEngine.isLiveOverlay(
+                queued(id = 0L, prov = MapTrailEngine.PROVENANCE_LOCAL_GPS_RUNTIME)
             )
         )
         assertTrue(
-            TrackerMapPointProvenancePolicy.isLiveOverlay(
-                queued(id = 0L, prov = TrackerMapPointProvenancePolicy.PROVENANCE_REMOTE_STREAM)
+            MapTrailEngine.isLiveOverlay(
+                queued(id = 0L, prov = MapTrailEngine.PROVENANCE_REMOTE_STREAM)
             )
         )
     }

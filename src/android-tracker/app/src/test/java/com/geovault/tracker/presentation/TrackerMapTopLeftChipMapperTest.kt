@@ -2,10 +2,10 @@ package com.geovault.tracker.presentation
 
 import com.geovault.tracker.R
 import com.geovault.tracker.Tracker
-import com.geovault.tracker.policy.TrackPointEvent
+import com.geovault.tracker.domain.TrackPoint
 import com.geovault.tracker.policy.TrackPointSource
-import com.geovault.tracker.services.RecordingRuntime
-import com.geovault.tracker.services.TrackingRuntimeSnapshot
+import com.geovault.tracker.positioning.RecordingRuntime
+import com.geovault.tracker.positioning.TrackingRuntimeSnapshot
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -109,7 +109,12 @@ class TrackerMapTopLeftChipMapperTest {
             ),
         )
 
-        val result = mapper.map(state, emptyList()) as TrackerMapTopLeftChipUiModel.Visible
+        val result = mapper.map(
+            state,
+            emptyList(),
+            selectedTrackerId = "selected",
+            selectedTrackerName = "Selected",
+        ) as TrackerMapTopLeftChipUiModel.Visible
 
         assertEquals(TrackerMapTopLeftChipMode.SINGLE_TRACKER, result.mode)
         assertFalse(result.showReset)
@@ -127,7 +132,12 @@ class TrackerMapTopLeftChipMapperTest {
             ),
         )
 
-        val result = mapper.map(state, emptyList()) as TrackerMapTopLeftChipUiModel.Visible
+        val result = mapper.map(
+            state,
+            emptyList(),
+            selectedTrackerId = "selected",
+            selectedTrackerName = "Selected",
+        ) as TrackerMapTopLeftChipUiModel.Visible
 
         assertTrue(result.showReset)
         assertEquals(TrackerMapTopLeftChipText.Value("Other"), result.title)
@@ -173,7 +183,12 @@ class TrackerMapTopLeftChipMapperTest {
             runtime = TrackingRuntimeSnapshot(selectedTrackerId = "tracker2", selectedTrackerName = "Bob"),
         ).copy(unavailableTrackerNotice = TrackerMapUnavailableNotice(trackerId = "tracker1", trackerName = "Alice"))
 
-        val result = mapper.map(state, emptyList()) as TrackerMapTopLeftChipUiModel.Visible
+        val result = mapper.map(
+            state,
+            emptyList(),
+            selectedTrackerId = "tracker2",
+            selectedTrackerName = "Bob",
+        ) as TrackerMapTopLeftChipUiModel.Visible
 
         assertEquals(TrackerMapTopLeftChipText.Value("Bob"), result.title)
     }
@@ -233,7 +248,12 @@ class TrackerMapTopLeftChipMapperTest {
                 updated_at = 1_700_000_000_000L,
             )
         )
-        val result = mapper.map(state, roster) as TrackerMapTopLeftChipUiModel.Visible
+        val result = mapper.map(
+            state,
+            roster,
+            selectedTrackerId = "a",
+            selectedTrackerName = "A",
+        ) as TrackerMapTopLeftChipUiModel.Visible
         assertNull(result.subtitle)
     }
 
@@ -260,7 +280,12 @@ class TrackerMapTopLeftChipMapperTest {
                 updated_at = 1_700_000_000_000L,
             )
         )
-        val result = mapper.map(state, roster) as TrackerMapTopLeftChipUiModel.Visible
+        val result = mapper.map(
+            state,
+            roster,
+            selectedTrackerId = "other",
+            selectedTrackerName = "Other",
+        ) as TrackerMapTopLeftChipUiModel.Visible
         val rel = result.subtitle as TrackerMapTopLeftChipText.RelativeLastData
         assertEquals(sentAt, rel.lastDataEpochMs)
     }
@@ -286,7 +311,19 @@ class TrackerMapTopLeftChipMapperTest {
                 updated_at = updatedAt,
             )
         )
-        val result = mapper.map(state, roster) as TrackerMapTopLeftChipUiModel.Visible
+        val result = mapper.map(
+            state,
+            roster,
+            liveHeads = mapOf(
+                "other" to TrackPoint(
+                    provenance = TrackPointSource.REMOTE_STREAM,
+                    trackerId = "other",
+                    latitude = 37.0,
+                    longitude = -122.0,
+                    timeMs = updatedAt,
+                ),
+            ),
+        ) as TrackerMapTopLeftChipUiModel.Visible
         val sub = result.subtitle
         assertTrue(sub is TrackerMapTopLeftChipText.RelativeLastData)
         val rel = sub as TrackerMapTopLeftChipText.RelativeLastData
@@ -355,7 +392,7 @@ class TrackerMapTopLeftChipMapperTest {
             mode = TrackerMapDisplayMode.SINGLE_SESSION,
             displayedTrackerId = "other",
             displayedTrackerName = "Other",
-            streamTargetIds = setOf("other"),
+            activeStreamedTrackerIds = setOf("other"),
             runtime = TrackingRuntimeSnapshot(
                 selectedTrackerId = "sel",
                 selectedTrackerName = "Sel",
@@ -411,16 +448,6 @@ class TrackerMapTopLeftChipMapperTest {
                 selectedTrackerId = "sel",
                 selectedTrackerName = "Sel",
             ),
-        ).copy(
-            remoteLastPoints = mapOf(
-                "other" to TrackPointEvent(
-                    source = TrackPointSource.REMOTE_STREAM,
-                    trackId = "other",
-                    lon = -122.0,
-                    lat = 37.0,
-                    timestampMs = 1_700_000_000_000L,
-                )
-            )
         )
         val roster = listOf(
             Tracker(
@@ -448,7 +475,6 @@ class TrackerMapTopLeftChipMapperTest {
         currentGroupId: String = "",
         groupModeOptions: List<TrackerMapGroupModeOption> = emptyList(),
         activeStreamedTrackerIds: Set<String> = emptySet(),
-        streamTargetIds: Set<String> = emptySet(),
         runtime: TrackingRuntimeSnapshot = TrackingRuntimeSnapshot(),
     ): TrackerMapUiState {
         return TrackerMapUiState(
@@ -459,7 +485,6 @@ class TrackerMapTopLeftChipMapperTest {
             currentGroupId = currentGroupId,
             groupModeOptions = groupModeOptions,
             activeStreamedTrackerIds = activeStreamedTrackerIds,
-            streamTargetIds = streamTargetIds,
         )
     }
 }
@@ -471,6 +496,6 @@ private fun TrackerMapTopLeftChipMapper.map(
     return map(
         state = state,
         roster = roster,
-        acceptedRemoteTrackerIds = state.streamTargetIds + state.activeStreamedTrackerIds,
+        acceptedRemoteTrackerIds = state.activeStreamedTrackerIds,
     )
 }

@@ -3,18 +3,19 @@ package com.geovault.tracker.presentation
 import com.geovault.common.maps.core.geoVaultLatLngBoundsForPoints
 import com.geovault.common.maps.core.isValidMapLibreGeographicLatLng
 import com.geovault.tracker.Tracker
+import com.geovault.tracker.map.MapRenderMath
 import com.geovault.tracker.db.QueuedLocation
-import com.geovault.tracker.policy.TrackPointEvent
-import com.geovault.tracker.services.TrackingRuntimeSnapshot
+import com.geovault.tracker.domain.TrackPoint
+import com.geovault.tracker.positioning.TrackingRuntimeSnapshot
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.geometry.LatLngBounds
 
-data class TrackerMapGroupBoundsInput(
+internal data class TrackerMapGroupBoundsInput(
     val visibleTrackerIds: Set<String>,
     val liveActiveFitEnabled: Boolean,
     val fitOnlyActiveTrackers: Boolean,
     val trailsByTracker: Map<String, List<QueuedLocation>>,
-    val remoteLastPoints: Map<String, TrackPointEvent>,
+    val remoteLastPoints: Map<String, TrackPoint>,
     val acceptedRemoteTrackerIds: Set<String>,
     val trackers: List<Tracker>,
     val nowMs: Long,
@@ -57,7 +58,7 @@ sealed class TrackerMapGroupBoundsResolution {
  * Replaces split logic between [TrackerMapViewModel] and [TrackerMapLiveActiveFitPolicy] so lock-on
  * active fit can frame roster live positions immediately and never falls back to stale unions.
  */
-object TrackerMapGroupBoundsResolver {
+internal object TrackerMapGroupBoundsResolver {
 
     const val ACTIVE_TRACKER_WINDOW_MS = 10 * 60 * 1000L
 
@@ -135,9 +136,9 @@ object TrackerMapGroupBoundsResolver {
         trackerIds: Set<String>,
     ): LatLngBounds? {
         val trails = input.trailsByTracker.filterKeys { it.trim() in trackerIds }
-        val trailBounds = TrackerMapStateTransforms.multiTrailBounds(trails)
+        val trailBounds = MapRenderMath.multiTrailBounds(trails)
         val headBounds = resolvedHeadBounds(input, trackerIds)
-        return TrackerMapStateTransforms.mergeBounds(trailBounds, headBounds)
+        return MapRenderMath.mergeBounds(trailBounds, headBounds)
     }
 
     private fun resolvedHeadBounds(
@@ -145,18 +146,8 @@ object TrackerMapGroupBoundsResolver {
         trackerIds: Set<String>,
     ): LatLngBounds? {
         val points = trackerIds.mapNotNull { trackerId ->
-            val tracker = input.trackers.firstOrNull { it.id.trim() == trackerId.trim() }
-            val resolved = TrackerMapLastPointResolver.resolve(
-                state = TrackerMapUiState(
-                    allQueueTrailsByTracker = input.trailsByTracker,
-                    remoteLastPoints = input.remoteLastPoints,
-                    displayedTrackerId = trackerId,
-                    runtime = input.runtime,
-                ),
-                trackerId = trackerId,
-                tracker = tracker,
-                acceptedRemoteTrackerIds = input.acceptedRemoteTrackerIds,
-            ) ?: return@mapNotNull null
+            val resolved = MapRenderMath.resolveLastPoint(trackerId, input.remoteLastPoints)
+                ?: return@mapNotNull null
             if (!isValidMapLibreGeographicLatLng(resolved.latitude, resolved.longitude)) {
                 return@mapNotNull null
             }
@@ -168,7 +159,7 @@ object TrackerMapGroupBoundsResolver {
     private fun resolveActiveTrackerIds(
         candidateTrackerIds: Set<String>,
         trailsByTracker: Map<String, List<QueuedLocation>>,
-        remoteLastPoints: Map<String, TrackPointEvent>,
+        remoteLastPoints: Map<String, TrackPoint>,
         trackers: List<Tracker>,
         nowMs: Long,
     ): Set<String> {
@@ -192,7 +183,7 @@ object TrackerMapGroupBoundsResolver {
     fun isTrackerActive(
         trackerId: String,
         trailsByTracker: Map<String, List<QueuedLocation>>,
-        remoteLastPoints: Map<String, TrackPointEvent>,
+        remoteLastPoints: Map<String, TrackPoint>,
         trackers: List<Tracker>,
         nowMs: Long,
     ): Boolean {
@@ -208,21 +199,22 @@ object TrackerMapGroupBoundsResolver {
     private fun resolveTrackerLastUpdateMs(
         trackerId: String,
         trailsByTracker: Map<String, List<QueuedLocation>>,
-        remoteLastPoints: Map<String, TrackPointEvent>,
+        remoteLastPoints: Map<String, TrackPoint>,
         trackers: List<Tracker>,
     ): Long? {
-        val tracker = trackers.firstOrNull { it.id.trim() == trackerId.trim() }
-        val resolved = TrackerMapLastPointResolver.resolve(
-            state = TrackerMapUiState(
-                allQueueTrailsByTracker = trailsByTracker,
-                remoteLastPoints = remoteLastPoints,
-                displayedTrackerId = trackerId,
-            ),
-            trackerId = trackerId,
-            tracker = tracker,
-            acceptedRemoteTrackerIds = remoteLastPoints.keys,
-        )
-        return resolved?.lastUpdatedMs
+        val normalizedId = trackerId.trim()
+        val headMs = remoteLastPoints.entries
+            .firstOrNull { it.key.trim() == normalizedId }
+            ?.value
+            ?.timeMs
+            ?.takeIf { it > 0L }
+        if (headMs != null) return headMs
+        val trailMs = trailsByTracker.entries
+            .firstOrNull { it.key.trim() == normalizedId }
+            ?.value
+            ?.maxOfOrNull { it.time }
+            ?.takeIf { it > 0L }
+        return trailMs
     }
 
     private fun TrackerMapGroupBoundsInput.normalizedToVisibleTrackers(): TrackerMapGroupBoundsInput {
