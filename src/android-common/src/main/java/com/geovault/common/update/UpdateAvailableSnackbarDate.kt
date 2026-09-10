@@ -7,7 +7,7 @@ import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
 
 object UpdateAvailableSnackbarDate {
-    private val monthDayYear: DateTimeFormatter = DateTimeFormatter.ofPattern("M-d-yyyy")
+    private val monthDayYear: DateTimeFormatter = DateTimeFormatter.ofPattern("MM-dd-yyyy")
 
     fun format(versionLabel: String, publishedAtIso: String, unknown: String): String {
         parseVersionLabelDate(versionLabel)?.let { return it.format(monthDayYear) }

@@ -15,17 +15,17 @@ class UpdateAvailableSnackbarDateTest {
             publishedAtIso = "2026-04-27T12:00:00Z",
             unknown = "Unknown",
         )
-        assertEquals("4-26-2026", formatted)
+        assertEquals("04-26-2026", formatted)
     }
 
     @Test
-    fun `omits leading zeros on month and day`() {
+    fun `zero-pads month and day`() {
         val formatted = UpdateAvailableSnackbarDate.format(
             versionLabel = "2026-01-02 abcdef1234",
             publishedAtIso = "",
             unknown = "Unknown",
         )
-        assertEquals("1-2-2026", formatted)
+        assertEquals("01-02-2026", formatted)
     }
 
     @Test
@@ -34,7 +34,7 @@ class UpdateAvailableSnackbarDateTest {
         val expected = Instant.parse(iso)
             .atZone(ZoneId.systemDefault())
             .toLocalDate()
-            .format(DateTimeFormatter.ofPattern("M-d-yyyy"))
+            .format(DateTimeFormatter.ofPattern("MM-dd-yyyy"))
         val formatted = UpdateAvailableSnackbarDate.format(
             versionLabel = "v2",
             publishedAtIso = iso,
