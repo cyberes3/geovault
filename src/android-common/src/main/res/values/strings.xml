@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="gv_update_snackbar_message">A newer %1$s version is available (%2$s).</string>
+    <string name="gv_update_snackbar_message">A newer app version is available (%1$s)</string>
     <string name="gv_update_snackbar_action_details">Details</string>
     <string name="gv_update_dialog_title">Update Available</string>
     <string name="gv_update_download_dialog_title">Download Update</string>

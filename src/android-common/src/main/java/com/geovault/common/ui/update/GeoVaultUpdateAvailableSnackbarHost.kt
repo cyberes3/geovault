@@ -18,6 +18,7 @@ import com.geovault.common.ui.snackbar.GeoVaultSnackbarOverlayDefaults
 import com.geovault.common.update.CustomTabReleasePageLauncher
 import com.geovault.common.update.ReleasePageLauncher
 import com.geovault.common.update.UpdateAvailablePromptComposer
+import com.geovault.common.update.UpdateAvailableSnackbarDate
 import com.geovault.common.update.VersionCheckResult
 
 /**
@@ -37,7 +38,13 @@ fun GeoVaultUpdateAvailableSnackbarHost(
     val context = LocalContext.current
     val releaseLauncher: ReleasePageLauncher = remember(context) { CustomTabReleasePageLauncher(context) }
     val releaseLauncherState by rememberUpdatedState(releaseLauncher)
-    val snackMessage = stringResource(R.string.gv_update_snackbar_message, update.appName, update.versionLabel)
+    val unknownPublished = stringResource(R.string.gv_update_published_unknown)
+    val versionDate = UpdateAvailableSnackbarDate.format(
+        update.versionLabel,
+        update.releasePublishedAtIso,
+        unknownPublished,
+    )
+    val snackMessage = stringResource(R.string.gv_update_snackbar_message, versionDate)
     val detailsLabel = stringResource(R.string.gv_update_snackbar_action_details)
     val model = remember(update.releaseCommitSha, snackMessage, detailsLabel) {
         UpdateAvailablePromptComposer.modelForUpdateAvailable(update, snackMessage, detailsLabel)
