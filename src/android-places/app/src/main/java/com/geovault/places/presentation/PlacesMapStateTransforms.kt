@@ -24,18 +24,17 @@ object PlacesMapStateTransforms {
         return geoVaultLatLngBoundsForPoints(points)
     }
 
-    fun buildRenderState(places: List<Place>, selectedKey: PlaceKey?): MapRenderState {
+    fun buildRenderState(places: List<Place>): MapRenderState {
         val points = places.mapNotNull { place ->
             val location = place.content.location
             if (!location.isValidGeographic()) return@mapNotNull null
-            val isSelected = place.key == selectedKey
             MapRenderPoint(
                 id = place.key.value,
                 latitude = location.latitude,
                 longitude = location.longitude,
                 title = place.content.name,
-                iconImageId = if (isSelected) CommonMapIconIds.MARKER_SELECTED else CommonMapIconIds.MARKER_DEFAULT,
-                iconSize = if (isSelected) 1.08f else 1f,
+                iconImageId = CommonMapIconIds.MARKER_DEFAULT,
+                iconSize = 1f,
             )
         }
         return MapRenderState(points = points)

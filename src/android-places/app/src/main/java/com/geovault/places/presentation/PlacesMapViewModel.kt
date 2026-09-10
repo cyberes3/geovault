@@ -12,7 +12,6 @@ import com.geovault.places.data.PlacesStore
 import com.geovault.places.di.PlacesAppServices
 import com.geovault.places.domain.PlacesListProjection
 import com.geovault.places.model.Place
-import com.geovault.places.model.PlaceKey
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
@@ -51,8 +50,8 @@ class PlacesMapViewModel(
         return PlacesMapStateTransforms.featureBounds(places.value)
     }
 
-    fun buildMapRenderState(selectedKey: PlaceKey?): MapRenderState {
-        return PlacesMapStateTransforms.buildRenderState(places.value, selectedKey)
+    fun buildMapRenderState(): MapRenderState {
+        return PlacesMapStateTransforms.buildRenderState(places.value)
     }
 
     fun selectedPlaceLabel(place: Place?): String {

@@ -44,6 +44,12 @@ data class GeoJsonRenderConfig(
      * while still reserving placement space so later text can yield to them.
      */
     val overlayPointLabelsAllowOverlap: Boolean = false,
+    /**
+     * When set, [GeoJsonRenderPlugin] owns a dedicated 0–1 point source for the selected
+     * marker. [MapRenderState] must not bake selected styling into the main collection.
+     * Taps paint this overlay immediately via [GeoJsonRenderPlugin.setSelectedPointId].
+     */
+    val selectionOverlay: GeoJsonSelectionOverlayConfig? = null,
     val useSynchronousSourceUpdates: Boolean = false,
     /**
      * When true (the default), point symbol icon and text use zero-duration opacity transitions

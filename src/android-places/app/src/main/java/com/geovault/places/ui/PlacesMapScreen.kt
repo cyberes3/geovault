@@ -47,6 +47,7 @@ import com.geovault.common.maps.location.rememberGeoVaultMapLocationPermissionSt
 import com.geovault.common.maps.location.rememberGeoVaultMapUserLocationPlugin
 import com.geovault.common.maps.render.GeoJsonRenderPlugin
 import com.geovault.common.maps.render.GeoJsonRenderConfig
+import com.geovault.common.maps.render.GeoJsonSelectionOverlayConfig
 import com.geovault.common.maps.render.GeoVaultRenderedMapHitKind
 import com.geovault.common.maps.ui.GeoVaultMapBottomActionPanel
 import com.geovault.common.maps.ui.GeoVaultMapFabColumn
@@ -106,6 +107,7 @@ fun PlacesMapScreen(
                 showPointLabelsAndIcons = true,
                 showPointTextLabels = true,
                 synchronousGeoJsonApplication = true,
+                selectionOverlay = GeoJsonSelectionOverlayConfig(),
             ),
             context = context,
         )
@@ -155,7 +157,7 @@ fun PlacesMapScreen(
     GeoVaultMapPuckOverlapEffect(
         map = map,
         plugin = locationPlugin,
-        iconLayerIds = listOf(GeoJsonRenderPlugin.pointsIconLayerId("places-main-map")),
+        iconLayerIds = renderPlugin.puckOverlapIconLayerIds(),
     )
     val layerFabAction = remember(map) { geoVaultLayerToggleFabAction(map) }
     val zoomInFabAction = remember(map) { geoVaultZoomInFabAction(map) }
@@ -182,8 +184,11 @@ fun PlacesMapScreen(
         }
     }
 
-    LaunchedEffect(places, selectedKey) {
-        renderPlugin.setRenderState(viewModel.buildMapRenderState(selectedKey))
+    LaunchedEffect(places) {
+        renderPlugin.setRenderState(viewModel.buildMapRenderState())
+    }
+    LaunchedEffect(selectedKey) {
+        renderPlugin.setSelectedPointId(selectedKey?.value)
     }
 
     var mapInitialFrameReady by remember { mutableStateOf(false) }

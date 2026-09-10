@@ -40,19 +40,16 @@ class PlacesMapStateTransformsTest {
     }
 
     @Test
-    fun buildRenderStateUsesPlaceKeyAndSelectedStyle() {
+    fun buildRenderStateUsesDefaultMarkerForEveryPlace() {
         val first = samplePlace(key = PlaceKey.server(1), serverId = 1, name = "A", latitude = 10.0, longitude = 11.0)
         val second = samplePlace(key = PlaceKey.server(2), serverId = 2, name = "B", latitude = 12.0, longitude = 13.0)
 
-        val renderState = PlacesMapStateTransforms.buildRenderState(
-            places = listOf(first, second),
-            selectedKey = second.key,
-        )
+        val renderState = PlacesMapStateTransforms.buildRenderState(listOf(first, second))
         val selected = renderState.points.first { it.id == second.key.value }
         val normal = renderState.points.first { it.id == first.key.value }
 
-        assertEquals(CommonMapIconIds.MARKER_SELECTED, selected.iconImageId)
-        assertEquals(1.08f, selected.iconSize)
+        assertEquals(CommonMapIconIds.MARKER_DEFAULT, selected.iconImageId)
+        assertEquals(1f, selected.iconSize)
         assertEquals(CommonMapIconIds.MARKER_DEFAULT, normal.iconImageId)
         assertEquals(1f, normal.iconSize)
     }
@@ -62,7 +59,7 @@ class PlacesMapStateTransformsTest {
         val invalid = samplePlace(latitude = 100.0, longitude = 20.0)
         val valid = samplePlace(key = PlaceKey.server(2), serverId = 2, name = "Ok")
 
-        val renderState = PlacesMapStateTransforms.buildRenderState(listOf(invalid, valid), null)
+        val renderState = PlacesMapStateTransforms.buildRenderState(listOf(invalid, valid))
 
         assertEquals(listOf(valid.key.value), renderState.points.map { it.id })
     }

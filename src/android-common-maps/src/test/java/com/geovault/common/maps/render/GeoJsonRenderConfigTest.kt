@@ -28,4 +28,9 @@ class GeoJsonRenderConfigTest {
     fun polygonOutlineStyle_defaultsToSimple() {
         assertEquals(PolygonOutlineStyle.SIMPLE, GeoJsonRenderConfig().polygonOutlineStyle)
     }
+
+    @Test
+    fun selectionOverlay_defaultsToDisabled() {
+        assertEquals(null, GeoJsonRenderConfig().selectionOverlay)
+    }
 }
