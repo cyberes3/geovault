@@ -12,7 +12,7 @@ import com.geovault.common.sort.NaturalSort
 import com.geovault.tracker.R
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.toLooseMap
-import com.geovault.tracker.data.TrackerApiFailureMessages
+import com.geovault.common.net.GeoVaultApiFailureMessages
 import com.geovault.tracker.data.TrackerManagementRepository
 import com.geovault.tracker.di.TrackerAppServices
 import com.geovault.tracker.presentation.ParamsProjector
@@ -176,7 +176,7 @@ class TrackerParamsViewModel(
                     it.copy(
                         showBlockingLoader = false,
                         isRefreshing = false,
-                        errorMessage = TrackerApiFailureMessages.format(app, e),
+                        errorMessage = GeoVaultApiFailureMessages.format(e),
                     )
                 }
             }

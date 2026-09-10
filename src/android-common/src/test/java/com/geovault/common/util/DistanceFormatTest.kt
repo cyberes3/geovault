@@ -55,4 +55,18 @@ class DistanceFormatTest {
     fun displayMagnitudeToMetersOrNull_returnsNullForInvalidNumber() {
         assertNull(DistanceFormat.displayMagnitudeToMetersOrNull("abc", MeasurementSystem.METRIC))
     }
+
+    @Test
+    fun squareMetersToSquareFeet_usesFeetPerMeterSquared() {
+        assertEquals(
+            DistanceFormat.FEET_PER_METER * DistanceFormat.FEET_PER_METER,
+            DistanceFormat.squareMetersToSquareFeet(1.0),
+            0.0000001,
+        )
+    }
+
+    @Test
+    fun formatMilesOneDecimal_usesTenths() {
+        assertEquals("1.0 mi", DistanceFormat.formatMilesOneDecimal(DistanceFormat.METERS_PER_STATUTE_MILE).text)
+    }
 }

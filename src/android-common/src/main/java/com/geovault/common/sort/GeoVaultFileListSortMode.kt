@@ -17,7 +17,7 @@ enum class GeoVaultFileListSortMode(val label: String) {
     }
 }
 
-enum class GeoVaultFileListSortScope {
-    DATA_FILES,
-    COORDINATE_SYSTEMS,
+enum class GeoVaultFileListSortScope(val key: String) {
+    DATA_FILES("data_files"),
+    COORDINATE_SYSTEMS("coordinate_systems"),
 }

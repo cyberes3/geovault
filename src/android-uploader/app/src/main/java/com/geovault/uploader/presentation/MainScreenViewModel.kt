@@ -6,7 +6,6 @@ import androidx.lifecycle.viewModelScope
 import com.geovault.common.auth.GeoVaultAccountUiState
 import com.geovault.common.auth.GeoVaultConnectionStatus
 import com.geovault.common.auth.GeoVaultConnectionValidator
-import com.geovault.common.messages.GeoVaultUploadMessageFormatter
 import com.geovault.common.ui.model.GeoVaultActionRenderModel
 import com.geovault.common.ui.model.GeoVaultStatusRenderModel
 import com.geovault.common.ui.model.GeoVaultStatusVisualState
@@ -124,19 +123,19 @@ class MainScreenViewModel(
                 is GeoVaultConnectionStatus.Connected -> GeoVaultStatusRenderModel(
                     visualState = GeoVaultStatusVisualState.Success,
                     title = null,
-                    message = GeoVaultUploadMessageFormatter.validationConnected(),
+                    message = UploaderMessageFormatter.validationConnected(),
                     primaryAction = GeoVaultActionRenderModel(label = "Choose File"),
                 )
                 GeoVaultConnectionStatus.Unauthorized -> GeoVaultStatusRenderModel(
                     visualState = GeoVaultStatusVisualState.Error,
                     title = "Validation Failed",
-                    message = GeoVaultUploadMessageFormatter.validationUnauthorized(),
+                    message = UploaderMessageFormatter.validationUnauthorized(),
                     secondaryAction = GeoVaultActionRenderModel(label = "Settings"),
                 )
                 GeoVaultConnectionStatus.Unreachable -> GeoVaultStatusRenderModel(
                     visualState = GeoVaultStatusVisualState.Error,
                     title = "Validation Failed",
-                    message = GeoVaultUploadMessageFormatter.validationConnectionFailed(
+                    message = UploaderMessageFormatter.validationConnectionFailed(
                         "Could not reach server",
                     ),
                     secondaryAction = GeoVaultActionRenderModel(label = "Settings"),

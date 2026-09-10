@@ -48,4 +48,17 @@ data class MapRenderState(
     val points: List<MapRenderPoint> = emptyList(),
     val lines: List<MapRenderLine> = emptyList(),
     val polygons: List<MapRenderPolygon> = emptyList(),
-)
+) {
+    fun vertexCount(): Int {
+        var count = points.size
+        for (line in lines) {
+            count += line.coordinates.size
+        }
+        for (polygon in polygons) {
+            for (ring in polygon.rings) {
+                count += ring.size
+            }
+        }
+        return count
+    }
+}

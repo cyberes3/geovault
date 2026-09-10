@@ -23,9 +23,10 @@ class GeoVaultApiFailure(
 
     companion object {
         fun fromOkHttp(response: OkHttpResponse, operation: String? = null, body: String? = null): GeoVaultApiFailure {
+            val raw = body ?: runCatching { response.body.string() }.getOrNull()
             return GeoVaultApiFailure(
                 httpCode = response.code,
-                serverMessage = parseServerMessage(body),
+                serverMessage = parseServerMessage(raw),
                 operation = operation,
             )
         }

@@ -12,7 +12,7 @@ import com.geovault.tracker.R
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.data.GroupManagementRepository
 import com.geovault.tracker.data.PendingTransaction
-import com.geovault.tracker.data.TrackerApiFailureMessages
+import com.geovault.common.net.GeoVaultApiFailureMessages
 import com.geovault.tracker.data.TrackerBootstrapOutcome
 import com.geovault.tracker.data.TrackerManagementRepository
 import com.geovault.tracker.data.CatalogBootstrap
@@ -674,7 +674,7 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private fun apiFailureMessage(failure: GeoVaultApiFailure): String =
-        TrackerApiFailureMessages.format(getApplication(), failure)
+        GeoVaultApiFailureMessages.format(failure)
 
     private fun networkApiFailure(): GeoVaultApiFailure =
         GeoVaultApiFailure.fromThrowable(IOException())

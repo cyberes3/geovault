@@ -12,7 +12,7 @@ import com.geovault.common.update.GeoVaultAppUpdatePromptBinding
 import com.geovault.common.update.VersionCheckResult
 import com.geovault.tracker.BuildConfig
 import com.geovault.tracker.di.TrackerAppServices
-import com.geovault.tracker.data.TrackerApiFailureMessages
+import com.geovault.common.net.GeoVaultApiFailureMessages
 import com.geovault.tracker.data.TrackerBootstrapOutcome
 import com.geovault.tracker.data.CatalogBootstrap
 import kotlinx.coroutines.Deferred
@@ -257,7 +257,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     private fun emitGeometryFailureIfNeeded(outcome: TrackerBootstrapOutcome) {
         val failure = outcome.geometryFailure ?: return
         GeoVaultCaptureLog.w(TAG, "Catalog geometry fetch failed error=$failure", failure)
-        emitHostMessage(TrackerApiFailureMessages.format(app, failure))
+        emitHostMessage(GeoVaultApiFailureMessages.format(failure))
     }
 
     private fun emitHostMessage(message: String) {

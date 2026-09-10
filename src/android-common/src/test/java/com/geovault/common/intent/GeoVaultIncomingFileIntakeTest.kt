@@ -4,7 +4,8 @@ import android.content.Intent
 import android.net.Uri
 import com.geovault.common.files.GeoVaultFileIngest
 import com.geovault.common.files.GeoVaultFileRef
-import com.geovault.common.files.GeoVaultUploadFileTypes
+import com.geovault.common.files.GeoVaultFileTypeCatalog
+import com.geovault.common.files.GeoVaultStandardFileTypes
 import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -61,11 +62,21 @@ class GeoVaultIncomingFileIntakeTest {
         assertEquals(listOf(pdf.name), result.rejectedFileNames)
     }
 
+    private companion object {
+        val TEST_GEOSPATIAL_CATALOG = GeoVaultFileTypeCatalog(
+            listOf(
+                GeoVaultStandardFileTypes.kml,
+                GeoVaultStandardFileTypes.kmz,
+                GeoVaultStandardFileTypes.gpx,
+            ),
+        )
+    }
+
     private fun intake(): GeoVaultIncomingFileIntake {
         return GeoVaultIncomingFileIntake(
             GeoVaultFileIngest(
                 context = RuntimeEnvironment.getApplication(),
-                catalog = GeoVaultUploadFileTypes.catalog,
+                catalog = TEST_GEOSPATIAL_CATALOG,
                 stageLongLivedGrants = false,
             )
         )

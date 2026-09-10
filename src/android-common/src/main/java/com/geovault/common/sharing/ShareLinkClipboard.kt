@@ -11,11 +11,9 @@ class ShareLinkClipboard(context: Context) {
     private val clipboard = ClipboardCopyHelper(appContext)
 
     fun copyRelativePath(origin: String, relativePath: String, toastMessage: String): Boolean {
-        val trimmedOrigin = origin.trimEnd('/')
-        val path = if (relativePath.startsWith("/")) relativePath else "/$relativePath"
         return clipboard.copyTextWithToast(
             context = appContext,
-            text = "$trimmedOrigin$path",
+            text = ShareUrl.absolute(origin, relativePath),
             label = "Share link",
             toastMessage = toastMessage,
         )

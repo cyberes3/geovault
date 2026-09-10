@@ -26,6 +26,7 @@ object DistanceFormat {
     const val FEET_PER_STATUTE_MILE = 5280.0
     const val METERS_PER_KILOMETER = 1000.0
     const val METERS_PER_STATUTE_MILE = FEET_PER_STATUTE_MILE / FEET_PER_METER
+    const val SQUARE_FEET_PER_SQUARE_METER = FEET_PER_METER * FEET_PER_METER
 
     /** Navigation overlay stays in feet until strictly more than this many statute miles. */
     const val NAVIGATION_MILES_THRESHOLD = 0.1
@@ -35,6 +36,12 @@ object DistanceFormat {
     fun feetToMeters(feet: Double): Double = feet / FEET_PER_METER
 
     fun metersToMiles(meters: Double): Double = metersToFeet(meters) / FEET_PER_STATUTE_MILE
+
+    fun squareMetersToSquareFeet(squareMeters: Double): Double =
+        squareMeters * SQUARE_FEET_PER_SQUARE_METER
+
+    fun formatMilesOneDecimal(meters: Double): FormattedDistance =
+        FormattedDistance(String.format(Locale.US, "%.1f", metersToMiles(meters)), DistanceUnit.MILE)
 
     fun milesToMeters(miles: Double): Double = miles * METERS_PER_STATUTE_MILE
 

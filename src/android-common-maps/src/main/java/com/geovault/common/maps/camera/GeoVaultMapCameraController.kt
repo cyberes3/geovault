@@ -2,6 +2,7 @@ package com.geovault.common.maps.camera
 
 import com.geovault.common.maps.core.GeoVaultBaseMap
 import com.geovault.common.maps.core.animateCameraToFitLatLngBounds
+import com.geovault.common.maps.core.animateCameraToHomeFit
 import com.geovault.common.maps.core.geoVaultCenterCameraPreserveZoom
 import com.geovault.common.maps.core.geoVaultLatLngBoundsForPoints
 import com.geovault.common.maps.core.moveCameraToFitLatLngBounds
@@ -24,6 +25,28 @@ class GeoVaultMapCameraController(
 ) {
     fun snapFitAll(renderState: MapRenderState, paddingPx: IntArray): Boolean {
         return snapFitPoints(renderStatePoints(renderState), paddingPx)
+    }
+
+    fun fitLatLngBounds(
+        bounds: LatLngBounds,
+        paddingPx: IntArray,
+        animate: Boolean = false,
+    ) {
+        if (map.maplibreMap == null) return
+        if (animate) {
+            map.animateCameraToFitLatLngBounds(bounds, paddingPx)
+        } else {
+            map.moveCameraToFitLatLngBounds(bounds, paddingPx)
+        }
+    }
+
+    fun animateHomeFit(
+        bounds: LatLngBounds?,
+        gpsAnchor: LatLng?,
+        paddingPx: IntArray,
+    ) {
+        if (map.maplibreMap == null) return
+        map.animateCameraToHomeFit(bounds, gpsAnchor, paddingPx)
     }
 
     fun snapFitBounds(bounds: LatLngBounds, paddingPx: IntArray): Boolean {

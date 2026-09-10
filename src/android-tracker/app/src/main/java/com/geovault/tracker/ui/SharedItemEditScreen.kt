@@ -1,6 +1,5 @@
 package com.geovault.tracker.ui
 
-import android.content.Context
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,15 +12,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.geovault.common.util.ClipboardCopyHelper
-import com.geovault.common.auth.GeoVaultAuthSession
 import com.geovault.common.ui.components.GeoVaultLoadingSpinner
 import com.geovault.common.ui.components.GeoVaultRequestBottomTabsHidden
 import com.geovault.common.ui.components.GeoVaultSecondaryButton
@@ -114,7 +110,6 @@ fun SharedGroupEditScreen(
 ) {
     GeoVaultRequestBottomTabsHidden(shouldHide = true)
     val context = LocalContext.current
-    val clipboardHelper = remember(context) { ClipboardCopyHelper(context) }
     GeoVaultRegisterBackHandler(
         priority = TrackerBackPriorities.FULL_SCREEN_OVERLAY,
         onBack = {
@@ -156,11 +151,10 @@ fun SharedGroupEditScreen(
             GeoVaultSecondaryButton(
                 text = stringResource(R.string.trackers_action_copy_internal_share_link),
                 onClick = {
-                    copySharedItemLink(
+                    TrackerShareLinks.copy(
                         context = context,
-                        clipboardHelper = clipboardHelper,
                         shareUrl = group.internal_share_url,
-                        label = context.getString(R.string.internal_share_link_clip_label),
+                        toastMessage = context.getString(R.string.internal_share_link_clip_label),
                     )
                 },
                 enabled = !group.internal_share_url.isNullOrBlank(),
@@ -175,16 +169,6 @@ fun SharedGroupEditScreen(
             )
         }
     }
-}
-
-private fun copySharedItemLink(
-    context: Context,
-    clipboardHelper: ClipboardCopyHelper,
-    shareUrl: String?,
-    label: String,
-) {
-    if (shareUrl.isNullOrBlank()) return
-    clipboardHelper.copyText(GeoVaultAuthSession.get().resolveAbsoluteUrl(shareUrl), label)
 }
 
 @Composable

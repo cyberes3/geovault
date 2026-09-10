@@ -20,7 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import com.geovault.common.auth.GeoVaultAccountViewModel
 import com.geovault.common.auth.GeoVaultAuthExtras
-import com.geovault.common.files.GeoVaultUploadFileTypes
+import com.geovault.uploader.files.UploaderFileTypes
 import com.geovault.common.intent.GeoVaultShareCloseAction
 import com.geovault.common.intent.GeoVaultShareClosePolicy
 import com.geovault.common.intent.GeoVaultShareSession
@@ -125,7 +125,7 @@ class MainActivity : ComponentActivity() {
                             state = state,
                             auth = auth,
                             onChooseFileClick = {
-                                chooseFilesLauncher.launch(GeoVaultUploadFileTypes.pickerMimeTypes)
+                                chooseFilesLauncher.launch(UploaderFileTypes.pickerMimeTypes)
                             },
                             onOpenSettings = openSettingsOverlay,
                         )

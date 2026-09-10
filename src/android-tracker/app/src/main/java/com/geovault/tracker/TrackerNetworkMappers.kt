@@ -1,5 +1,7 @@
 package com.geovault.tracker
 
+import com.geovault.common.sharing.ShareId
+import com.geovault.common.sharing.ShareUrl
 import com.google.gson.JsonArray
 import com.google.gson.JsonElement
 import com.google.gson.JsonNull
@@ -27,15 +29,33 @@ fun TrackerDto.toDomainModel(): Tracker {
         share_params_with_world = share_params_with_world,
         owner_email = owner_email,
         subscriber_count = subscriber_count,
-        internal_share_id = internal_share_id,
-        internal_share_url = internal_share_url,
-        world_share_id = world_share_id,
-        world_share_url = world_share_url,
+        internal_share_id = ShareId.parse(internal_share_id)?.value,
+        internal_share_url = resolveTrackShareUrl(internal_share_url, internal_share_id, world = false),
+        world_share_id = ShareId.parse(world_share_id)?.value,
+        world_share_url = resolveTrackShareUrl(world_share_url, world_share_id, world = true),
         shared_with_emails = shared_with_emails
     )
 }
 
 fun List<TrackerDto>.toDomainModels(): List<Tracker> = map { it.toDomainModel() }
+
+fun Group.withValidatedShares(): Group {
+    val internalId = ShareId.parse(internal_share_id)?.value
+    val worldId = ShareId.parse(world_share_id)?.value
+    return copy(
+        internal_share_id = internalId,
+        world_share_id = worldId,
+        internal_share_url = resolveTrackShareUrl(internal_share_url, internalId, world = false),
+        world_share_url = resolveTrackShareUrl(world_share_url, worldId, world = true),
+    )
+}
+
+internal fun resolveTrackShareUrl(url: String?, shareId: String?, world: Boolean): String? {
+    val existing = url?.trim()?.takeIf { it.isNotEmpty() }
+    if (existing != null) return existing
+    val id = ShareId.parse(shareId) ?: return null
+    return if (world) ShareUrl.trackSocial(id.value) else ShareUrl.trackSpa(id.value)
+}
 
 private fun TrackerGeometryStatusDto.toDomainModel(): TrackerGeometryStatus {
     return TrackerGeometryStatus(

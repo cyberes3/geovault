@@ -1,6 +1,5 @@
 package com.geovault.tracker.ui
 
-import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -42,8 +41,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.geovault.common.sort.NaturalSort
-import com.geovault.common.util.ClipboardCopyHelper
-import com.geovault.common.auth.GeoVaultAuthSession
 import com.geovault.common.ui.components.GeoVaultSubViewScaffold
 import com.geovault.common.ui.components.GeoVaultConfirmationDialog
 import com.geovault.common.ui.components.GeoVaultFormSection
@@ -242,7 +239,6 @@ private fun GroupEditOwnerContent(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    val clipboardHelper = remember(context) { ClipboardCopyHelper(context) }
     var showPickUsersDialog by remember { mutableStateOf(false) }
     var shareUserPickerSearch by remember { mutableStateOf("") }
     var showDeleteConfirm by remember { mutableStateOf(false) }
@@ -425,11 +421,10 @@ private fun GroupEditOwnerContent(
                                     GeoVaultSecondaryButton(
                                         text = stringResource(R.string.trackers_action_copy_internal_share_link),
                                         onClick = {
-                                            copyShareLink(
+                                            TrackerShareLinks.copy(
                                                 context = context,
-                                                clipboardHelper = clipboardHelper,
                                                 shareUrl = dialog.internalShareUrlDraft,
-                                                label = context.getString(R.string.internal_share_link_clip_label),
+                                                toastMessage = context.getString(R.string.internal_share_link_clip_label),
                                             )
                                         },
                                         enabled = !isSaving && !dialog.internalShareUrlDraft.isNullOrBlank(),
@@ -440,11 +435,10 @@ private fun GroupEditOwnerContent(
                                         GeoVaultSecondaryButton(
                                             text = stringResource(R.string.trackers_action_copy_world_share_link),
                                             onClick = {
-                                                copyShareLink(
+                                                TrackerShareLinks.copy(
                                                     context = context,
-                                                    clipboardHelper = clipboardHelper,
                                                     shareUrl = dialog.worldShareUrlDraft,
-                                                    label = context.getString(R.string.world_share_link_clip_label),
+                                                    toastMessage = context.getString(R.string.world_share_link_clip_label),
                                                 )
                                             },
                                             enabled = !isSaving && !dialog.worldShareUrlDraft.isNullOrBlank(),
@@ -556,7 +550,6 @@ private fun GroupEditNonOwnerContent(
     onLeaveGroup: () -> Unit,
 ) {
     val context = LocalContext.current
-    val clipboardHelper = remember(context) { ClipboardCopyHelper(context) }
     var showLeaveConfirm by remember { mutableStateOf(false) }
     val destructiveAccent =
         if (isSystemInDarkTheme()) GeoVaultColorTokens.Dark.Error else GeoVaultColorTokens.Error
@@ -605,11 +598,10 @@ private fun GroupEditNonOwnerContent(
             GeoVaultSecondaryButton(
                 text = stringResource(R.string.trackers_action_copy_internal_share_link),
                 onClick = {
-                    copyShareLink(
+                    TrackerShareLinks.copy(
                         context = context,
-                        clipboardHelper = clipboardHelper,
                         shareUrl = dialog.internalShareUrlDraft,
-                        label = context.getString(R.string.internal_share_link_clip_label),
+                        toastMessage = context.getString(R.string.internal_share_link_clip_label),
                     )
                 },
                 enabled = !dialog.internalShareUrlDraft.isNullOrBlank(),
@@ -703,14 +695,4 @@ private fun GroupEditVisibilityPill(
     } else {
         GeoVaultSecondaryButton(text = label, onClick = onClick, enabled = enabled, modifier = m)
     }
-}
-
-private fun copyShareLink(
-    context: Context,
-    clipboardHelper: ClipboardCopyHelper,
-    shareUrl: String?,
-    label: String,
-) {
-    if (shareUrl.isNullOrBlank()) return
-    clipboardHelper.copyText(GeoVaultAuthSession.get().resolveAbsoluteUrl(shareUrl), label)
 }

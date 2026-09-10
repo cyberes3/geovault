@@ -1,7 +1,7 @@
 package com.geovault.uploader.domain
 
 import com.geovault.common.files.GeoVaultFileRef
-import com.geovault.common.messages.GeoVaultUploadMessageFormatter
+import com.geovault.uploader.presentation.UploaderMessageFormatter
 import com.geovault.common.net.GeoVaultApiFailure
 
 data class UploadItemId(val value: String)
@@ -143,7 +143,7 @@ data class UploadSession(
         return copy(
             items = items + (id to item.copy(state = UploadItemState.Uploading)),
             phase = running.copy(currentId = id),
-            statusMessage = GeoVaultUploadMessageFormatter.uploadProgress(
+            statusMessage = UploaderMessageFormatter.uploadProgress(
                 running.workCompleted + 1,
                 running.workTotal,
             ),
@@ -175,7 +175,7 @@ data class UploadSession(
         return copy(
             items = nextItems,
             phase = UploadSessionPhase.Finished(succeeded = succeededCount, failed = failedCount),
-            statusMessage = GeoVaultUploadMessageFormatter.uploadSummary(
+            statusMessage = UploaderMessageFormatter.uploadSummary(
                 succeeded = succeededCount,
                 failed = failedCount,
                 cancelled = false,
@@ -202,7 +202,7 @@ data class UploadSession(
         return copy(
             items = nextItems,
             phase = UploadSessionPhase.Idle,
-            statusMessage = GeoVaultUploadMessageFormatter.uploadSummary(
+            statusMessage = UploaderMessageFormatter.uploadSummary(
                 succeeded = 0,
                 failed = 0,
                 cancelled = true,

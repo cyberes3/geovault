@@ -40,7 +40,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.geovault.common.files.GeoVaultFilename
-import com.geovault.common.files.GeoVaultUploadFileTypes
+import com.geovault.uploader.files.UploaderFileTypes
 import com.geovault.common.ui.GeoVaultAuthShellState
 import com.geovault.common.ui.GeoVaultTabShell
 import com.geovault.common.ui.components.GeoVaultEmptyState
@@ -167,7 +167,7 @@ fun UploadQueueScreen(
     if (state.showRejectedDialog && state.rejectedFileNames.isNotEmpty()) {
         GeoVaultRejectedIncomingFilesDialog(
             fileNames = state.rejectedFileNames,
-            catalog = GeoVaultUploadFileTypes.catalog,
+            catalog = UploaderFileTypes.catalog,
             onDismissRequest = onDismissInvalidFiles,
         )
     }

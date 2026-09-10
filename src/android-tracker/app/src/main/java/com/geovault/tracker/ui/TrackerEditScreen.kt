@@ -50,9 +50,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.geovault.common.util.ClipboardCopyHelper
 import com.geovault.common.files.GeoVaultOutgoingShare
-import com.geovault.common.auth.GeoVaultAuthSession
 import com.geovault.common.ui.components.GeoVaultConfirmationDialog
 import com.geovault.common.ui.components.GeoVaultSelectField
 import com.geovault.common.ui.components.GeoVaultFormSection
@@ -388,7 +386,6 @@ private fun TrackerCreateFormContent(
     onSetAsSelectedChanged: (Boolean) -> Unit,
 ) {
     val context = LocalContext.current
-    val clipboardHelper = remember(context) { ClipboardCopyHelper(context) }
     val colorPreview = remember(dialog.colorDraft, context) {
         resolveTrackerColorPreview(dialog.colorDraft)
     }
@@ -495,7 +492,6 @@ private fun TrackerEditFormContent(
     onToggleSharedEmail: (String) -> Unit,
 ) {
     val context = LocalContext.current
-    val clipboardHelper = remember(context) { ClipboardCopyHelper(context) }
     val colorPreview = remember(dialog.colorDraft, context) {
         resolveTrackerColorPreview(dialog.colorDraft)
     }
@@ -736,11 +732,10 @@ private fun TrackerEditFormContent(
                                         GeoVaultSecondaryButton(
                                             text = stringResource(R.string.trackers_action_copy_world_share_link),
                                             onClick = {
-                                                copyShareLink(
+                                                TrackerShareLinks.copy(
                                                     context = context,
-                                                    clipboardHelper = clipboardHelper,
                                                     shareUrl = dialog.worldShareUrlDraft,
-                                                    label = context.getString(R.string.world_share_link_clip_label),
+                                                    toastMessage = context.getString(R.string.world_share_link_clip_label),
                                                 )
                                             },
                                             enabled = !isSaving && !dialog.worldShareUrlDraft.isNullOrBlank(),
@@ -907,19 +902,9 @@ private fun EditVisibilityPill(
     }
 }
 
-private fun copyShareLink(
-    context: Context,
-    clipboardHelper: ClipboardCopyHelper,
-    shareUrl: String?,
-    label: String,
-) {
-    if (shareUrl.isNullOrBlank()) return
-    clipboardHelper.copyText(GeoVaultAuthSession.get().resolveAbsoluteUrl(shareUrl), label)
-}
-
 private fun shareWorldShareLink(context: Context, worldShareUrl: String?) {
-    if (worldShareUrl.isNullOrBlank()) return
-    GeoVaultOutgoingShare.shareText(context, worldShareUrl)
+    val url = TrackerShareLinks.absoluteOrNull(worldShareUrl) ?: return
+    GeoVaultOutgoingShare.shareText(context, url)
 }
 
 private data class TrackerColorPreviewState(

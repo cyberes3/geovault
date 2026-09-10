@@ -1,5 +1,6 @@
 package com.geovault.tracker
 
+import com.geovault.common.net.ListEnvelope
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import okhttp3.ResponseBody
@@ -24,7 +25,7 @@ data class TrackerCheckResponse(val valid: Boolean, val name: String? = null)
 
 interface TrackerApi {
     @GET("/api/extensions/live-track/trackers/")
-    fun getTrackers(): Call<ListPage<TrackerDto>>
+    fun getTrackers(): Call<ListEnvelope<TrackerDto>>
 
     @GET("/api/extensions/live-track/trackers/available-to-add/")
     fun getAvailableToAdd(): Call<AvailableToAddResponse>
@@ -36,7 +37,7 @@ interface TrackerApi {
     fun getTrackerGeometry(@Path("id") id: String): Call<TrackerDto>
 
     @POST("/api/extensions/live-track/trackers/geometry/")
-    fun getTrackersGeometry(@Body request: TrackerBulkGeometryRequest): Call<ListPage<TrackerDto>>
+    fun getTrackersGeometry(@Body request: TrackerBulkGeometryRequest): Call<ListEnvelope<TrackerDto>>
 
     @POST("/api/extensions/live-track/trackers/")
     fun createTracker(@Body request: TrackerCreateRequest): Call<TrackerDto>
@@ -75,7 +76,7 @@ interface TrackerApi {
     fun clearHiddenItems(@Body request: HiddenItemsClearRequest): Call<ResponseBody>
 
     @GET("/api/extensions/live-track/groups/")
-    fun getGroups(): Call<ListPage<Group>>
+    fun getGroups(): Call<ListEnvelope<Group>>
 
     @POST("/api/extensions/live-track/groups/")
     fun createGroup(@Body request: GroupCreateRequest): Call<Group>
@@ -102,7 +103,7 @@ interface TrackerApi {
     fun leaveGroup(@Path("id") id: String): Call<ResponseBody>
 
     @GET("/api/users/")
-    fun getUsers(): Call<ListPage<UserItem>>
+    fun getUsers(): Call<ListEnvelope<UserItem>>
 
     @POST("/api/extensions/live-track/tracker-check/")
     fun checkTracker(@Body request: TrackerCheckRequest): Call<TrackerCheckResponse>

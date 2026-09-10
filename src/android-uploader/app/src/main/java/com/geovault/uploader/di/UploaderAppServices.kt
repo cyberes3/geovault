@@ -7,7 +7,7 @@ import com.geovault.common.auth.GeoVaultAuthSession
 import com.geovault.common.auth.GeoVaultConnectionValidator
 import com.geovault.common.files.GeoVaultFileIngest
 import com.geovault.common.files.GeoVaultOpenableUriMetadata
-import com.geovault.common.files.GeoVaultUploadFileTypes
+import com.geovault.uploader.files.UploaderFileTypes
 import com.geovault.common.intent.GeoVaultIncomingFileIntake
 import com.geovault.common.update.GeoVaultAndroidReleaseIdentity
 import com.geovault.common.update.GeoVaultAppUpdateCoordinator
@@ -45,7 +45,7 @@ class UploaderAppServices private constructor(
     private val fileIngest by lazy {
         GeoVaultFileIngest(
             context = appContext,
-            catalog = GeoVaultUploadFileTypes.catalog,
+            catalog = UploaderFileTypes.catalog,
             stageLongLivedGrants = true,
         )
     }

@@ -106,11 +106,18 @@ class GeoVaultFileTypeCatalogTest {
     }
 
     @Test
-    fun `upload catalog still recognizes kml kmz gpx`() {
-        assertTrue(GeoVaultUploadFileTypes.isSupportedFilename("track.gpx"))
-        assertTrue(GeoVaultUploadFileTypes.isSupportedFilename("layer.kmz"))
-        assertFalse(GeoVaultUploadFileTypes.isSupportedFilename("layer.dxf"))
-        assertTrue(GeoVaultUploadFileTypes.supportedMimeTypes.contains("application/gpx+xml"))
+    fun `standard geospatial types recognize kml kmz gpx`() {
+        val geospatial = GeoVaultFileTypeCatalog(
+            listOf(
+                GeoVaultStandardFileTypes.kml,
+                GeoVaultStandardFileTypes.kmz,
+                GeoVaultStandardFileTypes.gpx,
+            ),
+        )
+        assertTrue(geospatial.isSupportedFilename("track.gpx"))
+        assertTrue(geospatial.isSupportedFilename("layer.kmz"))
+        assertFalse(geospatial.isSupportedFilename("layer.dxf"))
+        assertTrue(geospatial.mimeTypes.contains(GeoVaultStandardFileTypes.MIME_GPX))
     }
 
     @Test

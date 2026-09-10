@@ -5,9 +5,10 @@ import android.content.Intent
 import android.net.Uri
 import com.geovault.common.files.GeoVaultFileIngest
 import com.geovault.common.files.GeoVaultOpenableUriMetadata
-import com.geovault.common.files.GeoVaultUploadFileTypes
+import com.geovault.uploader.files.UploaderFileTypes
 import com.geovault.common.intent.GeoVaultIncomingFileIntake
 import com.geovault.common.net.GeoVaultApiFailure
+import com.geovault.common.net.GeoVaultApiFailureMessages
 import com.geovault.uploader.data.UploaderSettingsStore
 import com.geovault.uploader.domain.ImportFileUploader
 import com.geovault.uploader.domain.ImportUploadEngine
@@ -146,8 +147,8 @@ class UploadViewModelTest {
         )
         assertEquals("0 Files", ui.fileCountLabel)
         assertFalse(ui.showUploadAll)
-        val message = UploaderFailureMessages.format(failed)
-        assertTrue(message.contains("Session is invalid or expired"))
+        val message = GeoVaultApiFailureMessages.format(failed)
+        assertTrue(message.contains("Session expired. Sign in again."))
         assertFalse(message.contains("API key", ignoreCase = true))
     }
 
@@ -160,7 +161,7 @@ class UploadViewModelTest {
             incomingIntake = GeoVaultIncomingFileIntake(
                 GeoVaultFileIngest(
                     context = app,
-                    catalog = GeoVaultUploadFileTypes.catalog,
+                    catalog = UploaderFileTypes.catalog,
                     stageLongLivedGrants = false,
                 ),
             ),

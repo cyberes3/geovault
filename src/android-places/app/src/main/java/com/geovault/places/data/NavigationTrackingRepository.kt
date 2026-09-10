@@ -6,8 +6,8 @@ import com.geovault.common.net.GeoVaultHttp
 import com.geovault.common.net.GeoVaultServerUrl
 import com.geovault.common.net.awaitResponse
 import com.geovault.common.settings.GeoVaultCachedDocumentStore
-import com.geovault.common.sync.GeoVaultHttpFailureClassifier
-import com.geovault.common.sync.GeoVaultHttpFailureKind
+import com.geovault.common.net.GeoVaultHttpFailureClassifier
+import com.geovault.common.net.GeoVaultHttpFailureKind
 import com.geovault.places.domain.NavigationRetryFlusher
 import com.geovault.places.model.Place
 import kotlinx.coroutines.CoroutineScope

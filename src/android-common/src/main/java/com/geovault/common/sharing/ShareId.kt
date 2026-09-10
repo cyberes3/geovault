@@ -22,6 +22,9 @@ data class ShareId(val value: String) {
             return ShareId(normalized)
         }
 
-        fun isShareId(value: String?): Boolean = parse(value) != null
+        fun isShareId(value: String?): Boolean {
+            val normalized = value?.trim()?.lowercase().orEmpty()
+            return SHARE_ID_PATTERN.matches(normalized)
+        }
     }
 }

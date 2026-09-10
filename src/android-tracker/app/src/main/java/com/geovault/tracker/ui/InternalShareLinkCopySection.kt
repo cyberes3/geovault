@@ -10,15 +10,11 @@ import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import com.geovault.common.util.ClipboardCopyHelper
-import com.geovault.common.auth.GeoVaultAuthSession
 import com.geovault.common.ui.components.GeoVaultSecondaryButton
-import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.common.ui.theme.geoVaultContentSecondaryColor
 import com.geovault.tracker.R
 
@@ -31,7 +27,6 @@ fun InternalShareLinkCopySection(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    val clipboardHelper = remember(context) { ClipboardCopyHelper(context) }
     Text(
         text = helpText,
         style = MaterialTheme.typography.caption,
@@ -40,10 +35,10 @@ fun InternalShareLinkCopySection(
     GeoVaultSecondaryButton(
         text = stringResource(R.string.trackers_action_copy_internal_share_link),
         onClick = {
-            copyInternalShareLink(
-                clipboardHelper = clipboardHelper,
+            TrackerShareLinks.copy(
+                context = context,
                 shareUrl = shareUrl,
-                label = context.getString(R.string.internal_share_link_clip_label),
+                toastMessage = context.getString(R.string.internal_share_link_clip_label),
             )
         },
         enabled = enabled && !shareUrl.isNullOrBlank(),
@@ -62,13 +57,4 @@ fun InternalShareLinkCopySection(
             )
         },
     )
-}
-
-private fun copyInternalShareLink(
-    clipboardHelper: ClipboardCopyHelper,
-    shareUrl: String?,
-    label: String,
-) {
-    if (shareUrl.isNullOrBlank()) return
-    clipboardHelper.copyText(GeoVaultAuthSession.get().resolveAbsoluteUrl(shareUrl), label)
 }

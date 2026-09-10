@@ -12,7 +12,7 @@ import com.geovault.common.util.UnitUtils
 import com.geovault.tracker.R
 import com.geovault.tracker.di.TrackerAppServices
 import com.geovault.tracker.data.GroupManagementRepository
-import com.geovault.tracker.data.TrackerApiFailureMessages
+import com.geovault.common.net.GeoVaultApiFailureMessages
 import com.geovault.tracker.data.TrackerManagementRepository
 import com.geovault.tracker.settings.TrackerSettings
 import com.geovault.tracker.settings.TrackerSettingsLoadState
@@ -219,7 +219,7 @@ class SettingsViewModel(
     }
 
     private fun emitHiddenItemFailure(failure: GeoVaultApiFailure) {
-        emitHostMessage(TrackerApiFailureMessages.format(appContext, failure))
+        emitHostMessage(GeoVaultApiFailureMessages.format(failure))
     }
 
     private fun emitHostMessage(message: String) {

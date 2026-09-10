@@ -29,6 +29,18 @@ object ShareUrl {
         }
     }
 
+    fun absolute(origin: String, pathOrUrl: String): String {
+        val trimmed = pathOrUrl.trim()
+        if (trimmed.startsWith("http://", ignoreCase = true) ||
+            trimmed.startsWith("https://", ignoreCase = true)
+        ) {
+            return trimmed
+        }
+        val trimmedOrigin = origin.trimEnd('/')
+        val path = if (trimmed.startsWith("/")) trimmed else "/$trimmed"
+        return "$trimmedOrigin$path"
+    }
+
     fun parseMapSocialPath(pathname: String): String? =
         uuidFromPrefixedPath(pathname, MAP_SOCIAL_PREFIX)
 

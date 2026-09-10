@@ -2,8 +2,8 @@ package com.geovault.places.domain
 
 import com.geovault.common.logging.GeoVaultCaptureLog
 import com.geovault.common.net.GeoVaultApiFailure
-import com.geovault.common.sync.GeoVaultHttpFailureClassifier
-import com.geovault.common.sync.GeoVaultHttpFailureKind
+import com.geovault.common.net.GeoVaultHttpFailureClassifier
+import com.geovault.common.net.GeoVaultHttpFailureKind
 import com.geovault.common.sync.GeoVaultQueuedSyncFailurePolicy
 import com.geovault.common.sync.GeoVaultQueuedSyncItemDisposition
 import com.geovault.places.data.PlacesMutableStore

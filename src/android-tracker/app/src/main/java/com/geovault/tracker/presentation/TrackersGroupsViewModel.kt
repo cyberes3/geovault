@@ -16,7 +16,7 @@ import com.geovault.tracker.UserItem
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.tracker.data.CatalogEntityType
 import com.geovault.tracker.data.GroupManagementRepository
-import com.geovault.tracker.data.TrackerApiFailureMessages
+import com.geovault.common.net.GeoVaultApiFailureMessages
 import com.geovault.tracker.data.TrackerBootstrapOutcome
 import com.geovault.tracker.data.TrackerManagementRepository
 import com.geovault.tracker.di.TrackerAppServices
@@ -1164,7 +1164,7 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
             .ifEmpty { "track" }
 
     private fun apiFailureMessage(failure: GeoVaultApiFailure): String =
-        TrackerApiFailureMessages.format(getApplication(), failure)
+        GeoVaultApiFailureMessages.format(failure)
 
     private fun networkApiFailure(): GeoVaultApiFailure =
         GeoVaultApiFailure.fromThrowable(IOException())

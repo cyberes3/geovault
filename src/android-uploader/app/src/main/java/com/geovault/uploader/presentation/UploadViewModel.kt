@@ -9,6 +9,7 @@ import com.geovault.common.files.GeoVaultFileRef
 import com.geovault.common.files.GeoVaultFilename
 import com.geovault.common.files.GeoVaultOpenableUriMetadata
 import com.geovault.common.intent.GeoVaultIncomingFileIntake
+import com.geovault.common.net.GeoVaultApiFailureMessages
 import com.geovault.common.intent.GeoVaultIncomingIntakeResult
 import com.geovault.common.intent.GeoVaultShareSession
 import com.geovault.common.sort.NaturalSort
@@ -233,7 +234,7 @@ class UploadViewModel(
                     modifiedAtMs = item.modifiedAtMs,
                     state = item.state,
                     errorMessage = (item.state as? UploadItemState.Failed)?.let { failed ->
-                        UploaderFailureMessages.format(failed.failure)
+                        GeoVaultApiFailureMessages.format(failed.failure)
                     },
                     canRename = !running && item.state is UploadItemState.Queued,
                     canRemove = !running &&

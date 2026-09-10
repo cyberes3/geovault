@@ -60,8 +60,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.geovault.common.geo.CoordinateFormat
 import com.geovault.common.geo.Wgs84Point
-import com.geovault.common.ui.files.GeoVaultSafExportRequest
-import com.geovault.common.ui.files.rememberGeoVaultSafDocumentExportLauncher
+import com.geovault.common.files.GeoVaultStandardFileTypes
+import com.geovault.common.ui.files.GeoVaultShareSaveExportHost
+import com.geovault.common.ui.files.GeoVaultShareSaveExportRequest
 import com.geovault.common.ui.components.GeoVaultConfirmationDialog
 import com.geovault.common.ui.components.GeoVaultEmptyState
 import com.geovault.common.ui.components.GeoVaultFormDialog
@@ -226,19 +227,15 @@ fun TrackersScreen(
         onDispose { vm.dismissDialog() }
     }
     val context = LocalContext.current
-    val launchKmlExport = rememberGeoVaultSafDocumentExportLauncher(
-        mimeType = "application/vnd.google-earth.kml+xml",
-        writeFailedMessage = context.getString(R.string.trackers_kml_write_failed),
-    )
+    var kmlExportRequest by remember { mutableStateOf<GeoVaultShareSaveExportRequest?>(null) }
     LaunchedEffect(vm) {
         vm.kmlExportEvents.collect { event: TrackerKmlExportEvent ->
-            launchKmlExport(
-                GeoVaultSafExportRequest(
-                    bytes = event.bytes,
-                    suggestedFileName = "${event.fileBaseName}.kml",
-                    fallbackBaseName = event.fileBaseName,
-                    extensionWithoutDot = "kml",
-                )
+            kmlExportRequest = GeoVaultShareSaveExportRequest(
+                title = context.getString(R.string.trackers_action_export_kml),
+                fileName = "${event.fileBaseName}.kml",
+                mimeType = GeoVaultStandardFileTypes.MIME_KML,
+                bytes = event.bytes,
+                chooserTitle = context.getString(R.string.trackers_action_export_kml),
             )
         }
     }
@@ -598,6 +595,12 @@ fun TrackersScreen(
             // both are open simultaneously (zIndex(4f) inside the layer reinforces this).
             TrackerParamsOverlayLayer()
         },
+    )
+
+    GeoVaultShareSaveExportHost(
+        request = kmlExportRequest,
+        onConsumed = { kmlExportRequest = null },
+        writeFailedMessage = context.getString(R.string.trackers_kml_write_failed),
     )
 
     if (showOpenSettingsDiscardConfirm) {

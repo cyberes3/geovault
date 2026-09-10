@@ -2,8 +2,14 @@ package com.geovault.common.sort
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import com.geovault.common.settings.FileListSortDocument
+import com.geovault.common.settings.FileListSortV1ToV2Migration
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Test
@@ -66,6 +72,35 @@ class GeoVaultFileListSortStoreTest {
         assertEquals(
             GeoVaultFileListSortMode.DEFAULT,
             store.getBlocking(GeoVaultFileListSortScope.COORDINATE_SYSTEMS),
+        )
+    }
+
+    @Test
+    fun v1DocumentMigratesNamedFieldsToScopeKeys() {
+        val migrated = FileListSortV1ToV2Migration.migrate(
+            buildJsonObject {
+                put("dataFilesSort", GeoVaultFileListSortMode.MODIFIED_NEWEST.name)
+                put("coordinateSystemsSort", GeoVaultFileListSortMode.NAME_Z_TO_A.name)
+            },
+        )
+        val modes = migrated["modesByScope"]?.jsonObject
+        requireNotNull(modes)
+        assertEquals(
+            GeoVaultFileListSortMode.MODIFIED_NEWEST.name,
+            modes[FileListSortDocument.SCOPE_DATA_FILES]?.jsonPrimitive?.content,
+        )
+        assertEquals(
+            GeoVaultFileListSortMode.NAME_Z_TO_A.name,
+            modes[FileListSortDocument.SCOPE_COORDINATE_SYSTEMS]?.jsonPrimitive?.content,
+        )
+    }
+
+    @Test
+    fun stringScopeKeysRoundTrip() {
+        store.putBlocking("data_files", GeoVaultFileListSortMode.MODIFIED_OLDEST)
+        assertEquals(
+            GeoVaultFileListSortMode.MODIFIED_OLDEST,
+            store.getBlocking("data_files"),
         )
     }
 }

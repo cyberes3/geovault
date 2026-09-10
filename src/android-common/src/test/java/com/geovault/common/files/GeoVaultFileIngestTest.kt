@@ -13,11 +13,21 @@ import org.robolectric.annotation.Config
 @Config(sdk = [34])
 class GeoVaultFileIngestTest {
 
+    private companion object {
+        val TEST_GEOSPATIAL_CATALOG = GeoVaultFileTypeCatalog(
+            listOf(
+                GeoVaultStandardFileTypes.kml,
+                GeoVaultStandardFileTypes.kmz,
+                GeoVaultStandardFileTypes.gpx,
+            ),
+        )
+    }
+
     @Test
     fun ingest_empty_isEmpty() {
         val ingest = GeoVaultFileIngest(
             context = RuntimeEnvironment.getApplication(),
-            catalog = GeoVaultUploadFileTypes.catalog,
+            catalog = TEST_GEOSPATIAL_CATALOG,
         )
         val result = ingest.ingest(emptyList(), GeoVaultFileRef.Source.Picker)
         assertTrue(result.accepted.isEmpty())
@@ -28,7 +38,7 @@ class GeoVaultFileIngestTest {
     fun ingest_rejectsUnsupportedExtension() {
         val ingest = GeoVaultFileIngest(
             context = RuntimeEnvironment.getApplication(),
-            catalog = GeoVaultUploadFileTypes.catalog,
+            catalog = TEST_GEOSPATIAL_CATALOG,
         )
         val uri = Uri.parse("content://test/notes.txt")
         val result = ingest.ingest(listOf(uri), GeoVaultFileRef.Source.Picker)

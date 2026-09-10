@@ -2,7 +2,9 @@ package com.geovault.common.sort
 
 import android.content.Context
 import com.geovault.common.settings.FileListSortDocument
+import com.geovault.common.settings.FileListSortV1ToV2Migration
 import com.geovault.common.settings.GeoVaultDocumentStore
+import com.geovault.common.settings.modeName
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -16,6 +18,7 @@ class GeoVaultFileListSortStore private constructor(context: Context) {
         documentSerializer = FileListSortDocument.serializer(),
         defaultValue = FileListSortDocument(),
         currentVersion = FileListSortDocument.SCHEMA_VERSION,
+        migrations = listOf(FileListSortV1ToV2Migration),
         legacyMapper = FileListSortDocument::fromLegacy,
     )
 
@@ -30,37 +33,42 @@ class GeoVaultFileListSortStore private constructor(context: Context) {
         }
     }
 
-    fun observe(scope: GeoVaultFileListSortScope): Flow<GeoVaultFileListSortMode> {
+    fun observe(scope: GeoVaultFileListSortScope): Flow<GeoVaultFileListSortMode> = observe(scope.key)
+
+    fun observe(scopeKey: String): Flow<GeoVaultFileListSortMode> {
         return store.data
-            .map { document -> modeFor(document, scope) }
+            .map { document -> modeFor(document, scopeKey) }
             .distinctUntilChanged()
     }
 
-    fun getBlocking(scope: GeoVaultFileListSortScope): GeoVaultFileListSortMode {
+    fun getBlocking(scope: GeoVaultFileListSortScope): GeoVaultFileListSortMode = getBlocking(scope.key)
+
+    fun getBlocking(scopeKey: String): GeoVaultFileListSortMode {
         return runBlocking(Dispatchers.IO) {
-            modeFor(store.get(), scope)
+            modeFor(store.get(), scopeKey)
         }
     }
 
     suspend fun put(scope: GeoVaultFileListSortScope, mode: GeoVaultFileListSortMode) {
+        put(scope.key, mode)
+    }
+
+    suspend fun put(scopeKey: String, mode: GeoVaultFileListSortMode) {
         store.update { current ->
-            when (scope) {
-                GeoVaultFileListSortScope.DATA_FILES -> current.copy(dataFilesSort = mode.name)
-                GeoVaultFileListSortScope.COORDINATE_SYSTEMS -> current.copy(coordinateSystemsSort = mode.name)
-            }
+            current.copy(modesByScope = current.modesByScope + (scopeKey to mode.name))
         }
     }
 
     fun putBlocking(scope: GeoVaultFileListSortScope, mode: GeoVaultFileListSortMode) {
-        runBlocking(Dispatchers.IO) { put(scope, mode) }
+        putBlocking(scope.key, mode)
     }
 
-    private fun modeFor(document: FileListSortDocument, scope: GeoVaultFileListSortScope): GeoVaultFileListSortMode {
-        val stored = when (scope) {
-            GeoVaultFileListSortScope.DATA_FILES -> document.dataFilesSort
-            GeoVaultFileListSortScope.COORDINATE_SYSTEMS -> document.coordinateSystemsSort
-        }
-        return GeoVaultFileListSortMode.fromStored(stored)
+    fun putBlocking(scopeKey: String, mode: GeoVaultFileListSortMode) {
+        runBlocking(Dispatchers.IO) { put(scopeKey, mode) }
+    }
+
+    private fun modeFor(document: FileListSortDocument, scopeKey: String): GeoVaultFileListSortMode {
+        return GeoVaultFileListSortMode.fromStored(document.modeName(scopeKey))
     }
 
     companion object {

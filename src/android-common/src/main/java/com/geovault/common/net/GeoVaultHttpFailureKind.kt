@@ -1,6 +1,5 @@
-package com.geovault.common.sync
+package com.geovault.common.net
 
-import com.geovault.common.net.GeoVaultApiFailure
 import java.io.IOException
 import java.net.ConnectException
 import java.net.SocketTimeoutException
@@ -8,7 +7,7 @@ import java.net.UnknownHostException
 import javax.net.ssl.SSLException
 
 /**
- * Coarse classification of API/network failures for offline queue and retry policy.
+ * Coarse classification of API/network failures for retry policy and user messages.
  */
 enum class GeoVaultHttpFailureKind {
     /** Transient network/transport errors — keep queued and retry. */

@@ -1,5 +1,7 @@
 package com.geovault.common.sync
 
+import com.geovault.common.net.GeoVaultHttpFailureClassifier
+import com.geovault.common.net.GeoVaultHttpFailureKind
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 import org.junit.Assert.assertEquals

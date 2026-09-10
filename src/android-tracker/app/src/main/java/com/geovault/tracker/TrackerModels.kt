@@ -147,15 +147,6 @@ data class HiddenItemsClearRequest(
     val target_types: List<String>? = null
 )
 
-@Serializable
-data class ListPage<T>(
-    val items: List<T> = emptyList(),
-    val page: Int = 1,
-    val page_size: Int = 1,
-    val total_items: Int = 0,
-    val total_pages: Int = 0,
-)
-
 /** Group payload from GET/POST/PATCH groups. */
 @Serializable
 @Parcelize

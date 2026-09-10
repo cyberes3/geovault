@@ -1,5 +1,7 @@
 package com.geovault.common.sync
 
+import com.geovault.common.net.GeoVaultHttpFailureKind
+
 /**
  * What to do with a queued offline item after a sync attempt fails.
  */
