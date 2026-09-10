@@ -1,10 +1,12 @@
 package com.geovault.common.maps.render
 
+import org.maplibre.android.style.layers.Property
+
 /**
- * Visual settings for the independent selected-point source owned by [GeoJsonRenderPlugin].
+ * Visual settings for the selected-point marker owned by [GeoJsonRenderPlugin].
  *
  * This is not part of [MapRenderState]. The main collection stays the durable geometry world;
- * selection is a 0–1 point overlay resolved from a selected feature id.
+ * selection is a 0–1 marker resolved from a selected feature id.
  */
 data class GeoJsonSelectionOverlayConfig(
     val selectedIconImageId: String = CommonMapIconIds.MARKER_SELECTED,
@@ -35,6 +37,40 @@ internal object GeoJsonSelectionOverlay {
             iconImageId = config.selectedIconImageId,
             iconSize = config.selectedIconSize,
             title = if (config.showPointTextLabels) source.title else null,
+        )
+    }
+}
+
+internal data class GeoJsonSelectionOverlayPlacement(
+    val translationX: Float,
+    val translationY: Float,
+    val pivotX: Float,
+    val pivotY: Float,
+)
+
+/**
+ * Places the selected-marker view so its icon anchor sits on the projected lat/lng.
+ * Scale and rotation are applied around that pivot by the view itself.
+ */
+internal object GeoJsonSelectionOverlayLayout {
+    fun placement(
+        screenX: Float,
+        screenY: Float,
+        width: Float,
+        height: Float,
+        iconAnchor: String,
+    ): GeoJsonSelectionOverlayPlacement {
+        val pivotX = width / 2f
+        val pivotY = when (iconAnchor) {
+            Property.ICON_ANCHOR_BOTTOM -> height
+            Property.ICON_ANCHOR_TOP -> 0f
+            else -> height / 2f
+        }
+        return GeoJsonSelectionOverlayPlacement(
+            translationX = screenX - pivotX,
+            translationY = screenY - pivotY,
+            pivotX = pivotX,
+            pivotY = pivotY,
         )
     }
 }

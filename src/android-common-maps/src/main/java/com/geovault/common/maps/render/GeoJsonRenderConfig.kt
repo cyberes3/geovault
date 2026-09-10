@@ -45,8 +45,8 @@ data class GeoJsonRenderConfig(
      */
     val overlayPointLabelsAllowOverlap: Boolean = false,
     /**
-     * When set, [GeoJsonRenderPlugin] owns a dedicated 0–1 point source for the selected
-     * marker. [MapRenderState] must not bake selected styling into the main collection.
+     * When set, [GeoJsonRenderPlugin] owns a 0–1 selected marker painted in the Compose map host.
+     * [MapRenderState] must not bake selected styling into the main collection.
      * Taps paint this overlay immediately via [GeoJsonRenderPlugin.setSelectedPointId].
      */
     val selectionOverlay: GeoJsonSelectionOverlayConfig? = null,

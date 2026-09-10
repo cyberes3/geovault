@@ -260,6 +260,7 @@ fun PlacesMapScreen(
                         map = map,
                         showDefaultSourceToggle = false,
                         includeDefaultFabColumnPadding = true,
+                        selectionMarkerState = renderPlugin.selectionMarkerState,
                     )
 
                     val layersTooltip = stringResource(R.string.tooltip_map_layers)

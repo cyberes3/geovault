@@ -1,20 +1,23 @@
 package com.geovault.common.maps.render
 
 import android.content.Context
+import android.graphics.Bitmap
 import android.graphics.PointF
 import android.graphics.RectF
 import android.os.Handler
 import android.os.Looper
+import android.view.GestureDetector
+import android.view.MotionEvent
 import androidx.compose.ui.graphics.toArgb
 import com.geovault.common.maps.core.GeoVaultMapPlugin
 import com.geovault.common.maps.core.MapMarkerUtils
 import com.geovault.common.maps.core.OutlinedGeoJsonLineLayers
+import com.geovault.common.maps.core.isValidMapLibreGeographicLatLng
 import com.geovault.common.maps.ui.OverlappingPointsPopup
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
-import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.Style
@@ -96,12 +99,14 @@ class GeoJsonRenderPlugin(
      * purple station / nav-target icons; Survey uses it so the nav marker stays on top.
      */
     var styleSelectionOverlayPoint: ((MapRenderPoint) -> MapRenderPoint)? = null
+    val selectionMarkerState: GeoJsonSelectionMarkerState? =
+        if (useSelectionOverlay) GeoJsonSelectionMarkerState() else null
+    private val selectionBitmapCache: MutableMap<String, Bitmap> = mutableMapOf()
     private var map: MapLibreMap? = null
     private var mapView: MapView? = null
-    private var tapListenerAttached = false
+    private var tapDetector: GestureDetector? = null
     private var activePopup: OverlappingPointsPopup? = null
     private val mainHandler = Handler(Looper.getMainLooper())
-    private val renderedHitClickListener = MapLibreMap.OnMapClickListener(::handleRenderedMapClick)
     private var marshaledApply: Runnable? = null
     private val renderGeneration = AtomicLong(0L)
     private val destroyed = AtomicBoolean(false)
@@ -112,16 +117,8 @@ class GeoJsonRenderPlugin(
     }
 
     var onRenderedMapHitSelected: ((GeoVaultRenderedMapHit) -> Boolean)? = null
-        set(value) {
-            field = value
-            updateTapListenerRegistration()
-        }
 
     var onRenderedMapBackgroundTapped: (() -> Boolean)? = null
-        set(value) {
-            field = value
-            updateTapListenerRegistration()
-        }
 
     /**
      * Optional wrapper around cluster-expansion camera moves so hosts can pause follow
@@ -133,8 +130,8 @@ class GeoJsonRenderPlugin(
         setOf(GeoVaultRenderedMapHitKind.Point, GeoVaultRenderedMapHitKind.Overlay)
 
     /**
-     * Selects the point with [id] from the current [MapRenderState] and writes only the
-     * selection overlay source. No-op when [GeoJsonRenderConfig.selectionOverlay] is null.
+     * Selects the point with [id] from the current [MapRenderState] and paints only the
+     * selection marker. No-op when [GeoJsonRenderConfig.selectionOverlay] is null.
      * Pass null to clear.
      */
     fun setSelectedPointId(id: String?) {
@@ -143,11 +140,10 @@ class GeoJsonRenderPlugin(
         applySelectionOverlay()
     }
 
-    /** Icon layers the location puck should fade against (main, nav overlay, selection). */
+    /** Icon layers the location puck should fade against (main and nav overlay). */
     fun puckOverlapIconLayerIds(): List<String> = buildList {
         add(pointsIconLayerId)
         if (usePointOverlay) add(pointsOverlayIconLayerId)
-        if (useSelectionOverlay) add(pointsSelectionIconLayerId)
     }
 
     override fun setRenderState(newState: MapRenderState) {
@@ -165,21 +161,61 @@ class GeoJsonRenderPlugin(
 
     override fun onMapAttached(map: MapLibreMap) {
         this.map = map
-        updateTapListenerRegistration()
     }
 
     override fun onMapViewAttached(map: MapLibreMap, mapView: MapView) {
         this.map = map
         this.mapView = mapView
-        updateTapListenerRegistration()
+        installTapDetector(mapView)
+        if (useSelectionOverlay) applySelectionOverlay()
     }
 
     override fun onMapDetached() {
-        detachTapListener()
+        uninstallTapDetector()
         activePopup?.dismiss()
         activePopup = null
         map = null
         mapView = null
+    }
+
+    /**
+     * Owns map-tap handling for this plugin.
+     *
+     * MapLibre only dispatches [MapLibreMap.OnMapClickListener] from `onSingleTapConfirmed`, which
+     * first waits out the platform double-tap timeout (~250ms), making every tap feel laggy. This
+     * detector resolves the tap on `onSingleTapUp` (fired at finger-up) instead, so selection is
+     * immediate. It fires strictly before `onSingleTapConfirmed` would, so the plugin does not
+     * register a MapLibre click listener at all -- there is a single tap path with no reconciliation.
+     *
+     * The touch listener is non-consuming, so pan/zoom/double-tap still reach MapLibre.
+     */
+    @Suppress("ClickableViewAccessibility")
+    private fun installTapDetector(mapView: MapView) {
+        val detector = GestureDetector(
+            mapView.context,
+            object : GestureDetector.SimpleOnGestureListener() {
+                override fun onSingleTapUp(e: MotionEvent): Boolean {
+                    handleMapTap(PointF(e.x, e.y))
+                    return false
+                }
+            },
+        )
+        tapDetector = detector
+        mapView.setOnTouchListener { _, event ->
+            detector.onTouchEvent(event)
+            false
+        }
+    }
+
+    private fun uninstallTapDetector() {
+        mapView?.setOnTouchListener(null)
+        tapDetector = null
+    }
+
+    private fun handleMapTap(screenPoint: PointF) {
+        if (!handlesTaps()) return
+        val attachedMap = map ?: return
+        processTapAtScreen(attachedMap, screenPoint)
     }
 
     override fun onPluginDestroyed() {
@@ -188,6 +224,8 @@ class GeoJsonRenderPlugin(
         destroyed.set(true)
         renderGeneration.incrementAndGet()
         renderExecutor.shutdownNow()
+        selectionMarkerState?.clear()
+        selectionBitmapCache.clear()
         onRenderedMapHitSelected = null
         onRenderedMapBackgroundTapped = null
         wrapProgrammaticCamera = null
@@ -210,38 +248,17 @@ class GeoJsonRenderPlugin(
         activePopup = null
     }
 
-    private fun shouldAttachTapListener(): Boolean {
+    /** Whether this plugin has anything to do with a tap (selection, background, or clustering). */
+    private fun handlesTaps(): Boolean {
         return onRenderedMapHitSelected != null ||
             onRenderedMapBackgroundTapped != null ||
             useSelectionOverlay ||
             config.pointClustering != null
     }
 
-    private fun updateTapListenerRegistration() {
-        val attachedMap = map ?: return
-        if (!shouldAttachTapListener()) {
-            detachTapListener()
-            return
-        }
-        if (!tapListenerAttached) {
-            attachedMap.addOnMapClickListener(renderedHitClickListener)
-            tapListenerAttached = true
-        }
-    }
-
-    private fun detachTapListener() {
-        val attachedMap = map
-        if (tapListenerAttached && attachedMap != null) {
-            attachedMap.removeOnMapClickListener(renderedHitClickListener)
-        }
-        tapListenerAttached = false
-    }
-
-    private fun handleRenderedMapClick(latLng: LatLng): Boolean {
+    private fun processTapAtScreen(attachedMap: MapLibreMap, screenPoint: PointF): Boolean {
         val hitSelected = onRenderedMapHitSelected
-        val attachedMap = map ?: return false
         val anchor = mapView ?: return false
-        val screenPoint = attachedMap.projection.toScreenLocation(latLng)
         val density = anchor.resources.displayMetrics.density
 
         if (GeoVaultRenderedMapHitKind.Point in renderedMapTapHitKinds) {
@@ -419,8 +436,6 @@ class GeoJsonRenderPlugin(
     }
 
     private fun pointHitLayerIds(): List<String> = listOf(
-        pointsSelectionIconLayerId,
-        pointsSelectionLabelLayerId,
         pointsOverlayIconLayerId,
         pointsIconLayerId,
         pointsOverlayLabelLayerId,
@@ -486,9 +501,6 @@ class GeoJsonRenderPlugin(
         ensureSource(style, pointsSourceId, buildGeoJsonOptions(config.pointClustering))
         if (usePointOverlay) {
             ensureSource(style, pointsOverlaySourceId, null)
-        }
-        if (useSelectionOverlay) {
-            ensureSource(style, pointsSelectionSourceId, selectionSourceOptions())
         }
         ensureSource(style, linesSourceId)
         ensureSource(style, polygonsSourceId)
@@ -746,73 +758,6 @@ class GeoJsonRenderPlugin(
                 attachOverlayPointSymbolLayers()
             }
         }
-        if (useSelectionOverlay && style.getLayer(pointsSelectionIconLayerId) == null) {
-            val overlayConfig = selectionOverlayConfig
-            val iconSizeExpr = Expression.coalesce(
-                Expression.get("iconSize"),
-                Expression.literal(config.defaultIconSize),
-            )
-            val iconRotateExpr = Expression.coalesce(
-                Expression.toNumber(Expression.get("iconRotationDegrees")),
-                Expression.literal(0.0),
-            )
-            val iconLayer = SymbolLayer(pointsSelectionIconLayerId, pointsSelectionSourceId)
-                .withProperties(
-                    PropertyFactory.iconImage(Expression.get("iconImageId")),
-                    PropertyFactory.iconSize(iconSizeExpr),
-                    PropertyFactory.iconAnchor(config.defaultIconAnchor),
-                    PropertyFactory.iconRotate(iconRotateExpr),
-                    PropertyFactory.iconRotationAlignment(Property.ICON_ROTATION_ALIGNMENT_VIEWPORT),
-                    PropertyFactory.iconPitchAlignment(Property.ICON_PITCH_ALIGNMENT_VIEWPORT),
-                    PropertyFactory.iconAllowOverlap(true),
-                    PropertyFactory.iconIgnorePlacement(true),
-                )
-            if (config.disablePointSymbolFade) {
-                iconLayer.setIconOpacityTransition(TransitionOptions(0L, 0L))
-            }
-            val labelLayer: SymbolLayer? = if (overlayConfig?.showPointTextLabels == true) {
-                SymbolLayer(pointsSelectionLabelLayerId, pointsSelectionSourceId).withProperties(
-                    PropertyFactory.iconImage(Expression.get("iconImageId")),
-                    PropertyFactory.iconOpacity(Expression.literal(0.0)),
-                    PropertyFactory.iconSize(iconSizeExpr),
-                    PropertyFactory.iconAnchor(config.defaultIconAnchor),
-                    PropertyFactory.iconRotate(iconRotateExpr),
-                    PropertyFactory.iconRotationAlignment(Property.ICON_ROTATION_ALIGNMENT_VIEWPORT),
-                    PropertyFactory.iconAllowOverlap(true),
-                    PropertyFactory.iconIgnorePlacement(true),
-                    PropertyFactory.iconPitchAlignment(Property.ICON_PITCH_ALIGNMENT_VIEWPORT),
-                    PropertyFactory.textField(Expression.get("title")),
-                    PropertyFactory.textSize(
-                        Expression.coalesce(
-                            Expression.get("labelTextSize"),
-                            Expression.literal(config.defaultLabelTextSize),
-                        ),
-                    ),
-                    PropertyFactory.textColor(
-                        Expression.coalesce(
-                            Expression.get("labelTextColorHex"),
-                            Expression.literal(config.defaultLabelTextColorHex),
-                        ),
-                    ),
-                    PropertyFactory.textAnchor(Property.TEXT_ANCHOR_TOP),
-                    PropertyFactory.textOffset(arrayOf(0f, config.pointLabelTextOffsetYEm)),
-                    PropertyFactory.textAllowOverlap(false),
-                    PropertyFactory.textIgnorePlacement(false),
-                ).also { layer ->
-                    if (config.disablePointSymbolFade) {
-                        val instant = TransitionOptions(0L, 0L)
-                        layer.setIconOpacityTransition(instant)
-                        layer.setTextOpacityTransition(instant)
-                    }
-                }
-            } else {
-                null
-            }
-            if (labelLayer != null) {
-                addPointPresentationLayer(labelLayer)
-            }
-            addPointPresentationLayer(iconLayer)
-        }
         if (style.getLayer(lineOuterLayerId) == null) {
             addLayerWithPlacement(
                 style,
@@ -1005,6 +950,11 @@ class GeoJsonRenderPlugin(
 
     private fun applySelectionOverlay() {
         val overlayConfig = selectionOverlayConfig ?: return
+        val markerState = selectionMarkerState ?: return
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            mainHandler.post { applySelectionOverlay() }
+            return
+        }
         val styled = GeoJsonSelectionOverlay.styledPoint(
             selectedId = selectedPointId,
             sourcePoints = renderState.points,
@@ -1012,20 +962,41 @@ class GeoJsonRenderPlugin(
             style = styleSelectionOverlayPoint,
         )
         selectedPointId = styled?.id
-        val json = if (styled == null) {
-            GeoJsonFeatureCollectionEncoder.EMPTY_FEATURE_COLLECTION_JSON
-        } else {
-            buildPointsFeatureCollectionJson(listOf(styled))
+        if (styled == null || !isValidMapLibreGeographicLatLng(styled.latitude, styled.longitude)) {
+            markerState.clear()
+            return
         }
-        val style = map?.style ?: return
-        if (styled != null) {
-            ensureRenderStateMarkerImages(style, setOfNotNull(styled.iconImageId))
+        val bitmap = bitmapForSelection(styled) ?: run {
+            markerState.clear()
+            return
         }
-        updateSource(style, pointsSelectionSourceId, json)
+        markerState.show(
+            GeoJsonSelectionMarkerVisual(
+                pointId = styled.id,
+                latitude = styled.latitude,
+                longitude = styled.longitude,
+                bitmap = bitmap,
+                iconSize = styled.iconSize ?: overlayConfig.selectedIconSize,
+                iconRotationDegrees = styled.iconRotationDegrees ?: 0f,
+                iconAnchor = config.defaultIconAnchor,
+            ),
+        )
     }
 
-    private fun selectionSourceOptions(): GeoJsonOptions {
-        return GeoJsonOptions().apply { withSynchronousUpdate(true) }
+    private fun bitmapForSelection(styled: MapRenderPoint): Bitmap? {
+        val imageId = styled.iconImageId ?: return null
+        selectionBitmapCache[imageId]?.let { return it }
+        val appContext = context?.applicationContext ?: return null
+        val markerStyle = CommonMapPointIcons.styleOrNull(imageId)
+            ?: buildResolvedMarkerStyles(appContext)[imageId]
+        val bitmap = if (markerStyle != null) {
+            MapMarkerUtils.buildMarkerBitmap(appContext, markerStyle)
+        } else {
+            val symbolStyle = buildResolvedSymbolIconStyles()[imageId] ?: return null
+            MapMarkerUtils.buildSymbolIconBitmap(appContext, symbolStyle)
+        }
+        selectionBitmapCache[imageId] = bitmap
+        return bitmap
     }
 
     private fun updateSource(style: Style, id: String, json: String) {
@@ -1176,9 +1147,6 @@ class GeoJsonRenderPlugin(
     private val pointsLabelLayerId = pointsLabelLayerId(sourceIdPrefix)
     private val pointsOverlayIconLayerId = pointsOverlayIconLayerId(sourceIdPrefix)
     private val pointsOverlayLabelLayerId = pointsOverlayLabelLayerId(sourceIdPrefix)
-    private val pointsSelectionSourceId = pointsSelectionSourceId(sourceIdPrefix)
-    private val pointsSelectionIconLayerId = pointsSelectionIconLayerId(sourceIdPrefix)
-    private val pointsSelectionLabelLayerId = pointsSelectionLabelLayerId(sourceIdPrefix)
     private val lineOuterLayerId = "$sourceIdPrefix-lines-outer-layer"
     private val lineBorderLayerId = "$sourceIdPrefix-lines-border-layer"
     private val lineFillLayerId = "$sourceIdPrefix-lines-fill-layer"
@@ -1210,15 +1178,6 @@ class GeoJsonRenderPlugin(
 
         fun pointsOverlayLabelLayerId(sourceIdPrefix: String): String =
             "$sourceIdPrefix-points-overlay-label-layer"
-
-        fun pointsSelectionSourceId(sourceIdPrefix: String): String =
-            "$sourceIdPrefix-points-selection-source"
-
-        fun pointsSelectionIconLayerId(sourceIdPrefix: String): String =
-            "$sourceIdPrefix-points-selection-icon-layer"
-
-        fun pointsSelectionLabelLayerId(sourceIdPrefix: String): String =
-            "$sourceIdPrefix-points-selection-label-layer"
 
         fun pointsCircleLayerId(sourceIdPrefix: String): String =
             "$sourceIdPrefix-points-circle-layer"
@@ -1252,8 +1211,6 @@ class GeoJsonRenderPlugin(
             "$sourceIdPrefix-polygons-outline-fill-layer"
 
         fun pointHitLayerIds(sourceIdPrefix: String): List<String> = listOf(
-            pointsSelectionIconLayerId(sourceIdPrefix),
-            pointsSelectionLabelLayerId(sourceIdPrefix),
             pointsOverlayIconLayerId(sourceIdPrefix),
             pointsIconLayerId(sourceIdPrefix),
             pointsOverlayLabelLayerId(sourceIdPrefix),

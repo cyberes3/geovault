@@ -30,12 +30,14 @@ import com.geovault.places.model.Place
 import com.geovault.places.model.PlaceKey
 import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -124,7 +126,9 @@ class PlacesShellViewModel(
             updateAvailable = bits.updateAvailable,
             mapLaunchArgs = bits.mapLaunchArgs,
         )
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, PlacesShellState())
+        // Off the main thread: selecting a place must not re-run the full document
+        // projection on the UI thread, which would stall the next frame (marker + info box).
+    }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.Eagerly, PlacesShellState())
 
     init {
         updatePromptBinding.collect(viewModelScope) { prompt ->

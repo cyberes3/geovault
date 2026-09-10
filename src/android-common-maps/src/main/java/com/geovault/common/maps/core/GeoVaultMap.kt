@@ -3,6 +3,7 @@ package com.geovault.common.maps.core
 import android.content.res.Configuration
 import android.graphics.Rect
 import android.os.Bundle
+import android.view.ViewGroup
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -31,6 +32,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.geovault.common.maps.render.GeoJsonSelectionMarkerState
 import com.geovault.common.maps.ui.scale.GeoVaultMapScaleBar
 import com.geovault.common.maps.ui.scale.GeoVaultMapScaleBarDefaults
 import com.geovault.common.ui.components.GeoVaultFormDialog
@@ -92,6 +94,7 @@ fun GeoVaultMainMapView(
     popupAvoidanceInsetsPx: GeoVaultMapPopupAvoidanceInsetsPx = GeoVaultMapPopupAvoidanceInsetsPx(),
     showScaleBar: Boolean = false,
     suppressMapLoadErrorDialog: Boolean = false,
+    selectionMarkerState: GeoJsonSelectionMarkerState? = null,
 ) {
     GeoVaultMapHost(
         modifier = modifier,
@@ -103,6 +106,7 @@ fun GeoVaultMainMapView(
         popupAvoidanceInsetsPx = popupAvoidanceInsetsPx,
         showScaleBar = showScaleBar,
         suppressMapLoadErrorDialog = suppressMapLoadErrorDialog,
+        selectionMarkerState = selectionMarkerState,
     )
 }
 
@@ -122,6 +126,7 @@ private fun GeoVaultMapHost(
     popupAvoidanceInsetsPx: GeoVaultMapPopupAvoidanceInsetsPx,
     showScaleBar: Boolean,
     suppressMapLoadErrorDialog: Boolean,
+    selectionMarkerState: GeoJsonSelectionMarkerState? = null,
 ) {
     val lifecycleOwner = LocalLifecycleOwner.current
     val density = LocalDensity.current
@@ -199,13 +204,14 @@ private fun GeoVaultMapHost(
                 acquiredMapView.overScrollMode = android.view.View.OVER_SCROLL_NEVER
                 acquiredMapView.setBackgroundColor(mapUnderlayArgb)
                 acquiredMapView.setMapPopupAvoidanceInsets(popupAvoidanceInsetsPx)
+                (acquiredMapView.parent as? ViewGroup)?.removeView(acquiredMapView)
                 mapView = acquiredMapView
                 currentMap.attachMapView(acquiredMapView)
                 acquiredMapView
             },
-            update = {
-                it.setBackgroundColor(mapUnderlayArgb)
-                it.setMapPopupAvoidanceInsets(popupAvoidanceInsetsPx)
+            update = { view ->
+                view.setBackgroundColor(mapUnderlayArgb)
+                view.setMapPopupAvoidanceInsets(popupAvoidanceInsetsPx)
                 // Keep night/dark hint in sync on every recomposition (Material dark without
                 // UI_MODE_NIGHT_YES, theme toggles) — SideEffect alone can run after the first
                 // tile-source fetch reads a stale null hint and sticks on light streets.
@@ -214,11 +220,16 @@ private fun GeoVaultMapHost(
                 } catch (_: IllegalStateException) {
                     // Manager not attached yet; [SideEffect] sets the hint on the next frame.
                 }
-                if (mapView !== it) {
-                    mapView = it
-                    currentMap.attachMapView(it)
+                if (mapView !== view) {
+                    mapView = view
+                    currentMap.attachMapView(view)
                 }
             },
+        )
+
+        GeoVaultMapSelectionMarkerLayer(
+            map = currentMap,
+            state = selectionMarkerState,
         )
 
         if (showDefaultSourceToggle) {

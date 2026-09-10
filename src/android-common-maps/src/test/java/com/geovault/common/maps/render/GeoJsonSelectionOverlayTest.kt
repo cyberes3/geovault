@@ -3,6 +3,7 @@ package com.geovault.common.maps.render
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
+import org.maplibre.android.style.layers.Property
 
 class GeoJsonSelectionOverlayTest {
     private val config = GeoJsonSelectionOverlayConfig()
@@ -106,5 +107,35 @@ class GeoJsonSelectionOverlayTest {
                 style = null,
             ),
         )
+    }
+
+    @Test
+    fun layout_centerAnchor_putsPivotOnScreenPoint() {
+        val placement = GeoJsonSelectionOverlayLayout.placement(
+            screenX = 100f,
+            screenY = 200f,
+            width = 20f,
+            height = 20f,
+            iconAnchor = Property.ICON_ANCHOR_CENTER,
+        )
+        assertEquals(10f, placement.pivotX)
+        assertEquals(10f, placement.pivotY)
+        assertEquals(90f, placement.translationX)
+        assertEquals(190f, placement.translationY)
+    }
+
+    @Test
+    fun layout_bottomAnchor_putsPivotOnScreenPoint() {
+        val placement = GeoJsonSelectionOverlayLayout.placement(
+            screenX = 100f,
+            screenY = 200f,
+            width = 20f,
+            height = 40f,
+            iconAnchor = Property.ICON_ANCHOR_BOTTOM,
+        )
+        assertEquals(10f, placement.pivotX)
+        assertEquals(40f, placement.pivotY)
+        assertEquals(90f, placement.translationX)
+        assertEquals(160f, placement.translationY)
     }
 }
