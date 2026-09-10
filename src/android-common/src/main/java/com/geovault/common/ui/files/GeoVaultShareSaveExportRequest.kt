@@ -1,5 +1,7 @@
 package com.geovault.common.ui.files
 
+import com.geovault.common.files.GeoVaultSafExportRequest
+
 data class GeoVaultShareSaveExportRequest(
     val title: String,
     val fileName: String,
@@ -31,12 +33,10 @@ data class GeoVaultShareSaveExportRequest(
             chooserTitle: String = title,
             saveLabel: String = "Save",
         ): GeoVaultShareSaveExportRequest {
-            val mime = saf.mimeType
-                ?: error("GeoVaultSafExportRequest.mimeType is required for share/save")
             return GeoVaultShareSaveExportRequest(
                 title = title,
                 fileName = saf.suggestedFileName,
-                mimeType = mime,
+                mimeType = saf.mimeType,
                 bytes = saf.bytes,
                 chooserTitle = chooserTitle,
                 saveLabel = saveLabel,

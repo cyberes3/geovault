@@ -8,11 +8,12 @@ import org.maplibre.android.style.layers.Property
  *
  * **Point icons and text labels:** Whenever [showPointLabelsAndIcons] is true and
  * [showPointTextLabels] is true, the plugin **automatically** registers two MapLibre symbol
- * layers on the same GeoJSON source—`{sourceIdPrefix}-points-label-layer` (text with a
- * zero-opacity icon for anchoring) is added **below** `{sourceIdPrefix}-points-icon-layer`
- * (visible markers), so icons always paint on top of names. Label collision still hides
- * overlapping labels ([showPointTextLabels] layer uses MapLibre collision), not icons.
- * When [showPointTextLabels] is false, only the icon layer is created (e.g. icon-only maps).
+ * layers on the same GeoJSON source via [PointSymbolLayers]—`{sourceIdPrefix}-points-icon-layer`
+ * (visible markers) is added **below** `{sourceIdPrefix}-points-label-layer` (text with a
+ * zero-opacity icon for anchoring), so names always paint on top of markers. Label collision
+ * still hides overlapping labels ([showPointTextLabels] layer uses MapLibre collision), not
+ * icons. When [showPointTextLabels] is false, only the icon layer is created (e.g. icon-only
+ * maps).
  *
  * **Text halo:** [pointLabelHaloWidth] optionally draws an outline around point name labels
  * (e.g. on satellite or busy imagery) so names stay legible. When [pointLabelHaloWidth] is

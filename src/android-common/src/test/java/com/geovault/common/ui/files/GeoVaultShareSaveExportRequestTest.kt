@@ -1,5 +1,6 @@
 package com.geovault.common.ui.files
 
+import com.geovault.common.files.GeoVaultSafExportRequest
 import org.junit.Assert.assertEquals
 import org.junit.Test
 

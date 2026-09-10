@@ -15,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import com.geovault.common.ui.files.GeoVaultSafExportHost
 import com.geovault.common.ui.modifier.dismissKeyboardOnOutsideTap
 import com.geovault.common.ui.navigation.GeoVaultBackHandlerHost
 import com.geovault.common.ui.system.GeoVaultSystemBars
@@ -200,17 +201,19 @@ fun GeoVaultTheme(
         colors = if (darkTheme) darkScheme() else lightScheme()
     ) {
         GeoVaultBackHandlerHost {
-            // Theme is intentionally inset-agnostic. Navigation-bar safe-area is owned by the
-            // chrome that needs it (GeoVaultBottomNavScaffold, GeoVaultMapScaffold,
-            // GeoVaultSubViewScaffold, GeoVaultAuthGate, GeoVaultSnackbarHost). Padding here
-            // would force the map's GL surface to re-measure on every transient WindowInsets
-            // dispatch (e.g. after screen-off → resume), producing a vertical squish.
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .dismissKeyboardOnOutsideTap()
-            ) {
-                content()
+            GeoVaultSafExportHost {
+                // Theme is intentionally inset-agnostic. Navigation-bar safe-area is owned by the
+                // chrome that needs it (GeoVaultBottomNavScaffold, GeoVaultMapScaffold,
+                // GeoVaultSubViewScaffold, GeoVaultAuthGate, GeoVaultSnackbarHost). Padding here
+                // would force the map's GL surface to re-measure on every transient WindowInsets
+                // dispatch (e.g. after screen-off → resume), producing a vertical squish.
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .dismissKeyboardOnOutsideTap()
+                ) {
+                    content()
+                }
             }
         }
     }

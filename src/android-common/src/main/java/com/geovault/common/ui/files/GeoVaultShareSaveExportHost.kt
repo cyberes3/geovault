@@ -4,21 +4,19 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import com.geovault.common.files.GeoVaultFileExport
+import com.geovault.common.files.GeoVaultSafExportSession
 import com.geovault.common.ui.components.GeoVaultShareSaveActionSheet
 
 @Composable
 fun GeoVaultShareSaveExportHost(
     request: GeoVaultShareSaveExportRequest?,
     onConsumed: () -> Unit,
-    writeFailedMessage: String = "Export failed",
+    writeFailedMessage: String = GeoVaultSafExportSession.DEFAULT_WRITE_FAILED_MESSAGE,
     onWriteFailed: ((String) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val fileExport = remember(context) { GeoVaultFileExport(context) }
-    val launchSave = rememberGeoVaultSafDocumentExportLauncher(
-        writeFailedMessage = writeFailedMessage,
-        onWriteFailed = onWriteFailed,
-    )
+    val launchSave = LocalGeoVaultSafExport.current
     if (request == null) {
         return
     }
@@ -34,7 +32,11 @@ fun GeoVaultShareSaveExportHost(
             )
         },
         onSave = {
-            launchSave(request.toSafRequest())
+            launchSave.launch(
+                request = request.toSafRequest(),
+                writeFailedMessage = writeFailedMessage,
+                onWriteFailed = onWriteFailed,
+            )
         },
         onDismissRequest = onConsumed,
     )
