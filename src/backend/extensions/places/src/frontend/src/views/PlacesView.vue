@@ -198,11 +198,17 @@ async function setupMap(): Promise<void> {
     hoveredPlaceId.value = null;
   });
 
-  controller.map.on('pointermove', (event: MaplibreMapMouseEvent) => {
-    const hit = controller.map.queryRenderedFeatures(event.point, { layers: [PLACE_LAYER_ID] }).length > 0;
-    if (mapPanelRef.value?.mapContainer) {
-      mapPanelRef.value.mapContainer.style.cursor = hit ? 'pointer' : '';
-    }
+  const setHoverCursor = (cursor: string): void => {
+    controller.map.getCanvas().style.cursor = cursor;
+  };
+
+  controller.map.on('mousemove', (event: MaplibreMapMouseEvent) => {
+    const hit = controller.queryFirstPointAt(event.point) != null;
+    setHoverCursor(hit ? 'pointer' : '');
+  });
+
+  controller.map.on('mouseout', () => {
+    setHoverCursor('');
   });
 }
 

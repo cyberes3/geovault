@@ -22,7 +22,7 @@ export interface RouteWrapperOptions {
 export function createRouteWrapper(component: Component, options: RouteWrapperOptions) {
     const { api, router = null, platformState = null, routeName = 'default', ...rest } = options;
     const kebabName = api.kebabName;
-    const scopeClass = `gv-ext gv-ext-${kebabName}`;
+    const scopeClass = `gv-ext gv-ext-${kebabName} flex flex-col flex-1 min-h-0 h-full w-full`;
 
     return {
         name: `ExtensionBoundary_${kebabName}_${routeName}`,

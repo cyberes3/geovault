@@ -1,6 +1,6 @@
 <template>
-  <div class="flex flex-col flex-1 min-h-0 h-full w-full overflow-y-auto sm:overflow-hidden bg-gray-50">
-    <div class="h-[42vh] min-h-[240px] max-h-[440px] sm:h-auto sm:max-h-none sm:min-h-[320px] sm:flex-1 sm:min-h-0 relative border-b border-gray-300">
+  <div class="flex flex-col flex-1 min-h-0 h-full w-full overflow-hidden bg-gray-50">
+    <div class="relative flex-1 min-h-0 border-b border-gray-300">
       <div ref="mapContainer" class="absolute inset-0 z-0 h-full w-full min-h-0 bg-gray-100 touch-pan-y"></div>
 
       <div
@@ -33,7 +33,7 @@
     </div>
 
     <div
-        class="flex flex-col bg-white border-t border-gray-300 shadow-[0_-2px_10px_rgba(0,0,0,0.05)] sm:flex-shrink-0 sm:z-20"
+        class="flex flex-shrink-0 flex-col bg-white border-t border-gray-300 shadow-[0_-2px_10px_rgba(0,0,0,0.05)] z-20"
         :class="{ 'opacity-60': loadingEdit }"
         :aria-busy="loadingEdit"
     >
@@ -93,6 +93,7 @@ const PLACE_EDIT_SOURCE_ID = 'gv_places_overlay_edit_source';
 const PLACE_EDIT_LAYER_ID = 'gv_places_overlay_edit_layer';
 const INITIAL_CENTER: [number, number] = [0, 0];
 const INITIAL_ZOOM = 2;
+const COORDINATE_FIELD_ZOOM = 10;
 
 const route = useRoute();
 const router = inject('extensionRouter') as RouterLike;
@@ -152,7 +153,7 @@ const editId = computed((): number | null => {
 const pageTitle = computed((): string => (editId.value ? 'Edit Place' : 'New Place'));
 useDocumentTitle(pageTitle);
 
-function updateMarkerFromCoords(panMap = false): void {
+function updateMarkerFromCoords(panMap = false, zoom?: number): void {
   if (!map.value || !mapController.value) {
     return;
   }
@@ -167,14 +168,18 @@ function updateMarkerFromCoords(panMap = false): void {
     properties: { is_highlighted: 0 },
   }]);
   if (panMap) {
-    map.value.easeTo({ center: [marker.lon, marker.lat], duration: 300 });
+    map.value.easeTo({
+      center: [marker.lon, marker.lat],
+      duration: 300,
+      ...(zoom != null ? { zoom } : {}),
+    });
   }
 }
 
 async function validateCoordinatesField(): Promise<void> {
   const result = await validateCoordinates();
   if (result.changed) {
-    updateMarkerFromCoords(result.panMap);
+    updateMarkerFromCoords(result.panMap, result.panMap ? COORDINATE_FIELD_ZOOM : undefined);
   }
 }
 
@@ -183,7 +188,7 @@ function onCoordinatesInput(value: string): void {
   handleCoordinatesInput();
   void validateCoordinates({ reformatInput: false }).then((result) => {
     if (result.changed) {
-      updateMarkerFromCoords(result.panMap);
+      updateMarkerFromCoords(result.panMap, result.panMap ? COORDINATE_FIELD_ZOOM : undefined);
     }
   });
 }

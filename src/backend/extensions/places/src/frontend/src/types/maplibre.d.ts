@@ -84,7 +84,11 @@ export interface MaplibreMap {
     addSource(id: string, spec: Record<string, unknown>): void;
     addLayer(layer: Record<string, unknown>): void;
     moveLayer(id: string): void;
-    queryRenderedFeatures(point: MaplibrePoint, options?: { layers?: string[] }): MaplibreGeoJSONFeature[];
+    queryRenderedFeatures(
+        geometry: MaplibrePoint | [MaplibrePoint, MaplibrePoint] | [[number, number], [number, number]],
+        options?: { layers?: string[] }
+    ): MaplibreGeoJSONFeature[];
+    getCanvas(): HTMLCanvasElement;
     getCenter(): MaplibreLngLat;
     getZoom(): number;
     getBearing(): number;

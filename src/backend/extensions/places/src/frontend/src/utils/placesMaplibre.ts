@@ -338,7 +338,11 @@ export async function createPlacesMap({
   };
 
   const queryFirstPointAt = (point: MaplibrePoint): MaplibreGeoJSONFeature | null => {
-    const features = map.queryRenderedFeatures(point, { layers: [layerId] });
+    const hitBox: [[number, number], [number, number]] = [
+      [point.x - 5, point.y - 5],
+      [point.x + 5, point.y + 5],
+    ];
+    const features = map.queryRenderedFeatures(hitBox, { layers: [layerId] });
     return features[0] ?? null;
   };
 
