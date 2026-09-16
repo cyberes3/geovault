@@ -1,6 +1,7 @@
 import type { GeoJSONSource, Map as MapLibreMap } from 'maplibre-gl';
 import type { GeoJsonFeatureCollection } from '@/types/geospatial';
 import { GEOJSON_SOURCE_ID } from '@/utils/map/mapLayers';
+import { mapBootLog, mapBootWarn } from '@/utils/map/mapBootLog';
 
 /**
  * MapLibre `geojson-data` sink. `setData` is coalesced to one write per animation frame.
@@ -36,8 +37,12 @@ export class GeoJsonSourceHandle {
         if (!collection) return;
         const map = this.getMap();
         const source = map?.getSource(GEOJSON_SOURCE_ID) as GeoJSONSource | undefined;
-        if (!source || !map) return;
+        if (!source || !map) {
+            mapBootWarn('geojson.flush', { skipped: 'no-source', featureCount: collection.features?.length ?? 0 });
+            return;
+        }
         source.setData(collection);
+        mapBootLog('geojson.flush', { featureCount: collection.features?.length ?? 0 });
     }
 
     dispose(): void {

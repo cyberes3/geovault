@@ -9,6 +9,7 @@ import { tileSourceCatalog } from '@/utils/map/tileSources/sharedCatalog.js';
 import { toast } from '@/utils/toast';
 import type { FeatureIconResolver } from '@/utils/map/FeatureIconResolver';
 import type { CameraSnapshot, MapStyleInput } from './types';
+import { attachMapLibreErrorLogging, describeError, describeMapSnapshot, describeStyleInput, mapBootError, mapBootLog } from '@/utils/map/mapBootLog';
 
 export interface MapRuntimeCallbacks {
     onMoveOrZoomStart: () => void;
@@ -54,6 +55,11 @@ export class MapRuntime {
     }
 
     async create(container: HTMLElement, config: MapRuntimeCreateConfig): Promise<MapLibreMap> {
+        mapBootLog('runtime.create:start', {
+            container: { width: container.clientWidth, height: container.clientHeight },
+            zoom: config.zoom,
+            style: describeStyleInput(config.style),
+        });
         this.destroy();
         this.map = await initializeMap(container, {
             center: config.center,
@@ -65,6 +71,7 @@ export class MapRuntime {
             style: config.style,
             attributionControl: tileSourceCatalog.showAttribution,
         });
+        attachMapLibreErrorLogging(this.map);
 
         const maplibregl = getLoadedMaplibreGl();
         this.map.addControl(
@@ -82,6 +89,7 @@ export class MapRuntime {
         this.bindEvents();
         this.bindContextLoss();
         registerFeatureLayers(this.map, this.styleEpoch);
+        mapBootLog('runtime.create:done', describeMapSnapshot(this.map));
         return this.map;
     }
 
@@ -89,22 +97,37 @@ export class MapRuntime {
         if (!this.map) throw new Error('Map is not created');
         this.styleEpoch += 1;
         const epoch = this.styleEpoch;
+        mapBootLog('runtime.setStyle:start', { epoch, style: describeStyleInput(style) });
         this.map.setStyle(style);
         await waitForStyleLoaded(this.map);
-        if (epoch !== this.styleEpoch || !this.map) return;
+        if (epoch !== this.styleEpoch || !this.map) {
+            mapBootLog('runtime.setStyle:stale', { epoch, currentEpoch: this.styleEpoch });
+            return;
+        }
         this.ensureGeoJsonSource();
         this.map.setMaxZoom(MAX_ZOOM_LEVEL);
         registerFeatureLayers(this.map, epoch);
         this.iconResolver?.attach(this.map);
+        mapBootLog('runtime.setStyle:done', { epoch, ...describeMapSnapshot(this.map) });
     }
 
     ensureGeoJsonSource(): void {
-        if (!this.map || this.map.getSource(GEOJSON_SOURCE_ID)) return;
-        this.map.addSource(GEOJSON_SOURCE_ID, {
-            type: 'geojson',
-            promoteId: 'database_id',
-            data: { type: 'FeatureCollection', features: [] },
-        });
+        if (!this.map) return;
+        if (this.map.getSource(GEOJSON_SOURCE_ID)) {
+            mapBootLog('runtime.ensureGeoJsonSource', { existed: true });
+            return;
+        }
+        try {
+            this.map.addSource(GEOJSON_SOURCE_ID, {
+                type: 'geojson',
+                promoteId: 'database_id',
+                data: { type: 'FeatureCollection', features: [] },
+            });
+            mapBootLog('runtime.ensureGeoJsonSource', { existed: false, added: true });
+        } catch (error) {
+            mapBootError('runtime.ensureGeoJsonSource', { error: describeError(error) });
+            throw error;
+        }
     }
 
     waitForIdle(timeoutMs = 15000): Promise<void> {

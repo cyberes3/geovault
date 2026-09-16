@@ -223,6 +223,7 @@ import type { UserInfo } from '@/assets/js/types/store-types';
 
 import { getInitialMapConfig as getWorldInitialMapConfig, getMapRecenterFromUserLocation } from '@/utils/map/mapConfigUtils';
 import { resolveMapStyle, MAX_ZOOM_LEVEL } from '@/utils/map/maplibre/mapInitialization.js';
+import { describeError, describeMapSnapshot, describeStyleInput, mapBootError, mapBootLog } from '@/utils/map/mapBootLog';
 import { useDocumentTitle } from '@/utils/documentTitle.js';
 
 import FeatureListSidebar from './FeatureListSidebar.vue';
@@ -674,24 +675,38 @@ function resetUiForRoute(): void {
 }
 
 async function loadRouteData(): Promise<void> {
-    if (route.path === '/mapshare' && !route.query.id) {
-        mapShare.handlePublicShareError('This share link is missing an id.');
-        return;
+    const mode = route.path === '/mapshare' && !route.query.id
+        ? 'share-missing-id'
+        : collectionId.value
+            ? 'collection'
+            : route.query.featureId
+                ? 'featureId'
+                : route.query.tag
+                    ? 'tag'
+                    : 'main';
+    mapBootLog('loadRouteData:start', { mode });
+    try {
+        if (route.path === '/mapshare' && !route.query.id) {
+            mapShare.handlePublicShareError('This share link is missing an id.');
+            return;
+        }
+        if (collectionId.value) {
+            await handleCollectionFilter(collectionId.value);
+            return;
+        }
+        if (route.query.featureId) {
+            await handleUrlFeatureId();
+            return;
+        }
+        if (route.query.tag) {
+            isTagFilterActive.value = true;
+            await handleUrlTag();
+            return;
+        }
+        await featureData.loadDataForCurrentView();
+    } finally {
+        mapBootLog('loadRouteData:done', { mode, featureCount: featureCount.value });
     }
-    if (collectionId.value) {
-        await handleCollectionFilter(collectionId.value);
-        return;
-    }
-    if (route.query.featureId) {
-        await handleUrlFeatureId();
-        return;
-    }
-    if (route.query.tag) {
-        isTagFilterActive.value = true;
-        await handleUrlTag();
-        return;
-    }
-    await featureData.loadDataForCurrentView();
 }
 
 async function recreateMapIfMissing(): Promise<void> {
@@ -746,6 +761,9 @@ async function handleKeepAliveActivate(): Promise<void> {
 let handleKeyDown: ((event: KeyboardEvent) => void) | null = null;
 
 onMounted(async () => {
+    const bootStarted = Date.now();
+    const bootElapsed = () => Date.now() - bootStarted;
+    mapBootLog('page:onMounted', { path: route.path });
     isMapInitializing.value = true;
     isDataLoading.value = true;
     window.addEventListener('resize', syncIsMobile);
@@ -783,7 +801,13 @@ onMounted(async () => {
 
     try {
         await waitForElement(mapContainer);
+        mapBootLog('page:container', {
+            elapsedMs: bootElapsed(),
+            width: mapContainer.value?.clientWidth ?? 0,
+            height: mapContainer.value?.clientHeight ?? 0,
+        });
     } catch (error) {
+        mapBootError('page:container', { error: describeError(error) });
         console.error('Map container not available:', error instanceof Error ? error.message : error);
         isMapInitializing.value = false;
         isDataLoading.value = false;
@@ -801,15 +825,26 @@ onMounted(async () => {
 
     await Promise.all([tileSourcesPromise, userLocationPromise, tagsPromise]);
     await fetchMaptilerConfig();
+    mapBootLog('page:catalog', {
+        elapsedMs: bootElapsed(),
+        tileSourceCount: tileSources.value.length,
+        selectedLayer: selectedLayer.value,
+        tileSourceIds: tileSources.value.map((source) => source.id),
+        maptilerAvailable: !!maptilerConfig.value?.isAvailable(),
+        hasIpHint: !!mapGeolocation.userLocation.value,
+    });
 
     const skipUrlDrivenCamera = mapSession.filters.isUrlDrivenCamera;
     const initialCamera = getInitialCameraConfig(skipUrlDrivenCamera);
     const initialTileSource = tileSources.value.find((s) => s.id === selectedLayer.value);
     const initialStyle = resolveMapStyle(initialTileSource);
+    mapBootLog('page:style', { elapsedMs: bootElapsed(), ...describeStyleInput(initialStyle) });
 
     try {
         await initializeMap({ ...initialCamera, style: initialStyle });
+        mapBootLog('page:map-created', { elapsedMs: bootElapsed(), hasMap: !!map.value, ...describeMapSnapshot(map.value) });
     } catch (error) {
+        mapBootError('page:map-created', { error: describeError(error) });
         console.error('Error initializing map:', error);
         loadError.value = error instanceof Error ? error.message : 'Failed to initialize map. Please refresh the page.';
         isMapInitializing.value = false;
@@ -832,6 +867,7 @@ onMounted(async () => {
         applyPostLoadMaxZoom();
 
         if (selectedLayer.value) {
+            mapBootLog('page:terrain', { selectedLayer: selectedLayer.value, terrainEnabled: terrainEnabled.value, hillshadeEnabled: hillshadeEnabled.value });
             await applyTerrainAndHillshade(selectedLayer.value);
         }
 
@@ -841,6 +877,7 @@ onMounted(async () => {
 
         const hasIpHint = !!mapGeolocation.userLocation.value;
         featureData.syncPendingExtentFitWithoutGeolocation(!hasIpHint && !skipUrlDrivenCamera && !isMapshareRoute.value);
+        mapBootLog('page:loadRouteData', { elapsedMs: bootElapsed(), hasIpHint, skipUrlDrivenCamera });
 
         await loadRouteData();
 
@@ -848,12 +885,26 @@ onMounted(async () => {
         ensureMapResize();
         featureData.updateFeaturesInExtent();
         logMapState();
+        mapBootLog('page:booted', {
+            elapsedMs: bootElapsed(),
+            featureCount: featureCount.value,
+            featuresInExtent: featuresInExtent.value.length,
+            ...describeMapSnapshot(map.value),
+        });
     } catch (error) {
+        mapBootError('page:boot', { error: describeError(error), elapsedMs: bootElapsed() });
         console.error('Error finishing map boot:', error);
         loadError.value = error instanceof Error ? error.message : 'Failed to initialize map. Please refresh the page.';
     } finally {
         isMapInitializing.value = false;
         isDataLoading.value = false;
+        mapBootLog('page:finally', {
+            elapsedMs: bootElapsed(),
+            isMapInitializing: isMapInitializing.value,
+            isDataLoading: isDataLoading.value,
+            hasMap: !!map.value,
+            loadError: loadError.value,
+        });
     }
 });
 

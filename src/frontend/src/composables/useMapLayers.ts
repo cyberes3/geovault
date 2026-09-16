@@ -11,6 +11,7 @@ import { MAX_ZOOM_LEVEL } from '@/utils/map/maplibre/mapInitialization.js';
 import type { FeatureSource, HiddenIdSet } from '@/utils/map/common/FeatureSource';
 import type { MapRuntime } from '@/utils/map/common/MapRuntime';
 import type { TileRuntime } from '@/utils/map/common/TileRuntime';
+import { describeError, mapBootError, mapBootLog } from '@/utils/map/mapBootLog';
 
 export interface UseMapLayersDeps {
     map: ShallowRef<MapLibreMap | null>;
@@ -78,8 +79,10 @@ export function useMapLayers(deps: UseMapLayersDeps) {
         try {
             await tiles.loadCatalog(getDefaultBasemap());
             syncFromTiles();
+            mapBootLog('tileSources', { count: tiles.sources.length, selectedId: tiles.selectedId, ids: tiles.sources.map((source) => source.id) });
             return tiles.sources;
         } catch (error) {
+            mapBootError('tileSources', { error: describeError(error) });
             console.error('Error fetching tile sources:', error);
             tileSources.value = [];
             setLoadError('Unable to load map tile sources.');
