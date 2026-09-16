@@ -6,7 +6,6 @@ import type { Map as MapLibreMap, MapEventType, StyleSpecification } from 'mapli
 import { MAX_ZOOM_LEVEL } from '@/utils/map/maplibre/mapInitialization.js';
 import type { LabelMarkerManager } from '@/utils/map/maplibre/labelMarkers.js';
 import type { MapSession } from '@/utils/map/session/MapSession';
-import { describeError, describeMapSnapshot, mapBootError, mapBootLog } from '@/utils/map/mapBootLog';
 
 export interface MapConfigInit {
     center: [number, number];
@@ -38,28 +37,18 @@ export function useMapInitialization(deps: UseMapInitializationDeps) {
             throw new Error('Map container is not available');
         }
 
-        mapBootLog('createMapInstance:start', {
+        deps.session.labels?.clear();
+        await deps.session.runtime.create(mapContainer.value, {
+            center: mapConfig.center,
             zoom: mapConfig.zoom,
-            container: { width: mapContainer.value.clientWidth, height: mapContainer.value.clientHeight },
+            pitch: mapConfig.pitch ?? 0,
+            bearing: mapConfig.bearing ?? 0,
+            antialias: deps.getEnableAntialias(),
+            style: mapConfig.style,
         });
-        try {
-            deps.session.labels?.clear();
-            await deps.session.runtime.create(mapContainer.value, {
-                center: mapConfig.center,
-                zoom: mapConfig.zoom,
-                pitch: mapConfig.pitch ?? 0,
-                bearing: mapConfig.bearing ?? 0,
-                antialias: deps.getEnableAntialias(),
-                style: mapConfig.style,
-            });
-            deps.session.attachLabels();
-            labelMarkerManager.value = deps.session.labels;
-            syncMapRef();
-            mapBootLog('createMapInstance:done', { hasMapRef: !!map.value, ...describeMapSnapshot(map.value) });
-        } catch (error) {
-            mapBootError('createMapInstance', { error: describeError(error) });
-            throw error;
-        }
+        deps.session.attachLabels();
+        labelMarkerManager.value = deps.session.labels;
+        syncMapRef();
     }
 
     function destroyMap(): void {

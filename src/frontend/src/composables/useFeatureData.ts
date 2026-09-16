@@ -23,7 +23,6 @@ import type { HiddenFeatureSet } from '@/utils/map/session/HiddenFeatureSet';
 import type { ElevationStore } from '@/utils/map/session/ElevationStore';
 import type { LoadContext as SessionLoadContext } from '@/utils/map/session/types';
 import type { VaultFeature } from '@/contracts/feature';
-import { describeError, mapBootError, mapBootLog, mapBootWarn } from '@/utils/map/mapBootLog';
 
 export interface UseFeatureDataDeps {
     map: ShallowRef<MapLibreMap | null>;
@@ -272,12 +271,6 @@ export function useFeatureData(deps: UseFeatureDataDeps) {
     }
 
     async function handleLoadSuccess(features: VaultFeature[], context: SessionLoadContext, firstReplaceLoad: boolean): Promise<void> {
-        mapBootLog('loadSuccess', {
-            kind: context.kind,
-            firstReplaceLoad,
-            featureCount: features.length,
-            pendingExtentFit: pendingExtentFitWithoutGeolocation.value,
-        });
         updateFeatureCount();
 
         const rawData = markRaw({ type: 'FeatureCollection', features }) as GeoJsonFeatureCollection;
@@ -324,21 +317,18 @@ export function useFeatureData(deps: UseFeatureDataDeps) {
 
     async function loadDataForCurrentView(options: { force?: boolean } = {}): Promise<void> {
         if (!map.value) {
-            mapBootWarn('loadData:skip', { reason: 'no-map' });
             isDataLoading.value = false;
             return;
         }
 
         inflightLoads += 1;
         isDataLoading.value = true;
-        mapBootLog('loadData:start', { inflightLoads, force: !!options.force, zoom: map.value.getZoom() });
 
         try {
             let bounds;
             try {
                 bounds = map.value.getBounds();
-            } catch (error) {
-                mapBootError('loadData:getBounds', { error: describeError(error) });
+            } catch {
                 return;
             }
 
@@ -347,17 +337,11 @@ export function useFeatureData(deps: UseFeatureDataDeps) {
             try {
                 if (isMapshareRoute.value) {
                     const shareInfoLoaded = await ensurePublicShareInfo();
-                    if (!shareInfoLoaded) {
-                        mapBootWarn('loadData:skip', { reason: 'share-info-failed' });
-                        return;
-                    }
+                    if (!shareInfoLoaded) return;
                 }
 
                 const context = getSessionLoadContext();
-                if (!map.value) {
-                    mapBootWarn('loadData:skip', { reason: 'map-cleared' });
-                    return;
-                }
+                if (!map.value) return;
                 bounds = map.value.getBounds();
                 const zoom = map.value.getZoom();
                 const viewportBbox: [number, number, number, number] = [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()];
@@ -367,13 +351,6 @@ export function useFeatureData(deps: UseFeatureDataDeps) {
                         ? [-180, -85.05112878, 180, 85.05112878]
                         : viewportBbox;
                 const bboxKey = bboxForApi.map((value) => value.toFixed(4)).join(',');
-                mapBootLog('loadData:request', {
-                    kind: context.kind,
-                    spatial: context.spatial,
-                    firstReplaceLoad,
-                    zoom,
-                    worldBbox: context.spatial === 'global' || firstReplaceLoad,
-                });
 
                 const result = await loadPipeline.load({
                     context,
@@ -382,16 +359,7 @@ export function useFeatureData(deps: UseFeatureDataDeps) {
                     replaceSource: context.replaceSource,
                     force: options.force,
                 });
-                if (!result) {
-                    mapBootWarn('loadData:skip', { reason: 'pipeline-null', generation: loadPipeline.generation });
-                    return;
-                }
-                mapBootLog('loadData:result', {
-                    fromCache: result.fromCache,
-                    empty: result.empty,
-                    truncated: result.truncated,
-                    featureCount: result.features.length,
-                });
+                if (!result) return;
 
                 if (context.kind !== 'featureFocus' && !(context.kind === 'share' && context.shareType === 'feature')) {
                     loadedBounds.add(bboxKey);
@@ -399,11 +367,7 @@ export function useFeatureData(deps: UseFeatureDataDeps) {
 
                 await handleLoadSuccess(result.features, context, firstReplaceLoad);
             } catch (error) {
-                if (isAbortError(error)) {
-                    mapBootLog('loadData:aborted');
-                    return;
-                }
-                mapBootError('loadData', { error: describeError(error) });
+                if (isAbortError(error)) return;
                 console.error('Error loading data:', error);
                 let context: SessionLoadContext;
                 try {
@@ -424,7 +388,6 @@ export function useFeatureData(deps: UseFeatureDataDeps) {
                     isInitialLoad.value = false;
                 }
             }
-            mapBootLog('loadData:finally', { inflightLoads, isDataLoading: isDataLoading.value });
         }
     }
 

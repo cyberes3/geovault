@@ -5,7 +5,6 @@
 import type { StyleSpecification, Map as MapLibreMap, RequestTransformFunction, RequestParameters, MapOptions } from 'maplibre-gl'
 import type { TileSource } from '@/api/services/tilesApi'
 import { loadMaplibreGl } from './lazyMaplibreGl.js'
-import { describeError, describeStyleInput, mapBootError, mapBootLog } from '@/utils/map/mapBootLog'
 
 // Maximum allowed zoom level for the map
 export const MAX_ZOOM_LEVEL = 18
@@ -189,88 +188,69 @@ export function isMapIdle(map: MapLibreMap): boolean {
  * If the style is loaded when the timeout hits, proceed; reject only when the style never became usable.
  */
 export function waitForMapIdle(map: MapLibreMap, timeoutMs = 15000): Promise<void> {
-  if (isMapIdle(map)) {
-    mapBootLog('waitForMapIdle', { result: 'already' })
-    return Promise.resolve()
-  }
-  mapBootLog('waitForMapIdle', { result: 'wait', timeoutMs })
-  const started = Date.now()
+  if (isMapIdle(map)) return Promise.resolve()
   return new Promise((resolve, reject) => {
     let settled = false
-    const finish = (ok: boolean, reason: string, error?: Error) => {
+    const finish = (ok: boolean, error?: Error) => {
       if (settled) return
       settled = true
       clearTimeout(timer)
       clearInterval(poll)
       map.off('idle', onIdle)
       map.off('styledata', onStyleData)
-      const elapsedMs = Date.now() - started
-      if (ok) {
-        mapBootLog('waitForMapIdle', { result: 'resolved', reason, elapsedMs })
-        resolve()
-      } else {
-        mapBootError('waitForMapIdle', { result: 'timeout', reason, elapsedMs })
-        reject(error ?? new Error('Timed out waiting for map idle'))
-      }
+      if (ok) resolve()
+      else reject(error ?? new Error('Timed out waiting for map idle'))
     }
     const onIdle = () => {
-      if (isMapIdle(map)) finish(true, 'idle')
+      if (isMapIdle(map)) finish(true)
     }
     const onStyleData = () => {
-      if (isMapIdle(map)) finish(true, 'styledata')
+      if (isMapIdle(map)) finish(true)
     }
     const timer = setTimeout(() => {
-      if (map.isStyleLoaded()) finish(true, 'timeout-style-loaded')
-      else finish(false, 'timeout', new Error('Timed out waiting for map idle'))
+      if (map.isStyleLoaded()) finish(true)
+      else finish(false, new Error('Timed out waiting for map idle'))
     }, timeoutMs)
     const poll = setInterval(() => {
-      if (isMapIdle(map)) finish(true, 'poll')
+      if (isMapIdle(map)) finish(true)
     }, 50)
     map.once('idle', onIdle)
     map.on('styledata', onStyleData)
-    if (isMapIdle(map)) finish(true, 'already-after-listen')
+    if (isMapIdle(map)) finish(true)
   })
 }
 
 /** Resolve when the style can accept addSource / addLayer (MapLibre 6 throws before this). */
 export function waitForStyleLoaded(map: MapLibreMap, timeoutMs = 15000): Promise<void> {
-  if (map.isStyleLoaded()) {
-    mapBootLog('waitForStyleLoaded', { result: 'already' })
-    return Promise.resolve()
-  }
-  mapBootLog('waitForStyleLoaded', { result: 'wait', timeoutMs })
-  const started = Date.now()
+  if (map.isStyleLoaded()) return Promise.resolve()
   return new Promise((resolve, reject) => {
     let settled = false
-    const finish = (reason: string) => {
+    const finish = () => {
       if (settled) return
       settled = true
       clearTimeout(timer)
       clearInterval(poll)
-      map.off('load', onLoad)
+      map.off('load', finish)
       map.off('styledata', onStyleData)
-      mapBootLog('waitForStyleLoaded', { result: 'resolved', reason, elapsedMs: Date.now() - started })
       resolve()
     }
-    const onLoad = () => { finish('load') }
     const onStyleData = () => {
-      if (map.isStyleLoaded()) finish('styledata')
+      if (map.isStyleLoaded()) finish()
     }
     const timer = setTimeout(() => {
       if (settled) return
       settled = true
       clearInterval(poll)
-      map.off('load', onLoad)
+      map.off('load', finish)
       map.off('styledata', onStyleData)
-      mapBootError('waitForStyleLoaded', { result: 'timeout', elapsedMs: Date.now() - started })
       reject(new Error('Timed out waiting for map load'))
     }, timeoutMs)
     const poll = setInterval(() => {
-      if (map.isStyleLoaded()) finish('poll')
+      if (map.isStyleLoaded()) finish()
     }, 50)
-    map.once('load', onLoad)
+    map.once('load', finish)
     map.on('styledata', onStyleData)
-    if (map.isStyleLoaded()) finish('already-after-listen')
+    if (map.isStyleLoaded()) finish()
   })
 }
 
@@ -280,17 +260,10 @@ export async function initializeMap(container: HTMLElement, config: InitializeMa
     throw new Error('Invalid container: must be an HTMLElement')
   }
 
-  mapBootLog('initializeMap', {
-    container: { width: container.clientWidth, height: container.clientHeight },
-    zoom: config.zoom,
-    style: describeStyleInput(config.style),
-  })
   const maplibregl = await loadMaplibreGl()
-  mapBootLog('initializeMap:maplibre', { version: maplibregl.getVersion?.() ?? null })
   try {
     return new maplibregl.Map(buildMapConstructorOptions(container, config))
   } catch (error) {
-    mapBootError('initializeMap', { error: describeError(error) })
     remapMapInitError(error, maplibregl.GPUInitializationError);
   }
 }
