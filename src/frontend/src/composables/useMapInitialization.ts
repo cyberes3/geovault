@@ -66,14 +66,7 @@ export function useMapInitialization(deps: UseMapInitializationDeps) {
     }
 
     function ensureMapResize(): void {
-        if (!map.value) return;
-        if (map.value.loaded()) {
-            map.value.resize();
-        } else {
-            void map.value.once('load', () => {
-                map.value?.resize();
-            });
-        }
+        map.value?.resize();
     }
 
     function waitForElement(elRef: Ref<HTMLElement | null>, timeout = 2000): Promise<HTMLElement> {
@@ -110,7 +103,7 @@ export function useMapInitialization(deps: UseMapInitializationDeps) {
         }
         const mapInstance = map.value;
         return new Promise((resolve, reject) => {
-            if (eventName === 'load' && mapInstance.loaded()) {
+            if (eventName === 'load' && mapInstance.isStyleLoaded()) {
                 resolve();
                 return;
             }

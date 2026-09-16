@@ -60,6 +60,7 @@ import { createPlatformStateBridge } from '@/extensions/platformState';
 import { loadExtensions } from '@/extensions/extensionLoader';
 
 import { loadMaplibreGl } from '@/utils/map/maplibre/lazyMaplibreGl.js';
+import { waitForStyleLoaded, waitForMapIdle } from '@/utils/map/maplibre/mapInitialization.js';
 import type { LocationMarkerCoords } from '@/utils/map/maplibre/locationMarker';
 import type { Map as MapLibreMap, Marker } from 'maplibre-gl';
 import type { SetupCopyMapCoordinatesDeps } from '@/utils/map/copyMapCoordinatesOnContextMenu';
@@ -200,6 +201,8 @@ const gvCoreMap = {
     createGeoJsonPreviewMap,
     createPointPickerMap,
     useUserLocationMarker: createUserLocationMarker,
+    waitForStyleLoaded,
+    waitForMapIdle,
 } as Window['gv_core']['map'];
 
 const gvCoreUi = {
@@ -256,6 +259,8 @@ window.gv_core = {
     resolveHeroiconByName,
     maplibre: null,
     loadMaplibreGl,
+    waitForStyleLoaded,
+    waitForMapIdle,
     createRouteWrapper,
     tileSourceCatalog,
     RasterTileUrls,

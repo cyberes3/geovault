@@ -17,7 +17,6 @@ import type {
   MaplibreGeoJSONFeature,
   MaplibreGlNamespace,
   MaplibreMap,
-  MaplibreMapMouseEvent,
   MaplibrePoint
 } from '@/types/maplibre';
 import type { PlaceMapFeature } from '@/types/places';
@@ -79,14 +78,8 @@ function applyInteractionPolicy(map: MaplibreMap, mode: string): void {
   }
 }
 
-function waitForMapEvent(map: MaplibreMap, eventName: string, timeoutMs = 15000): Promise<boolean> {
-  return new Promise((resolve) => {
-    const timeoutId = setTimeout(() => { resolve(false); }, timeoutMs);
-    map.once(eventName, () => {
-      clearTimeout(timeoutId);
-      resolve(true);
-    });
-  });
+function waitUntilStyleReady(map: MaplibreMap, timeoutMs = 15000): Promise<void> {
+  return window.gv_core.map.waitForStyleLoaded(map, timeoutMs);
 }
 
 function getValidPointFeatures(features: PlaceMapFeature[]): PlaceMapFeature[] {
@@ -208,19 +201,13 @@ export async function createPlacesMap({
 
     if (useStyleUrl && clientConfig.style_url) {
       map.setStyle(clientConfig.style_url);
-      const ok = await waitForMapEvent(map, 'styledata', 30000);
-      if (!ok) {
-        throw new Error('Timed out waiting for basemap style to load');
-      }
+      await waitUntilStyleReady(map, 30000);
       map.setMaxZoom(maxZoom);
       return;
     }
 
     map.setStyle(BLANK_MAP_STYLE);
-    const blankOk = await waitForMapEvent(map, 'styledata', 30000);
-    if (!blankOk) {
-      throw new Error('Timed out waiting for blank basemap style');
-    }
+    await waitUntilStyleReady(map, 30000);
     map.setMaxZoom(maxZoom);
 
     try {
@@ -252,12 +239,6 @@ export async function createPlacesMap({
     });
   };
 
-  const listeners: Array<{ event: string; handler: (event: MaplibreMapMouseEvent) => void }> = [];
-  const on = (event: string, handler: (event: MaplibreMapMouseEvent) => void): void => {
-    map.on(event, handler);
-    listeners.push({ event, handler });
-  };
-
   const resizeNow = (): void => {
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
@@ -275,11 +256,6 @@ export async function createPlacesMap({
     resizeNow();
   });
   resizeObserver.observe(mapHostEl);
-
-  on('load', () => {
-    applyInteractionPolicy(map, mode);
-    resizeNow();
-  });
 
   const reinstallPlacesOverlay = (): void => {
     try {
@@ -318,9 +294,9 @@ export async function createPlacesMap({
     }
   };
 
-  await new Promise<void>((resolve) => {
-    map.once('load', () => { resolve(); });
-  });
+  await waitUntilStyleReady(map);
+  applyInteractionPolicy(map, mode);
+  resizeNow();
   reinstallPlacesOverlay();
 
   const setPointFeatures = (features: PlaceMapFeature[]): void => {
@@ -365,7 +341,6 @@ export async function createPlacesMap({
 
     try {
       await applyPlacesBasemap(nextBaseSource);
-      await waitForMapEvent(map, 'idle', 8000);
       reinstallPlacesOverlay();
       applyInteractionPolicy(map, mode);
       map.jumpTo(currentViewState);
@@ -375,7 +350,6 @@ export async function createPlacesMap({
     } catch (error) {
       try {
         await applyPlacesBasemap(activeBaseSource);
-        await waitForMapEvent(map, 'idle', 8000);
         reinstallPlacesOverlay();
       } catch {
         /* best-effort recovery */
@@ -388,8 +362,6 @@ export async function createPlacesMap({
   };
 
   const destroy = (): void => {
-    listeners.forEach(({ event, handler }) => { map.off(event, handler); });
-    listeners.length = 0;
     window.removeEventListener('resize', resizeHandler);
     resizeObserver.disconnect();
     map.remove();

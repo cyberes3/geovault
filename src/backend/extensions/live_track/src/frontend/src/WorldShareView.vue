@@ -669,16 +669,14 @@ export default defineComponent({
           });
         });
         map.setStyle(clientConfig.style_url);
-        map.once('styledata', () => {
+        void window.gv_core.map.waitForStyleLoaded(map).then(async () => {
           if (!map) return;
           map.resize();
-          addWorldShareTrackLayers().then(() => {
-            requestAnimationFrame(() => {
-              if (!map) return;
-              map.resize();
-              map.jumpTo({ center: [center.lng, center.lat], zoom, bearing, duration: 0 });
-            });
-          }).catch(() => {});
+          await addWorldShareTrackLayers();
+          map.resize();
+          map.jumpTo({ center: [center.lng, center.lat], zoom, bearing, duration: 0 });
+        }).catch((error) => {
+          console.error('WorldShareView: style switch failed', error);
         });
         return;
       }
@@ -795,8 +793,11 @@ export default defineComponent({
 
         await nextTick();
         await new Promise<void>((resolve) => setTimeout(resolve, 50));
-        await initMap();
-        mapInitializing.value = false;
+        try {
+          await initMap();
+        } finally {
+          mapInitializing.value = false;
+        }
 
         if (!error.value && shareIdRef.value) {
           publicSession.watchPoll(pollShareData, POLL_INTERVAL_MS, () => {
@@ -807,6 +808,7 @@ export default defineComponent({
       } catch (e) {
         error.value = e instanceof Error && e.message === 'Invalid share link' ? 'Invalid share link' : 'Failed to load share';
         loading.value = false;
+        mapInitializing.value = false;
       }
     });
 
@@ -841,29 +843,8 @@ export default defineComponent({
         // Fit to the already-loaded track/group data now (duration 0), before the browser paints
         // the [0,0]/zoom 2 construction default, instead of waiting for 'load'.
         fitMapToTrack();
-        const currentMap = map;
-        return new Promise<void>((resolve) => {
-          currentMap.once('load', () => {
-            if (!map) {
-              resolve();
-              return;
-            }
-            map.resize();
-            addWorldShareTrackLayers().then(() => {
-              setupMapFollowListenersForView();
-              setupMapClickHandler();
-              requestAnimationFrame(() => {
-                if (!map) {
-                  resolve();
-                  return;
-                }
-                map.resize();
-                fitMapToTrack();
-                resolve();
-              });
-            }).catch(() => { resolve(); });
-          });
-        });
+        await finishWorldShareMap(map);
+        return;
       }
 
       const baseSpec = getRasterSourceSpec(layerValue, tileSource);
@@ -938,29 +919,18 @@ export default defineComponent({
       // Fit to the already-loaded track/group data now (duration 0), before the browser paints
       // the [0,0]/zoom 2 construction default, instead of waiting for 'load'.
       fitMapToTrack();
+      await finishWorldShareMap(map);
+    }
 
-      const currentMap = map;
-      return new Promise<void>((resolve) => {
-        currentMap.once('load', () => {
-          if (!map) {
-            resolve();
-            return;
-          }
-          addWorldShareTrackLayers().then(() => {
-            setupMapFollowListenersForView();
-            setupMapClickHandler();
-            requestAnimationFrame(() => {
-              if (!map) {
-                resolve();
-                return;
-              }
-              map.resize();
-              fitMapToTrack();
-              resolve();
-            });
-          }).catch(() => { resolve(); });
-        });
-      });
+    async function finishWorldShareMap(currentMap: MapLibreMap): Promise<void> {
+      await window.gv_core.map.waitForStyleLoaded(currentMap);
+      if (!map) return;
+      map.resize();
+      await addWorldShareTrackLayers();
+      setupMapFollowListenersForView();
+      setupMapClickHandler();
+      map.resize();
+      fitMapToTrack();
     }
 
     function teardownWorldShare(): void {

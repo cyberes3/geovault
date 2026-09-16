@@ -17,6 +17,8 @@ declare global {
             };
             maplibre?: unknown;
             loadMaplibreGl?: () => Promise<unknown>;
+            waitForStyleLoaded?: (map: unknown, timeoutMs?: number) => Promise<void>;
+            waitForMapIdle?: (map: unknown, timeoutMs?: number) => Promise<void>;
             tileSourceCatalog?: unknown;
             RasterTileUrls?: unknown;
             OSM_TILE_SOURCE_ID?: string;

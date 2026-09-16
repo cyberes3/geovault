@@ -76,6 +76,8 @@ export interface GvCoreMap {
     useUserLocationMarker: (map: unknown, coords: LocationMarkerCoords | null | undefined) => Promise<unknown>;
     createPointPickerMap: (container: HTMLElement, onPick: (lng: number, lat: number) => void) => Promise<PointPickerMap>;
     createGeoJsonPreviewMap: (container: HTMLElement) => Promise<unknown>;
+    waitForStyleLoaded: (map: unknown, timeoutMs?: number) => Promise<void>;
+    waitForMapIdle: (map: unknown, timeoutMs?: number) => Promise<void>;
 }
 
 export interface GvCoreUi {

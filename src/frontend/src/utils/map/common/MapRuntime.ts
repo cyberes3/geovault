@@ -1,5 +1,5 @@
 import type { Map as MapLibreMap, MapMouseEvent, StyleSpecification } from 'maplibre-gl';
-import { initializeMap, waitForStyleLoaded, MAX_ZOOM_LEVEL, DEFAULT_GLYPHS_URL } from '@/utils/map/maplibre/mapInitialization.js';
+import { initializeMap, waitForStyleLoaded, waitForMapIdle, MAX_ZOOM_LEVEL, DEFAULT_GLYPHS_URL } from '@/utils/map/maplibre/mapInitialization.js';
 import { getLoadedMaplibreGl } from '@/utils/map/maplibre/lazyMaplibreGl.js';
 import { setupCopyMapCoordinatesOnContextMenu } from '@/utils/map/copyMapCoordinatesOnContextMenu.js';
 import { setupUserGestureTrackingUnlock } from '@/utils/map/maplibre/trackingLock.js';
@@ -90,7 +90,7 @@ export class MapRuntime {
         this.styleEpoch += 1;
         const epoch = this.styleEpoch;
         this.map.setStyle(style);
-        await this.waitForIdle();
+        await waitForStyleLoaded(this.map);
         if (epoch !== this.styleEpoch || !this.map) return;
         this.ensureGeoJsonSource();
         this.map.setMaxZoom(MAX_ZOOM_LEVEL);
@@ -108,19 +108,8 @@ export class MapRuntime {
     }
 
     waitForIdle(timeoutMs = 15000): Promise<void> {
-        const map = this.map;
-        if (!map) return Promise.reject(new Error('Map is not created'));
-        return new Promise((resolve, reject) => {
-            const onIdle = () => {
-                clearTimeout(timer);
-                resolve();
-            };
-            const timer = setTimeout(() => {
-                map.off('idle', onIdle);
-                reject(new Error('Timed out waiting for map idle'));
-            }, timeoutMs);
-            map.once('idle', onIdle);
-        });
+        if (!this.map) return Promise.reject(new Error('Map is not created'));
+        return waitForMapIdle(this.map, timeoutMs);
     }
 
     waitUntilSourceReady(timeoutMs = 5000): Promise<void> {

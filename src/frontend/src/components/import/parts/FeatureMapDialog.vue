@@ -112,6 +112,7 @@ watch(() => props.isOpen, (open) => {
         }
       } catch (error) {
         console.error('Error initializing feature map:', error)
+      } finally {
         isLoading.value = false
       }
     })

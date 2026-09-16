@@ -42,7 +42,7 @@
 
         <!-- Map Initializing Overlay: shown while resolving basemap/camera before the map is constructed -->
         <div
-            v-if="isMapInitializing || !map"
+            v-if="isMapInitializing || (!map && !loadError && !publicShareError)"
             class="absolute inset-0 z-20 flex flex-col items-center justify-center bg-gray-500/40 pointer-events-auto cursor-wait"
             aria-busy="true"
             aria-live="polite"
@@ -697,23 +697,26 @@ async function loadRouteData(): Promise<void> {
 async function recreateMapIfMissing(): Promise<void> {
     if (map.value) return;
     isMapInitializing.value = true;
-    await nextTick();
-    await waitForElement(mapContainer);
-    const skipUrlDrivenCamera = mapSession.filters.isUrlDrivenCamera;
-    const snapshot = mapSession.camera.snapshot;
-    const mapConfig = snapshot
-        ? { center: snapshot.center, zoom: snapshot.zoom, pitch: snapshot.pitch, bearing: snapshot.bearing }
-        : { ...getInitialCameraConfig(skipUrlDrivenCamera), pitch: 0, bearing: 0 };
-    const initialTileSource = tileSources.value.find((s) => s.id === selectedLayer.value);
-    await createMapInstance({ ...mapConfig, style: resolveMapStyle(initialTileSource) });
-    applyPostLoadMaxZoom();
-    if (terrainEnabled.value && maptilerConfig.value?.isAvailable()) {
-        await setupTerrain();
+    try {
+        await nextTick();
+        await waitForElement(mapContainer);
+        const skipUrlDrivenCamera = mapSession.filters.isUrlDrivenCamera;
+        const snapshot = mapSession.camera.snapshot;
+        const mapConfig = snapshot
+            ? { center: snapshot.center, zoom: snapshot.zoom, pitch: snapshot.pitch, bearing: snapshot.bearing }
+            : { ...getInitialCameraConfig(skipUrlDrivenCamera), pitch: 0, bearing: 0 };
+        const initialTileSource = tileSources.value.find((s) => s.id === selectedLayer.value);
+        await createMapInstance({ ...mapConfig, style: resolveMapStyle(initialTileSource) });
+        applyPostLoadMaxZoom();
+        if (terrainEnabled.value && maptilerConfig.value?.isAvailable()) {
+            await setupTerrain();
+        }
+        if (hillshadeEnabled.value && maptilerConfig.value?.isAvailable()) {
+            addHillshadeIfNeeded();
+        }
+    } finally {
+        isMapInitializing.value = false;
     }
-    if (hillshadeEnabled.value && maptilerConfig.value?.isAvailable()) {
-        addHillshadeIfNeeded();
-    }
-    isMapInitializing.value = false;
 }
 
 async function handleKeepAliveActivate(): Promise<void> {
@@ -814,45 +817,44 @@ onMounted(async () => {
         return;
     }
 
-    if (initialSelectedTags.value.length > 0) {
-        currentTags.value = initialSelectedTags.value;
-        isTagFilterActive.value = true;
-    }
-
-    await new Promise<void>((resolve) => {
-        if (map.value?.loaded()) {
-            resolve();
-        } else {
-            void map.value?.once('load', () => { resolve(); });
+    try {
+        if (initialSelectedTags.value.length > 0) {
+            currentTags.value = initialSelectedTags.value;
+            isTagFilterActive.value = true;
         }
-    });
 
-    const userSettings = getUserMapSettings();
-    applyUserTerrainDefaults(
-        !!userSettings.enable_3d_terrain && !!maptilerConfig.value?.isAvailable(),
-        !!userSettings.enable_hillshade && !!maptilerConfig.value?.isAvailable(),
-    );
+        const userSettings = getUserMapSettings();
+        applyUserTerrainDefaults(
+            !!userSettings.enable_3d_terrain && !!maptilerConfig.value?.isAvailable(),
+            !!userSettings.enable_hillshade && !!maptilerConfig.value?.isAvailable(),
+        );
 
-    applyPostLoadMaxZoom();
+        applyPostLoadMaxZoom();
 
-    if (selectedLayer.value) {
-        await applyTerrainAndHillshade(selectedLayer.value);
+        if (selectedLayer.value) {
+            await applyTerrainAndHillshade(selectedLayer.value);
+        }
+
+        if (terrainEnabled.value && map.value) {
+            map.value.setPitch(50);
+        }
+
+        const hasIpHint = !!mapGeolocation.userLocation.value;
+        featureData.syncPendingExtentFitWithoutGeolocation(!hasIpHint && !skipUrlDrivenCamera && !isMapshareRoute.value);
+
+        await loadRouteData();
+
+        mapSession.markBooted();
+        ensureMapResize();
+        featureData.updateFeaturesInExtent();
+        logMapState();
+    } catch (error) {
+        console.error('Error finishing map boot:', error);
+        loadError.value = error instanceof Error ? error.message : 'Failed to initialize map. Please refresh the page.';
+    } finally {
+        isMapInitializing.value = false;
+        isDataLoading.value = false;
     }
-
-    if (terrainEnabled.value && map.value) {
-        map.value.setPitch(50);
-    }
-
-    const hasIpHint = !!mapGeolocation.userLocation.value;
-    featureData.syncPendingExtentFitWithoutGeolocation(!hasIpHint && !skipUrlDrivenCamera && !isMapshareRoute.value);
-
-    await loadRouteData();
-
-    mapSession.markBooted();
-    isMapInitializing.value = false;
-    ensureMapResize();
-    featureData.updateFeaturesInExtent();
-    logMapState();
 });
 
 onActivated(() => {

@@ -83,6 +83,7 @@ export function useFeatureData(deps: UseFeatureDataDeps) {
     let featureListUpdateTimeout: ReturnType<typeof setTimeout> | null = null;
     let featureCleanupTimeout: ReturnType<typeof setTimeout> | null = null;
     let featureCountUpdatePending = false;
+    let inflightLoads = 0;
 
     /** One-shot: main map, no URL-driven camera, geolocation unavailable - fit to first default bbox features. */
     const pendingExtentFitWithoutGeolocation = ref(false);
@@ -315,8 +316,13 @@ export function useFeatureData(deps: UseFeatureDataDeps) {
     }
 
     async function loadDataForCurrentView(options: { force?: boolean } = {}): Promise<void> {
-        if (!map.value) return;
-        const startedGeneration = loadPipeline.generation;
+        if (!map.value) {
+            isDataLoading.value = false;
+            return;
+        }
+
+        inflightLoads += 1;
+        isDataLoading.value = true;
 
         try {
             let bounds;
@@ -330,7 +336,6 @@ export function useFeatureData(deps: UseFeatureDataDeps) {
 
             try {
                 if (isMapshareRoute.value) {
-                    isDataLoading.value = true;
                     const shareInfoLoaded = await ensurePublicShareInfo();
                     if (!shareInfoLoaded) return;
                 }
@@ -347,7 +352,6 @@ export function useFeatureData(deps: UseFeatureDataDeps) {
                         : viewportBbox;
                 const bboxKey = bboxForApi.map((value) => value.toFixed(4)).join(',');
 
-                isDataLoading.value = true;
                 const result = await loadPipeline.load({
                     context,
                     bbox: bboxForApi,
@@ -376,7 +380,9 @@ export function useFeatureData(deps: UseFeatureDataDeps) {
                 handleLoadError(message, context);
             }
         } finally {
-            if (loadPipeline.generation === startedGeneration || loadPipeline.generation === startedGeneration + 1) {
+            inflightLoads -= 1;
+            if (inflightLoads <= 0) {
+                inflightLoads = 0;
                 isDataLoading.value = false;
                 if (isInitialLoad.value) {
                     isInitialLoad.value = false;

@@ -79,6 +79,8 @@ declare global {
                 createPointPickerMap: (container: HTMLElement, onPick: (lng: number, lat: number) => void) => Promise<MapLibrePreviewMap>;
                 createGeoJsonPreviewMap: (container: HTMLElement) => Promise<MapLibrePreviewMap>;
                 MapLibrePreviewMap: typeof MapLibrePreviewMap;
+                waitForStyleLoaded: (map: MapLibreMap, timeoutMs?: number) => Promise<void>;
+                waitForMapIdle: (map: MapLibreMap, timeoutMs?: number) => Promise<void>;
             };
             ui: {
                 toast: ToastService;
@@ -127,6 +129,8 @@ declare global {
             maplibre: MapLibreModule | null;
             /** Lazily loads MapLibre GL JS (and its CSS), caching the result. Prefer this over reading `maplibre` directly when you can't guarantee it has already loaded. */
             loadMaplibreGl: () => Promise<unknown>;
+            waitForStyleLoaded: (map: MapLibreMap, timeoutMs?: number) => Promise<void>;
+            waitForMapIdle: (map: MapLibreMap, timeoutMs?: number) => Promise<void>;
             createRouteWrapper: (component: Component, options: { api: ExtensionApi; platformState?: PlatformStateBridge; router?: unknown; [key: string]: unknown }) => Component;
             BaseButton: unknown;
             BaseModal: unknown;

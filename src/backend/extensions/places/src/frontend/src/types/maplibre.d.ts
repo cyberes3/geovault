@@ -75,6 +75,7 @@ export interface MaplibreMap {
     jumpTo(options: MaplibreCameraOptions): void;
     easeTo(options: MaplibreCameraOptions): void;
     setStyle(style: string | Record<string, unknown>): void;
+    isStyleLoaded(): boolean;
     setMaxZoom(zoom: number): void;
     setBearing(bearing: number): void;
     getLayer(id: string): unknown;

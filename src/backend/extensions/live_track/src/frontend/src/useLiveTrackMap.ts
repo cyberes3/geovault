@@ -188,6 +188,23 @@ export function useLiveTrackMap({
     for (const cb of styleReadyListeners) cb();
   }
 
+  async function waitUntilStyleReady(target: MapLibreMap, timeoutMs?: number): Promise<void> {
+    await window.gv_core.map.waitForStyleLoaded(target, timeoutMs);
+  }
+
+  async function afterStyleReady(target: MapLibreMap, then: () => Promise<void>): Promise<void> {
+    try {
+      await waitUntilStyleReady(target);
+      if (map !== target) return;
+      target.resize();
+      await then();
+    } catch (error) {
+      console.error('Error finishing live-track map style:', error);
+    } finally {
+      if (map === target) notifyStyleReady();
+    }
+  }
+
   function buildLinesGeoJSON(): LiveTrackGeoJSON<LineFeatureProps> {
     const groupId = activeGroupId.value;
     const groupTrackIds =
@@ -463,25 +480,10 @@ export function useLiveTrackMap({
       const zoom = map.getZoom();
       const bearing = map.getBearing();
       map.setStyle(styleUrl);
-      map.once('styledata', () => {
-        if (!map) return;
+      await afterStyleReady(map, async () => {
+        await addLiveTrackLayersAndData();
         map.resize();
-        addLiveTrackLayersAndData().then(() => {
-          notifyStyleReady();
-          setTimeout(() => {
-            if (map) {
-              map.resize();
-              map.jumpTo({ center: [center.lng, center.lat], zoom, bearing, duration: 0 });
-            }
-          }, 0);
-        }).catch(() => {
-          setTimeout(() => {
-            if (map) {
-              map.resize();
-              map.jumpTo({ center: [center.lng, center.lat], zoom, bearing, duration: 0 });
-            }
-          }, 0);
-        });
+        map.jumpTo({ center: [center.lng, center.lat], zoom, bearing, duration: 0 });
       });
     } else {
       const wasStyleBased = !map.getSource(BASE_SOURCE_ID);
@@ -522,29 +524,13 @@ export function useLiveTrackMap({
         map.addControl(new maplibregl.NavigationControl({ showCompass: false, showZoom: true }), 'top-right');
         setupMapFollowListenersForView();
         disableMapRotation();
-        map.once('load', () => {
-          if (!map) return;
+        await afterStyleReady(map, async () => {
+          await ensureArrowImage(map, '#6C93DE', false);
+          if (!map?.getStyle()) return;
+          if (!map.getLayer(POINTS_LAYER_ID)) map.addLayer(pointsLayerSpec);
+          await runUpdateMapFeatures();
           map.resize();
-          ensureArrowImage(map, '#6C93DE', false).then(() => {
-            if (!map?.getStyle()) return;
-            if (!map.getLayer(POINTS_LAYER_ID)) map.addLayer(pointsLayerSpec);
-            runUpdateMapFeatures().then(() => {
-              notifyStyleReady();
-              setTimeout(() => {
-                if (map) {
-                  map.resize();
-                  map.jumpTo({ center: [center.lng, center.lat], zoom, bearing, duration: 0 });
-                }
-              }, 0);
-            }).catch(() => {
-              setTimeout(() => {
-                if (map) {
-                  map.resize();
-                  map.jumpTo({ center: [center.lng, center.lat], zoom, bearing, duration: 0 });
-                }
-              }, 0);
-            });
-          }).catch(() => {});
+          map.jumpTo({ center: [center.lng, center.lat], zoom, bearing, duration: 0 });
         });
       } else {
         const spec = getRasterSourceSpec(layerValue, tileSource);
@@ -592,25 +578,10 @@ export function useLiveTrackMap({
       // Fit to the already-fetched tracker data now, before the browser paints the [0,0]/zoom 2
       // construction default, instead of waiting for 'load' and animating into place.
       fitMapToTracks({ duration: 0 });
-      map.on('load', () => {
-        if (!map) return;
+      await afterStyleReady(map, async () => {
+        await addLiveTrackLayersAndData();
         map.resize();
-        addLiveTrackLayersAndData().then(() => {
-          notifyStyleReady();
-          setTimeout(() => {
-            if (map) {
-              map.resize();
-              fitMapToTracks({ duration: 0 });
-            }
-          }, 0);
-        }).catch(() => {
-          setTimeout(() => {
-            if (map) {
-              map.resize();
-              fitMapToTracks({ duration: 0 });
-            }
-          }, 0);
-        });
+        fitMapToTracks({ duration: 0 });
       });
       return;
     }
@@ -652,29 +623,13 @@ export function useLiveTrackMap({
     // construction default, instead of waiting for 'load' and animating into place.
     fitMapToTracks({ duration: 0 });
 
-    map.once('load', () => {
-      if (!map) return;
+    await afterStyleReady(map, async () => {
+      await ensureArrowImage(map, '#6C93DE', false);
+      if (!map?.getStyle()) return;
+      if (!map.getLayer(POINTS_LAYER_ID)) map.addLayer(pointsLayerSpec);
+      await runUpdateMapFeatures();
       map.resize();
-      ensureArrowImage(map, '#6C93DE', false).then(() => {
-        if (!map?.getStyle()) return;
-        if (!map.getLayer(POINTS_LAYER_ID)) map.addLayer(pointsLayerSpec);
-        runUpdateMapFeatures().then(() => {
-          notifyStyleReady();
-          setTimeout(() => {
-            if (map) {
-              map.resize();
-              fitMapToTracks({ duration: 0 });
-            }
-          }, 0);
-        }).catch(() => {
-          setTimeout(() => {
-            if (map) {
-              map.resize();
-              fitMapToTracks({ duration: 0 });
-            }
-          }, 0);
-        });
-      }).catch(() => {});
+      fitMapToTracks({ duration: 0 });
     });
   }
 

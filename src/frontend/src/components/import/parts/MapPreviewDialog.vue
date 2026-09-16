@@ -83,6 +83,7 @@ watch(() => props.isOpen, (open) => {
         }
       } catch (error) {
         console.error('Error initializing map preview:', error)
+      } finally {
         isLoading.value = false
       }
     })

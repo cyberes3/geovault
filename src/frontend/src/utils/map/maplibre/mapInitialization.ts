@@ -79,7 +79,12 @@ export function resolveMapStyle(tileSource?: TileSource | null, glyphsUrl: strin
   const isStyleBased = !!clientConfig.style_url || clientConfig.type === 'maptiler'
 
   if (isStyleBased) {
-    return clientConfig.style_url ?? ''
+    return clientConfig.style_url || {
+      version: 8,
+      glyphs: glyphsUrl,
+      sources: {},
+      layers: []
+    }
   }
 
   const url = clientConfig.url ?? `/api/tiles/${tileSource.id}/{z}/{x}/{y}`
@@ -163,6 +168,56 @@ export function buildMapConstructorOptions(container: HTMLElement, config: Initi
     canvasContextAttributes: { antialias },
     transformRequest: createTransformRequest(transformRequest)
   }
+}
+
+export function isMapIdle(map: MapLibreMap): boolean {
+  try {
+    if (!map.isStyleLoaded()) return false
+    if (typeof map.isMoving === 'function' && map.isMoving()) return false
+    if (typeof map.isZooming === 'function' && map.isZooming()) return false
+    if (typeof map.isRotating === 'function' && map.isRotating()) return false
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Resolve when the map is idle enough to add sources/layers or fit bounds.
+ * `idle` only fires on a busy→idle transition, so an already-idle map must resolve immediately.
+ * If the style is loaded when the timeout hits, proceed; reject only when the style never became usable.
+ */
+export function waitForMapIdle(map: MapLibreMap, timeoutMs = 15000): Promise<void> {
+  if (isMapIdle(map)) return Promise.resolve()
+  return new Promise((resolve, reject) => {
+    let settled = false
+    const finish = (ok: boolean, error?: Error) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      clearInterval(poll)
+      map.off('idle', onIdle)
+      map.off('styledata', onStyleData)
+      if (ok) resolve()
+      else reject(error ?? new Error('Timed out waiting for map idle'))
+    }
+    const onIdle = () => {
+      if (isMapIdle(map)) finish(true)
+    }
+    const onStyleData = () => {
+      if (isMapIdle(map)) finish(true)
+    }
+    const timer = setTimeout(() => {
+      if (map.isStyleLoaded()) finish(true)
+      else finish(false, new Error('Timed out waiting for map idle'))
+    }, timeoutMs)
+    const poll = setInterval(() => {
+      if (isMapIdle(map)) finish(true)
+    }, 50)
+    map.once('idle', onIdle)
+    map.on('styledata', onStyleData)
+    if (isMapIdle(map)) finish(true)
+  })
 }
 
 /** Resolve when the style can accept addSource / addLayer (MapLibre 6 throws before this). */
