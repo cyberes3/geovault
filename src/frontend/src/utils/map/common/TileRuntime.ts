@@ -24,7 +24,7 @@ export class TileRuntime {
         } else if (!this.selectedId || !this.sources.some((source) => source.id === this.selectedId)) {
             this.selectedId = this.sources[0]?.id ?? '';
         }
-        await this.maptiler.fetchConfig(this.sources);
+        await this.maptiler.fetchConfig(tileSourceCatalog.allSources());
         return this.sources;
     }
 

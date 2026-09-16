@@ -1,6 +1,7 @@
 import type { Map as MapLibreMap, SourceSpecification } from 'maplibre-gl';
 import { fetchConfig as fetchCachedConfig, type ServerConfig } from '@/utils/configService';
 import type { TileSource, TileSourceClientConfig } from '@/api/services/tilesApi';
+import { waitForStyleLoaded } from './mapInitialization.js';
 
 export class MapTilerConfig {
     apiKey: string | null = null;
@@ -50,7 +51,9 @@ export class MapTilerConfig {
     }
 
     createTerrainSource(): TileSourceClientConfig | null {
-        return this.terrainSource;
+        if (!this.terrainSource) return null;
+        if (this.terrainSource.encoding != null) return this.terrainSource;
+        return { ...this.terrainSource, encoding: 'mapbox' };
     }
 
     createHillshadeSource(): TileSourceClientConfig | null {
@@ -80,11 +83,13 @@ export function setupAtmosphere(map: MapLibreMap | null | undefined): void {
 }
 
 export function removeAtmosphere(map: MapLibreMap | null | undefined): void {
-    setupSky(map);
+    if (!map) return;
+    map.setSky(undefined as unknown as Parameters<typeof map.setSky>[0]);
 }
 
 export async function setupTerrain(map: MapLibreMap | null | undefined, config: MapTilerConfig, applyAtmosphere = true): Promise<void> {
     if (!map || !config.isAvailable()) return;
+    await waitForStyleLoaded(map);
 
     if (map.getSource('terrain-source')) {
         map.setTerrain(null);

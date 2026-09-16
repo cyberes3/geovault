@@ -56,6 +56,7 @@ class MapTilerTerrainTileSource(TileSource):
         if self._use_proxy:
             return {
                 'type': 'raster-dem',
+                'encoding': 'mapbox',
                 'tiles': ['/api/tiles/maptiler-terrain/{z}/{x}/{y}'],
                 'tileSize': 512,
                 'maxzoom': 14,
@@ -64,6 +65,7 @@ class MapTilerTerrainTileSource(TileSource):
         else:
             return {
                 'type': 'raster-dem',
+                'encoding': 'mapbox',
                 'url': f'https://api.maptiler.com/tiles/terrain-rgb-v2/tiles.json?key={self._api_key}',
                 'attribution': '© MapTiler © OpenStreetMap contributors'
             }

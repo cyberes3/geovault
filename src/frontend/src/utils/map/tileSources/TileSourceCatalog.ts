@@ -28,6 +28,7 @@ export class TileSourceCatalog {
   private apiUrl: string
   private fetchFn: typeof fetch
   private _loadPromise: Promise<TileSource[]> | null
+  private _allSources: TileSource[] = []
   showAttribution = false
 
   constructor(options: TileSourceCatalogOptions = {}) {
@@ -38,6 +39,16 @@ export class TileSourceCatalog {
           throw new Error('fetch is not available')
         })
     this._loadPromise = null
+  }
+
+  /** Every source from the API, including hidden terrain/hillshade utilities. */
+  allSources(): TileSource[] {
+    return this._allSources
+  }
+
+  /** Basemap-selector sources. Hidden DEM/hillshade utilities are omitted. */
+  visibleSources(): TileSource[] {
+    return this._allSources.filter((source) => !source.hidden)
   }
 
   /** Start loading tile sources without awaiting (e.g. before many maps initialize). */
@@ -79,6 +90,7 @@ export class TileSourceCatalog {
   reset(): void {
     this._loadPromise = null
     this.showAttribution = false
+    this._allSources = []
   }
 
   private async _fetchVisibleSources(): Promise<TileSource[]> {
@@ -96,7 +108,8 @@ export class TileSourceCatalog {
         throw new Error('Tile sources response did not include a sources array')
       }
 
-      const visible = (sources as TileSource[]).filter((source) => !source.hidden)
+      this._allSources = sources as TileSource[]
+      const visible = this.visibleSources()
       if (visible.length === 0) {
         throw new Error('Tile sources response did not include visible sources')
       }
