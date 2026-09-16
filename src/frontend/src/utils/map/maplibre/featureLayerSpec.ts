@@ -26,16 +26,22 @@ export interface LayerConfig {
     paint?: Record<string, unknown>;
 }
 
+const HIGHLIGHT_ACTIVE: MapLibreExpression = [
+    'any',
+    ['boolean', ['feature-state', 'hovered'], false],
+    ['boolean', ['feature-state', 'selected'], false],
+];
+
 const HIGHLIGHT_SCALE: MapLibreExpression = [
     'case',
-    [
-        'any',
-        ['boolean', ['feature-state', 'hovered'], false],
-        ['boolean', ['feature-state', 'selected'], false],
-    ],
+    HIGHLIGHT_ACTIVE,
     1.5,
     1,
 ];
+
+function scaleForHighlight(length: number): MapLibreExpression {
+    return ['*', length, HIGHLIGHT_SCALE];
+}
 
 export function createZoomBasedRadiusExpression(baseRadius: number, minRadius: number, baseZoom = 10, scaleFactor = 0.6): MapLibreExpression {
     const exponentialBase = Math.pow(2, scaleFactor);
@@ -44,9 +50,9 @@ export function createZoomBasedRadiusExpression(baseRadius: number, minRadius: n
         'interpolate',
         ['exponential', exponentialBase],
         ['zoom'],
-        zoomAtMin, minRadius,
-        baseZoom, baseRadius,
-        22, baseRadius,
+        zoomAtMin, scaleForHighlight(minRadius),
+        baseZoom, scaleForHighlight(baseRadius),
+        22, scaleForHighlight(baseRadius),
     ];
 }
 
@@ -81,7 +87,7 @@ export function getFillOpacityExpression(): MapLibreExpression {
 export const defaultFeatureStyles = {
     points: {
         paint: {
-            'circle-radius': ['*', createZoomBasedRadiusExpression(4, 2), HIGHLIGHT_SCALE],
+            'circle-radius': createZoomBasedRadiusExpression(4, 2),
             'circle-color': getPointColorExpression(),
             'circle-stroke-width': 1,
             'circle-stroke-color': '#000000',
@@ -138,7 +144,7 @@ export function getReplacementPointLayerConfig(overrides: FeatureLayerOverrides 
         source: GEOJSON_SOURCE_ID,
         filter: [...REPLACEMENT_POINT_FILTER],
         paint: {
-            'circle-radius': ['*', createZoomBasedRadiusExpression(3, 1.5), HIGHLIGHT_SCALE],
+            'circle-radius': createZoomBasedRadiusExpression(3, 1.5),
             'circle-color': getPointColorExpression(),
             'circle-stroke-width': 1,
             'circle-stroke-color': '#000000',
@@ -157,11 +163,16 @@ export function getPointIconLayerConfig(overrides: Partial<LayerConfig> = {}): L
         filter: [...POINT_ICON_FILTER],
         layout: {
             'icon-image': ['coalesce', ['get', '_icon-id'], ''],
-            'icon-size': ['*', 1.0, HIGHLIGHT_SCALE],
+            'icon-size': 1,
             'icon-anchor': 'bottom',
             'icon-allow-overlap': true,
             'icon-ignore-placement': true,
             ...overrides.layout,
+        },
+        paint: {
+            'icon-halo-color': '#ffffff',
+            'icon-halo-width': ['case', HIGHLIGHT_ACTIVE, 2, 0],
+            ...overrides.paint,
         },
     };
 }
