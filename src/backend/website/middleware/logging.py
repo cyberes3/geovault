@@ -3,6 +3,7 @@ so Django's normal exception handling (see website.exception_handler) still runs
 import traceback
 
 from geo_lib.logging.console import get_tagged_logger
+from geo_lib.logging.redact import query_pairs, redact_query_items
 from geo_lib.utils.ip_utils import get_client_ip, get_user_identifier
 
 _logger = get_tagged_logger()
@@ -58,7 +59,7 @@ class LoggingMiddleware:
 
         # Log API requests and errors
         if request.path.startswith('/api/'):
-            query_string = request.GET.urlencode()
+            query_string = redact_query_items(query_pairs(request.GET))
             if getattr(request, 'oauth2_access_token', None) is not None:
                 auth_suffix = ' (OAUTH)'
             elif getattr(request, 'api_key', None) is not None:

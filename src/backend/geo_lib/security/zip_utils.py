@@ -5,10 +5,9 @@ from geo_lib.security.exceptions import SecurityError
 
 # Zip entries declare their own uncompressed size in the central directory, but that
 # field can be forged independently of the actual compressed data, so it can't be
-# trusted as a size check on its own. These caps bound the actual decompressed bytes
-# read from a KMZ member, regardless of what the archive claims, to guard against
-# decompression-bomb payloads (a tiny compressed entry that expands to gigabytes).
-MAX_KMZ_KML_DECOMPRESSED_BYTES = 200 * 1024 * 1024  # 200MB; KML is text and compresses well
+# trusted as a size check on its own. This cap bounds the actual decompressed bytes
+# read from a KMZ icon member, regardless of what the archive claims.
+# Embedded KML uses get_max_file_size(FileType.KML) via read_kmz_kml_member.
 MAX_KMZ_ICON_DECOMPRESSED_BYTES = 10 * 1024 * 1024  # 10MB; generous ceiling for an embedded icon image
 
 _READ_CHUNK_BYTES = 64 * 1024

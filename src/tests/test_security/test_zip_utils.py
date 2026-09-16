@@ -12,10 +12,11 @@ from io import BytesIO
 
 import pytest
 
-from geo_lib.security.exceptions import SecurityError
+from geo_lib.processing.file_types import FileType, get_max_file_size
+from geo_lib.security.exceptions import FileValidationError, SecurityError
+from geo_lib.security.kmz import read_kmz_kml_member
 from geo_lib.security.zip_utils import (
     MAX_KMZ_ICON_DECOMPRESSED_BYTES,
-    MAX_KMZ_KML_DECOMPRESSED_BYTES,
     read_zip_member_bounded,
 )
 
@@ -75,10 +76,27 @@ class TestReadZipMemberBounded:
             with pytest.raises(KeyError):
                 read_zip_member_bounded(zf, 'missing.kml', max_bytes=1024)
 
-    def test_kml_and_icon_limits_are_distinct_and_reasonable(self):
-        """The KML cap is generous (text compresses well) while the icon cap is tighter
-        (a single embedded image); both must be well under any plausible legitimate size
-        while still large enough not to reject real content."""
-        assert MAX_KMZ_KML_DECOMPRESSED_BYTES == 200 * 1024 * 1024
+    def test_icon_limit_is_distinct_from_kml_content_limit(self):
+        """Icons have their own cap; embedded KML uses the KML file-type size limit."""
         assert MAX_KMZ_ICON_DECOMPRESSED_BYTES == 10 * 1024 * 1024
-        assert MAX_KMZ_ICON_DECOMPRESSED_BYTES < MAX_KMZ_KML_DECOMPRESSED_BYTES
+        assert get_max_file_size(FileType.KML) == 5 * 1024 * 1024
+
+
+class TestReadKmzKmlMember:
+    def test_reads_small_kml(self):
+        content = b'<?xml version="1.0"?><kml></kml>'
+        with _make_zip('doc.kml', content) as zf:
+            assert read_kmz_kml_member(zf, 'doc.kml') == content.decode('utf-8')
+
+    def test_rejects_declared_size_above_kml_limit(self):
+        kml_limit = get_max_file_size(FileType.KML)
+        oversized = b'A' * (kml_limit + 1)
+        with _make_zip('doc.kml', oversized) as zf:
+            with pytest.raises(FileValidationError, match='Embedded KML file too large'):
+                read_kmz_kml_member(zf, 'doc.kml')
+
+    def test_rejects_decompression_bomb_at_kml_limit(self):
+        bomb_content = b'\x00' * (get_max_file_size(FileType.KML) + 64 * 1024)
+        with _make_zip('doc.kml', bomb_content) as zf:
+            with pytest.raises((FileValidationError, SecurityError)):
+                read_kmz_kml_member(zf, 'doc.kml')

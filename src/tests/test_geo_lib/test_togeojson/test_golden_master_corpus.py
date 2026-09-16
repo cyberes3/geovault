@@ -16,7 +16,7 @@ never reach the converter in production) and `Scripts/`/`expected-geojson/`
 
 Any corpus file without a cached expected-geojson/ entry (currently just
 Grey Harbor County/NWI_Wetlands.kmz, whose decompressed KML exceeds
-production's 200MB KMZ bound and so is never converted in production
+production's KML content size limit and so is never converted in production
 either) is skipped rather than failed.
 """
 

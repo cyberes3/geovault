@@ -5,11 +5,11 @@ from xml.etree import ElementTree as ET
 
 from django.core.files.uploadedfile import UploadedFile
 
-from geo_lib.processing.file_types import get_max_file_size, FileType, get_file_type_by_extension
+from geo_lib.processing.file_types import FileType, get_file_type_by_extension
 from geo_lib.security.exceptions import SecurityError, FileValidationError
 from geo_lib.security.filetype_checkers import _is_valid_kml, _is_valid_gpx
 from geo_lib.security.xml import parse_xml, _check_dangerous_elements, _check_dangerous_attributes
-from geo_lib.security.zip_utils import read_zip_member_bounded
+from geo_lib.security.kmz import read_kmz_kml_member
 
 
 def _validate_kmz_content(uploaded_file: UploadedFile):
@@ -38,24 +38,8 @@ def _validate_kmz_content(uploaded_file: UploadedFile):
             if not kml_files:
                 raise FileValidationError("The KMZ file must contain at least one KML file. Please ensure your KMZ archive includes a KML document.")
 
-            # Validate the main KML file, bounded against decompression-bomb entries
             main_kml_file = 'doc.kml' if 'doc.kml' in kml_files else kml_files[0]
-
-            # Check embedded KML size against KML file type limit (not KMZ limit).
-            # Reject the archive's declared uncompressed size first (cheap), then stream-decompress
-            # with that same limit as the hard cap so a forged-size bomb cannot balloon to a
-            # separate, much larger ceiling before the size check runs.
-            kml_size_limit = get_max_file_size(FileType.KML)
-            info = kmz.getinfo(main_kml_file)
-            if info.file_size > kml_size_limit:
-                kml_size_mb = info.file_size / (1024 * 1024)
-                kml_limit_mb = kml_size_limit / (1024 * 1024)
-                raise FileValidationError(
-                    f"Embedded KML file too large: {kml_size_mb:.1f}MB exceeds {kml_limit_mb:.0f}MB limit for KML content"
-                )
-
-            kml_content = read_zip_member_bounded(kmz, main_kml_file, kml_size_limit).decode('utf-8')
-
+            kml_content = read_kmz_kml_member(kmz, main_kml_file)
             _validate_kml_structure(kml_content)
 
     except zipfile.BadZipFile:

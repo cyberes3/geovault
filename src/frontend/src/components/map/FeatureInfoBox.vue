@@ -151,7 +151,6 @@
 
 <script lang="ts">
 import { defineComponent, type PropType } from 'vue'
-import { marked } from 'marked'
 import { length } from '@turf/length'
 import { area } from '@turf/area'
 import { feature as turfFeature } from '@turf/helpers'
@@ -162,6 +161,7 @@ import MeasurementIcon from '@/components/icons/MeasurementIcon.vue'
 import AreaIcon from '@/components/icons/AreaIcon.vue'
 import { getGeometryTypeColor } from '@/utils/geometryColors.js'
 import { sortTagsByPriority, sortUserTagsAlphabetically } from '@/utils/tagUtils.js'
+import { sanitizeMarkdown } from '@/utils/sanitizeMarkdown'
 import type { MapPageFeature } from '@/composables/mapPageTypes'
 
 export default defineComponent({
@@ -350,8 +350,7 @@ export default defineComponent({
       }
     },
     renderMarkdown(markdown: string | null): string {
-      if (!markdown) return ''
-      return marked.parse(markdown, { async: false })
+      return sanitizeMarkdown(markdown)
     },
     getFeatureElevation(feature: MapPageFeature | null): number | null {
       if (!feature) return null

@@ -159,8 +159,8 @@ second-guess it:
 - **Root cause of the original 8GB flag** (`git log -S "max-old-space-size"`
   → commit `a2522bd3`, "fix nodejs out of memory", 2025-12-29): at the time,
   a ≤5MB KMZ upload could decompress into an arbitrarily large KML with zero
-  guardrail — `MAX_KMZ_KML_DECOMPRESSED_BYTES` (the 200MB streaming cap in
-  `geo_lib/security/zip_utils.py`) wasn't added until 2026-07-02, months
+  guardrail — the embedded-KML size cap in
+  `geo_lib/security/kmz.py` wasn't added until 2026-07-02, months
   later. Node's V8 engine has its own internal heap ceiling, independent of
   the OS/cgroup limit, so a large-enough document tripped `FATAL ERROR:
   JavaScript heap out of memory` well before real memory pressure. The 8GB
@@ -168,12 +168,12 @@ second-guess it:
   workload itself needs 8GB.
 - **Empirical repro**: the largest real-world corpus file (`Grey Harbor
   County/NWI_Wetlands.kmz`, 103MB compressed → 322MB decompressed KML —
-  itself already over today's 200MB cap) peaked at ~1.95GB RSS in Node
+  itself already over today's KML content size limit) peaked at ~1.95GB RSS in Node
   (DOM parse → convert → `JSON.stringify`, ~38k features) and ~1.05GB RSS in
   Python's `defusedxml.minidom` for the equivalent DOM-parse stage. Real
   memory need, even for content beyond today's ceiling, is ~2GB, not 8GB.
 - **The dangerous case is already closed, independent of this port**: the
-  200MB `MAX_KMZ_KML_DECOMPRESSED_BYTES` cap and the 5MB direct-upload cap
+  embedded-KML content cap and the 5MB direct-upload cap
   already bound worst-case content before it ever reaches a converter — both
   comfortably inside the ~1-2GB measured above.
 - **The port is structurally lower-memory than the old pipeline anyway**:
@@ -215,7 +215,7 @@ Python thread with no per-job wall-clock limit of its own).
 
 This is an accepted trade-off, not an oversight, for the same reasons as the
 memory ceiling above — the dangerous unbounded-size case is already closed
-at the validation layer (200MB KMZ-decompressed cap, 5MB direct-upload cap),
+at the validation layer (embedded-KML content cap, 5MB direct-upload cap),
 this port's own stress testing showed roughly linear scaling with input size
 (a synthetic 1.2GB file — 6x over the KMZ cap — converted in ~2 minutes), and
 `GeoJSONProcessor.convert_to_geojson()` already sets the precedent of zero

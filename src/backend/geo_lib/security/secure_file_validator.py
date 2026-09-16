@@ -10,7 +10,7 @@ from geo_lib.security.exceptions import FileValidationError, SecurityError
 from geo_lib.security.filetype_validators import _validate_content
 from geo_lib.security.validation_helpers import _validate_basic_properties, _validate_file_signature, _validate_mime_type, _validate_file_size
 from geo_lib.security.xml import parse_xml, _check_dangerous_elements, _check_dangerous_attributes
-from geo_lib.security.zip_utils import MAX_KMZ_KML_DECOMPRESSED_BYTES, read_zip_member_bounded
+from geo_lib.security.kmz import read_kmz_kml_member
 
 
 def validate_file(uploaded_file: UploadedFile) -> Tuple[bool, str]:
@@ -172,8 +172,7 @@ def secure_kmz_to_kml(kmz_data: Union[str, bytes]) -> str:
             # Use doc.kml if available, otherwise first .kml file
             kml_file = 'doc.kml' if 'doc.kml' in kml_files else kml_files[0]
 
-            # Read and decode KML content, bounded against decompression-bomb entries
-            kml_content = read_zip_member_bounded(kmz, kml_file, MAX_KMZ_KML_DECOMPRESSED_BYTES).decode('utf-8')
+            kml_content = read_kmz_kml_member(kmz, kml_file)
 
             # Validate the content (don't modify it)
             validate_kml_content(kml_content)

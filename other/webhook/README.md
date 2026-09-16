@@ -29,6 +29,7 @@ something that GitHub understands.
 2. Install dependencies: `pip install -r requirements.txt`
 3. Set environment variables:
     - `export GITHUB_TOKEN=your_token`
+    - `export WEBHOOK_SECRET=your_shared_secret` (required; must match the Gitea webhook Secret)
     - `export GITHUB_REPO=cyberes3/geovault` (optional, defaults to cyberes3/geovault)
     - `export GITHUB_WORKFLOW_BRANCH=__mirror` (optional, defaults to __mirror)
 4. Run: `python webhook-proxy.py`
@@ -43,7 +44,7 @@ something that GitHub understands.
     - **Target URL**: `https://your-webhook-proxy-url.com/webhook` (replace with your proxy URL from Step 3)
     - **HTTP Method**: POST
     - **Content Type**: application/json
-    - **Secret**: (optional, for webhook verification)
+    - **Secret**: required; the same value as `WEBHOOK_SECRET` on the proxy
     - **Branch Filter**: `master` (only trigger on master branch)
     - **Events**: Check only "Push"
 5. Click "Add Webhook"
