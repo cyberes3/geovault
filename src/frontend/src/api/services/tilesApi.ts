@@ -25,6 +25,8 @@ export interface TileSource {
 
 export interface TileSourcesResponse {
     sources: TileSource[];
+    map_config_errors?: Array<{ code: string; message: string }>;
+    show_attribution?: boolean;
 }
 
 /** GET /api/tiles/sources/ - available basemap/terrain/hillshade tile sources. */

@@ -3,8 +3,8 @@
  * `pbf` ships its own types and is imported directly where needed.
  */
 declare module 'geobuf' {
-    import type Pbf from 'pbf';
+    import type { PbfReader } from 'pbf';
 
-    export function encode(geojson: unknown, pbf: Pbf): Uint8Array;
-    export function decode(pbf: Pbf): unknown;
+    export function encode(geojson: unknown, pbf: PbfReader): Uint8Array;
+    export function decode(pbf: PbfReader): unknown;
 }

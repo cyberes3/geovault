@@ -1,9 +1,13 @@
 import type { Map as MapLibreMap, MapMouseEvent, StyleSpecification } from 'maplibre-gl';
-import { initializeMap, setupGeoJsonSource, MAX_ZOOM_LEVEL, DEFAULT_GLYPHS_URL } from '@/utils/map/maplibre/mapInitialization.js';
+import { initializeMap, waitForStyleLoaded, MAX_ZOOM_LEVEL, DEFAULT_GLYPHS_URL } from '@/utils/map/maplibre/mapInitialization.js';
 import { getLoadedMaplibreGl } from '@/utils/map/maplibre/lazyMaplibreGl.js';
 import { setupCopyMapCoordinatesOnContextMenu } from '@/utils/map/copyMapCoordinatesOnContextMenu.js';
 import { setupUserGestureTrackingUnlock } from '@/utils/map/maplibre/trackingLock.js';
+import { registerFeatureLayers } from '@/utils/map/maplibre/layerManagement.js';
+import { GEOJSON_SOURCE_ID } from '@/utils/map/mapLayers';
+import { tileSourceCatalog } from '@/utils/map/tileSources/sharedCatalog.js';
 import { toast } from '@/utils/toast';
+import type { FeatureIconResolver } from '@/utils/map/FeatureIconResolver';
 import type { CameraSnapshot, MapStyleInput } from './types';
 
 export interface MapRuntimeCallbacks {
@@ -17,7 +21,6 @@ export interface MapRuntimeCallbacks {
     isTrackingLocked: () => boolean;
     onTrackingUnlock: () => void;
     onWebGlLost?: () => void;
-    onStyleImageMissing?: (iconId: string) => void;
 }
 
 export interface MapRuntimeCreateConfig {
@@ -36,10 +39,15 @@ export interface MapRuntimeCreateConfig {
 export class MapRuntime {
     map: MapLibreMap | null = null;
     styleEpoch = 0;
+    iconResolver: FeatureIconResolver | null = null;
     private teardown: (() => void) | null = null;
     private zoomFrame: number | null = null;
 
-    constructor(private readonly callbacks: MapRuntimeCallbacks) {}
+    private readonly callbacks: MapRuntimeCallbacks;
+
+    constructor(callbacks: MapRuntimeCallbacks) {
+        this.callbacks = callbacks;
+    }
 
     get hasMap(): boolean {
         return !!this.map;
@@ -55,6 +63,7 @@ export class MapRuntime {
             glyphsUrl: DEFAULT_GLYPHS_URL,
             antialias: config.antialias ?? false,
             style: config.style,
+            attributionControl: tileSourceCatalog.showAttribution,
         });
 
         const maplibregl = getLoadedMaplibreGl();
@@ -67,9 +76,12 @@ export class MapRuntime {
             'top-left',
         );
 
-        setupGeoJsonSource(this.map);
+        await waitForStyleLoaded(this.map);
+        this.ensureGeoJsonSource();
+        this.iconResolver?.attach(this.map);
         this.bindEvents();
         this.bindContextLoss();
+        registerFeatureLayers(this.map, this.styleEpoch);
         return this.map;
     }
 
@@ -82,12 +94,15 @@ export class MapRuntime {
         if (epoch !== this.styleEpoch || !this.map) return;
         this.ensureGeoJsonSource();
         this.map.setMaxZoom(MAX_ZOOM_LEVEL);
+        registerFeatureLayers(this.map, epoch);
+        this.iconResolver?.attach(this.map);
     }
 
     ensureGeoJsonSource(): void {
-        if (!this.map || this.map.getSource('geojson-data')) return;
-        this.map.addSource('geojson-data', {
+        if (!this.map || this.map.getSource(GEOJSON_SOURCE_ID)) return;
+        this.map.addSource(GEOJSON_SOURCE_ID, {
             type: 'geojson',
+            promoteId: 'database_id',
             data: { type: 'FeatureCollection', features: [] },
         });
     }
@@ -112,7 +127,7 @@ export class MapRuntime {
         const start = Date.now();
         return new Promise((resolve, reject) => {
             const check = () => {
-                if (this.map?.getSource('geojson-data')) {
+                if (this.map?.getSource(GEOJSON_SOURCE_ID)) {
                     resolve();
                     return;
                 }
@@ -205,9 +220,6 @@ export class MapRuntime {
             }
             this.callbacks.onZoomEnd(map.getZoom());
         };
-        const onStyleImageMissing = (event: { id: string }) => {
-            this.callbacks.onStyleImageMissing?.(event.id);
-        };
         const onClick = (event: MapMouseEvent) => { this.callbacks.onClick(event); };
         let lastMouse = 0;
         const onMouseMove = (event: MapMouseEvent) => {
@@ -223,7 +235,6 @@ export class MapRuntime {
         map.on('zoom', onZoomFrame);
         map.on('moveend', onMoveEnd);
         map.on('zoomend', onZoomEnd);
-        map.on('styleimagemissing', onStyleImageMissing);
         map.on('click', onClick);
         map.on('mousemove', onMouseMove);
         map.on('mouseout', onMouseOut);
@@ -240,7 +251,6 @@ export class MapRuntime {
             map.off('zoom', onZoomFrame);
             map.off('moveend', onMoveEnd);
             map.off('zoomend', onZoomEnd);
-            map.off('styleimagemissing', onStyleImageMissing);
             map.off('click', onClick);
             map.off('mousemove', onMouseMove);
             map.off('mouseout', onMouseOut);

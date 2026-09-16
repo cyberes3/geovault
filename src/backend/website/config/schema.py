@@ -99,6 +99,7 @@ class TileSourcesConfig(BaseModel):
     proxy_sources: list[str] = Field(default_factory=list)
     hidden: list[str] = Field(default_factory=list)
     social_preview_raster_source: str = 'osm'
+    show_attribution: bool = False
 
 
 class MapTilerConfig(BaseModel):

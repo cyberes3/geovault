@@ -130,6 +130,7 @@ TILESOURCES_PROXY_OSM = _config.tilesources.proxy_osm
 TILESOURCES_PROXY_SOURCES = _config.tilesources.proxy_sources
 TILESOURCES_HIDDEN = _config.tilesources.hidden
 TILESOURCES_SOCIAL_PREVIEW_RASTER_SOURCE = _config.tilesources.social_preview_raster_source
+TILESOURCES_SHOW_ATTRIBUTION = _config.tilesources.show_attribution
 
 # MapTiler tile sources + forward geocoding
 MAPTILER_API_KEY = _config.maptiler.api_key

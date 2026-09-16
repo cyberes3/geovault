@@ -194,7 +194,7 @@ export async function createPlacesMap({
     maxZoom,
     dragRotate: false,
     pitchWithRotate: false,
-    attributionControl: false,
+    attributionControl: tileSourceCatalog.showAttribution,
     cooperativeGestures: initialCoop
   });
 

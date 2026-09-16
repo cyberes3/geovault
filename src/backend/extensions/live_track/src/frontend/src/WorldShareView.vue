@@ -206,7 +206,7 @@ import type { MobileMapDrawerExposed } from './types/mobile-drawer';
 import type { TileSource } from '@geovault/extension-sdk';
 import type { Map as MapLibreMap } from 'maplibre-gl';
 
-const { setupCopyMapCoordinatesOnContextMenu, useDocumentTitle } = window.gv_core;
+const { setupCopyMapCoordinatesOnContextMenu, useDocumentTitle, tileSourceCatalog } = window.gv_core;
 const LIVE_TRACK_API_BASE_URL = '/api/extensions/live-track';
 const LINES_SOURCE_ID = 'world-share-lines';
 const POINTS_SOURCE_ID = 'world-share-points';
@@ -832,7 +832,7 @@ export default defineComponent({
           minZoom: MIN_ZOOM,
           maxZoom: MAX_ZOOM,
           maxPitch: 0,
-          attributionControl: false
+          attributionControl: tileSourceCatalog.showAttribution
         });
         map.addControl(new maplibregl.NavigationControl({ showCompass: false, showZoom: true }), 'top-right');
         map.on('error', (e) => {
@@ -931,7 +931,7 @@ export default defineComponent({
         minZoom: MIN_ZOOM,
         maxZoom: MAX_ZOOM,
         maxPitch: 0,
-        attributionControl: false
+        attributionControl: tileSourceCatalog.showAttribution
       });
       map.addControl(new maplibregl.NavigationControl({ showCompass: false, showZoom: true }), 'top-right');
 

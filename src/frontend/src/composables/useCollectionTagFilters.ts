@@ -13,7 +13,7 @@ import { convertMapLibreFeature } from '@/utils/map/maplibre/featureConversion.j
 import { toastApiError } from '@/utils/apiError';
 import { toast } from '@/utils/toast';
 import { sortTagsByPriority, sortUserTagsAlphabetically } from '@/utils/tagUtils.js';
-import { getFeatureCoordinates } from '@/utils/map/maplibre';
+import { getCoordinatesFromGeometry } from '@/utils/map/geometry';
 import { MAX_ZOOM_LEVEL } from '@/utils/map/maplibre/mapInitialization.js';
 import type { RootState } from '@/assets/js/store';
 import type { UserInfo } from '@/assets/js/types/store-types';
@@ -112,7 +112,7 @@ export function useCollectionTagFilters(deps: UseCollectionTagFiltersDeps) {
 
         features.forEach((feature) => {
             if (!feature.geometry.coordinates) return;
-            const coords = getFeatureCoordinates(feature.geometry);
+            const coords = getCoordinatesFromGeometry(feature.geometry);
             coords.forEach((coord) => {
                 const [lon, lat] = Array.isArray(coord) && coord.length >= 2 ? coord : [null, null];
                 if (lon != null && lat != null && isFinite(lon) && isFinite(lat)) {

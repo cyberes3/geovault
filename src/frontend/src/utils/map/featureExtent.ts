@@ -3,6 +3,7 @@
  */
 import type { Geometry, Position } from 'geojson'
 import type { LngLatBounds } from 'maplibre-gl'
+import { getCoordinatesFromGeometry } from '@/utils/map/geometry'
 
 export interface ExtentFeature {
   geometry?: Geometry | null
@@ -16,27 +17,7 @@ export interface BufferedBounds {
   north: number
 }
 
-/** Get [lon, lat] coordinates from a GeoJSON geometry. */
-export function getCoordinatesFromGeometry(geometry: Geometry | null | undefined): Position[] {
-  if (!geometry) return [];
-
-  switch (geometry.type) {
-    case 'Point':
-      return [geometry.coordinates];
-    case 'MultiPoint':
-    case 'LineString':
-      return geometry.coordinates;
-    case 'MultiLineString':
-    case 'Polygon':
-      return geometry.coordinates.flat();
-    case 'MultiPolygon':
-      return geometry.coordinates.flat(2);
-    case 'GeometryCollection':
-      return geometry.geometries.flatMap(g => getCoordinatesFromGeometry(g));
-    default:
-      return [];
-  }
-}
+export { getCoordinatesFromGeometry };
 
 /** Check if feature is in bounds. */
 export function isFeatureInBounds(feature: ExtentFeature | null | undefined, bounds: LngLatBounds | null | undefined): boolean {

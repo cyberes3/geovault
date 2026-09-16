@@ -4,7 +4,7 @@
  */
 
 import geobuf from 'geobuf';
-import Pbf from 'pbf';
+import { PbfReader } from 'pbf';
 import type { GeoJsonFeatureCollection } from '@/types/geospatial';
 import { ApiError } from '@/utils/apiError';
 
@@ -33,11 +33,11 @@ function isProtobufContentType(contentType: string): boolean {
 export const EMPTY_FEATURE_COLLECTION: GeoJsonFeatureCollection = Object.freeze({
     type: 'FeatureCollection',
     features: Object.freeze([]),
-}) as GeoJsonFeatureCollection;
+}) as unknown as GeoJsonFeatureCollection;
 
 /** Decode geobuf binary data to a GeoJSON FeatureCollection. */
 export function decodeGeobuf(arrayBuffer: ArrayBuffer | Uint8Array): GeoJsonFeatureCollection {
-    const pbf = new Pbf(new Uint8Array(arrayBuffer));
+    const pbf = new PbfReader(new Uint8Array(arrayBuffer));
     const decoded = geobuf.decode(pbf) as GeoJsonFeatureCollection | null;
     if (!decoded || decoded.type !== 'FeatureCollection' || !Array.isArray(decoded.features) || decoded.features.length === 0) {
         return EMPTY_FEATURE_COLLECTION;

@@ -1,10 +1,15 @@
-import type { Map as MapLibreMap } from 'maplibre-gl';
+import type { Map as MapLibreMap, MapMouseEvent } from 'maplibre-gl';
 import { FeatureSource } from '@/utils/map/common/FeatureSource';
 import { GeoJsonSourceHandle } from '@/utils/map/common/GeoJsonSourceHandle';
 import { MapRuntime } from '@/utils/map/common/MapRuntime';
 import { MapCamera } from '@/utils/map/common/MapCamera';
 import { TileRuntime } from '@/utils/map/common/TileRuntime';
 import { LocationRuntime } from '@/utils/map/common/LocationRuntime';
+import type { IngestContext } from '@/utils/map/common/types';
+import { FeatureIconResolver } from '@/utils/map/FeatureIconResolver';
+import { LabelMarkerManager } from '@/utils/map/maplibre/labelMarkers';
+import { pickFeaturesAtPoint } from '@/utils/map/pickFeatures';
+import { CLICK_HIT_RADIUS_PX, HOVER_HIT_RADIUS_PX } from '@/utils/map/mapLayers';
 import { HiddenFeatureSet } from './HiddenFeatureSet';
 import { FeatureViewportCache } from './FeatureViewportCache';
 import { MapFilterState } from './MapFilterState';
@@ -14,7 +19,6 @@ import { FeatureMutation } from './FeatureMutation';
 import { ElevationStore } from './ElevationStore';
 import type { MapRouteLocation } from './types';
 import type { PublicShareInfo } from '@/composables/mapPageTypes';
-import { getFeatureIconUrl, getIconSourceUrl, loadIconImage } from '@/utils/map/maplibre/featureStyling.js';
 
 export interface MapSessionHost {
     getContainer(): HTMLElement | null;
@@ -23,18 +27,12 @@ export interface MapSessionHost {
     getHiddenIds(): Array<string | number>;
     canWrite(): boolean;
     showLabels(): boolean;
-    onMoveOrZoomStart(): void;
-    onMoveEnd(): void;
-    onZoomEnd(zoom: number): void;
-    onZoomFrame(): void;
-    onClick(event: unknown): void;
-    onMouseMove(event: unknown): void;
-    onMouseOut(): void;
+    replaceIconsLowZoom(): boolean;
     onWebGlLost(): void;
 }
 
 /**
- * One map-page state machine. `activate` / `deactivate` / `onRouteChange` are the only boot paths.
+ * One map-page state machine. Owns click/hover/zoom/bbox. `activate` / `deactivate` / `onRouteChange` are the only boot paths.
  */
 export class MapSession {
     readonly features = new FeatureSource();
@@ -50,6 +48,8 @@ export class MapSession {
     readonly location = new LocationRuntime();
     readonly runtime: MapRuntime;
     readonly sink: GeoJsonSourceHandle;
+    readonly iconResolver: FeatureIconResolver;
+    labels: LabelMarkerManager | null = null;
 
     active = false;
     booted = false;
@@ -59,45 +59,111 @@ export class MapSession {
     publicShareInfo: PublicShareInfo | null = null;
     publicShareError: string | null = null;
     publicShareRefinedFitId: string | null = null;
+    errorMessage: string | null = null;
 
-    constructor(private readonly host: MapSessionHost) {
+    onViewportBusy: (() => void) | null = null;
+    onViewportIdle: (() => void) | null = null;
+
+    private readonly host: MapSessionHost;
+
+    constructor(host: MapSessionHost) {
+        this.host = host;
         this.sink = new GeoJsonSourceHandle(() => this.runtime.map, () => this.host.showLabels());
         this.features.attachSink(this.sink);
         this.pipeline = new LoadPipeline(this.features, this.cache, this.hidden);
-        this.mutations = new FeatureMutation(this.features, this.hidden, this.elevations, () => this.host.canWrite());
+        this.mutations = new FeatureMutation(
+            this.features,
+            this.hidden,
+            this.elevations,
+            () => this.host.canWrite(),
+            () => this.ingestContext(),
+        );
+        this.iconResolver = new FeatureIconResolver(this.features, this.hidden);
         this.runtime = new MapRuntime({
-            onMoveOrZoomStart: () => this.host.onMoveOrZoomStart(),
-            onMoveEnd: () => this.host.onMoveEnd(),
-            onZoomEnd: (zoom) => this.host.onZoomEnd(zoom),
-            onZoomFrame: () => this.host.onZoomFrame(),
-            onClick: (event) => this.host.onClick(event),
-            onMouseMove: (event) => this.host.onMouseMove(event),
-            onMouseOut: () => this.host.onMouseOut(),
+            onMoveOrZoomStart: () => this.onMoveOrZoomStart(),
+            onMoveEnd: () => this.onMoveEnd(),
+            onZoomEnd: (zoom) => this.onZoomEnd(zoom),
+            onZoomFrame: () => this.onZoomFrame(),
+            onClick: (event) => this.onClick(event),
+            onMouseMove: (event) => this.onMouseMove(event),
+            onMouseOut: () => this.onMouseOut(),
             isTrackingLocked: () => this.location.mode === 'follow',
             onTrackingUnlock: () => { this.location.unlockFollow(); },
-            onWebGlLost: () => this.host.onWebGlLost(),
-            onStyleImageMissing: (iconId) => { this.resolveMissingIcon(iconId); },
+            onWebGlLost: () => {
+                this.errorMessage = 'The map graphics context was lost. Refresh the page.';
+                this.host.onWebGlLost();
+            },
         });
-    }
-
-    private resolveMissingIcon(iconId: string): void {
-        if (!iconId.startsWith('icon-') || !this.runtime.map) return;
-        const features = this.features.buildRenderCollection(this.hidden).features;
-        for (const feature of features) {
-            if (feature.properties?.['_icon-id'] !== iconId) continue;
-            const iconUrl = getFeatureIconUrl(feature.properties);
-            if (!iconUrl) continue;
-            const resolvedUrl = getIconSourceUrl(iconUrl, feature.properties);
-            loadIconImage(this.runtime.map, iconId, resolvedUrl).catch((err: unknown) => {
-                console.warn(`Failed to load missing icon ${iconId}:`, err);
-            });
-            return;
-        }
-        console.warn(`Could not find feature for missing icon: ${iconId}`);
+        this.runtime.iconResolver = this.iconResolver;
     }
 
     get map(): MapLibreMap | null {
         return this.runtime.map;
+    }
+
+    ingestContext(): IngestContext {
+        const map = this.runtime.map;
+        const container = map?.getContainer();
+        return {
+            zoom: map?.getZoom() ?? 0,
+            replaceIconsLowZoom: this.host.replaceIconsLowZoom(),
+            showLabels: this.host.showLabels(),
+            viewSize: {
+                width: container?.clientWidth || 800,
+                height: container?.clientHeight || 600,
+            },
+        };
+    }
+
+    ingestIncoming(incoming: Parameters<FeatureSource['ingest']>[0]): void {
+        this.features.ingest(incoming, this.ingestContext(), this.hidden);
+        this.features.commit(this.hidden);
+        this.labels?.sync();
+    }
+
+    refreshZoomDependent(): void {
+        this.features.refreshZoomDependent(this.ingestContext());
+        this.features.commit(this.hidden);
+        this.labels?.sync();
+    }
+
+    onMoveOrZoomStart(): void {
+        this.onViewportBusy?.();
+    }
+
+    onMoveEnd(): void {
+        this.camera.save(this.runtime.map);
+        this.onViewportIdle?.();
+    }
+
+    onZoomEnd(_zoom: number): void {
+        this.refreshZoomDependent();
+        this.onViewportIdle?.();
+    }
+
+    onZoomFrame(): void {
+        this.labels?.sync(true);
+    }
+
+    onClick(event: MapMouseEvent): void {
+        if (!this.runtime.map) return;
+        const hits = pickFeaturesAtPoint(this.runtime.map, event.point, CLICK_HIT_RADIUS_PX, this.features);
+        this.interaction.handleClick(this.runtime.map, hits, { x: event.point.x, y: event.point.y });
+    }
+
+    onMouseMove(event: MapMouseEvent): void {
+        if (!this.runtime.map) return;
+        const hits = pickFeaturesAtPoint(this.runtime.map, event.point, HOVER_HIT_RADIUS_PX, this.features);
+        this.runtime.map.getCanvas().style.cursor = hits.length > 0 ? 'pointer' : '';
+        const id = hits[0] ? String(hits[0].properties?.database_id ?? '') || null : null;
+        this.interaction.hover(this.runtime.map, id);
+    }
+
+    onMouseOut(): void {
+        if (this.runtime.map) {
+            this.runtime.map.getCanvas().style.cursor = '';
+        }
+        this.interaction.hover(this.runtime.map, null);
     }
 
     routeKey(location: MapRouteLocation): string {
@@ -136,7 +202,9 @@ export class MapSession {
 
         if (this.booted && this.runtime.hasMap && !routeChanged) {
             this.runtime.resize();
+            this.camera.restore(this.runtime.map);
             this.features.commit(this.hidden);
+            this.labels?.sync();
             return hiddenSync.unhid ? 'reload' : 'restore';
         }
 
@@ -171,7 +239,7 @@ export class MapSession {
         this.cache.clear();
         this.features.clear();
         this.elevations.clear();
-        this.interaction.clear();
+        this.interaction.clear(this.runtime.map);
         this.publicShareInfo = null;
         this.publicShareError = null;
         this.publicShareRefinedFitId = null;
@@ -181,6 +249,14 @@ export class MapSession {
             this.publicShareError = 'This share link is missing an id.';
         }
         this.features.commit(this.hidden);
+        this.labels?.clear();
+    }
+
+    attachLabels(): void {
+        if (!this.runtime.map) return;
+        this.labels?.clear();
+        this.labels = new LabelMarkerManager(this.runtime.map, this.features);
+        this.labels.setVisibility(this.host.showLabels());
     }
 
     markBooted(): void {
@@ -189,6 +265,8 @@ export class MapSession {
 
     dispose(): void {
         this.deactivate();
+        this.labels?.clear();
+        this.labels = null;
         this.sink.dispose();
         this.runtime.destroy();
         this.booted = false;

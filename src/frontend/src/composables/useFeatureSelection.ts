@@ -1,25 +1,12 @@
 /**
- * Click/hover feature selection: the click handler's overlapping-feature disambiguation,
- * hover highlighting, the selected/editing feature state backing `FeatureInfoBox` /
- * `FeatureEditBox` / `FeatureSelectionPopup`, and the edit/save/delete/hide handlers that
- * mutate the map source in place after a feature CRUD action.
+ * Vue adapter over FeatureInteraction plus feature CRUD / camera helpers.
  */
-import { markRaw, ref, shallowRef, type ComputedRef, type Ref, type ShallowRef } from 'vue';
+import { computed, markRaw, onBeforeUnmount, ref, shallowRef, type ComputedRef, type Ref, type ShallowRef } from 'vue';
 import { useStore } from 'vuex';
-import type { Map as MapLibreMap, MapMouseEvent, Marker, PointLike } from 'maplibre-gl';
+import type { Map as MapLibreMap, Marker } from 'maplibre-gl';
 import { getLoadedMaplibreGl } from '@/utils/map/maplibre/lazyMaplibreGl.js';
 import { convertMapLibreFeature } from '@/utils/map/maplibre/featureConversion.js';
-import {
-    getFeatureIconUrl,
-    getIconSourceUrl,
-    loadIconImage,
-    shouldUseIcon,
-    getStrokeWidthExpressionWithHighlight,
-    getCircleRadiusExpressionWithHighlight,
-    getIconSizeExpressionWithHighlight,
-} from '@/utils/map/maplibre/featureStyling.js';
-import { createZoomBasedRadiusExpression } from '@/utils/map/maplibre/featureStyles.js';
-import { getFeatureCoordinates } from '@/utils/map/maplibre';
+import { getCoordinatesFromGeometry } from '@/utils/map/geometry';
 import { getInverseColor } from '@/utils/map/colorUtils';
 import { isValidMapLngLatPair } from '@/utils/map/mapGeography.js';
 import { MAX_ZOOM_LEVEL } from '@/utils/map/maplibre/mapInitialization.js';
@@ -29,9 +16,12 @@ import type { LabelMarkerManager } from '@/utils/map/maplibre/labelMarkers.js';
 import type { MapPageFeature, MapUserSettings } from './mapPageTypes';
 import type { FeatureMutation } from '@/utils/map/session/FeatureMutation';
 import type { FeatureSource } from '@/utils/map/common/FeatureSource';
+import type { MapSession } from '@/utils/map/session/MapSession';
+import type { RenderFeature } from '@/utils/map/common/types';
 import type { VaultFeature } from '@/contracts/feature';
 
 export interface UseFeatureSelectionDeps {
+    session: MapSession;
     map: ShallowRef<MapLibreMap | null>;
     labelMarkerManager: ShallowRef<LabelMarkerManager | null>;
     showAllLabels: Ref<boolean>;
@@ -41,235 +31,123 @@ export interface UseFeatureSelectionDeps {
     getUserMapSettings: () => MapUserSettings;
     isPublicShareMode: ComputedRef<boolean>;
     shareId: ComputedRef<string | null>;
-    /** Gate for hide/unhide actions: main map route, not a public share, and the user is authenticated. */
     canManageHiddenFeatures: ComputedRef<boolean>;
     mutations: FeatureMutation;
     featureSource: FeatureSource;
 }
 
-interface RawMapLibreFeature {
-    properties?: Record<string, unknown> & { _originalFeatureId?: unknown; _isSmallFeatureReplacement?: boolean; _isLabelPoint?: boolean };
-    geometry?: MapPageFeature['geometry'];
-}
-
 export function useFeatureSelection(deps: UseFeatureSelectionDeps) {
-    const { map, labelMarkerManager, showAllLabels, navigateAndRefresh, updateFeatureCount, updateFeaturesInExtent, getUserMapSettings, isPublicShareMode, shareId, canManageHiddenFeatures, mutations, featureSource } = deps;
+    const {
+        session,
+        map,
+        labelMarkerManager,
+        showAllLabels,
+        navigateAndRefresh,
+        updateFeatureCount,
+        updateFeaturesInExtent,
+        isPublicShareMode,
+        shareId,
+        canManageHiddenFeatures,
+        mutations,
+        featureSource,
+    } = deps;
     const store = useStore();
-
-    const selectedFeature: Ref<MapPageFeature | null> = ref(null);
-    const isEditingFeature = ref(false);
-    const showElevationProfile = ref(false);
-    const overlappingFeatures: Ref<MapPageFeature[]> = ref([]);
-    const showFeaturePopup = ref(false);
-    const popupPosition = ref({ x: 0, y: 0, containerWidth: 0, containerHeight: 0 });
-    const hoveredFeatureId: Ref<string | number | null> = ref(null);
+    const revision = ref(0);
     const hoverMarker: ShallowRef<Marker | null> = shallowRef(null);
+    const unsubscribe = session.interaction.subscribe(() => {
+        revision.value += 1;
+    });
+    onBeforeUnmount(unsubscribe);
+
+    function asPageFeature(feature: RenderFeature | null): MapPageFeature | null {
+        return feature ? markRaw(convertMapLibreFeature(feature)) as MapPageFeature : null;
+    }
+
+    const selectedFeature = computed<MapPageFeature | null>({
+        get() {
+            revision.value;
+            return asPageFeature(session.interaction.selected);
+        },
+        set(value) {
+            session.interaction.select(session.map, value as RenderFeature | null);
+        },
+    });
+
+    const isEditingFeature = computed({
+        get() {
+            revision.value;
+            return session.interaction.isEditing;
+        },
+        set(value) {
+            if (value) session.interaction.beginEdit();
+            else session.interaction.cancelEdit();
+        },
+    });
+
+    const showElevationProfile = computed({
+        get() {
+            revision.value;
+            return session.interaction.mode === 'elevationProfile';
+        },
+        set(value) {
+            if (value) session.interaction.showElevationProfile();
+            else session.interaction.closeElevationProfile();
+        },
+    });
+
+    const overlappingFeatures = computed(() => {
+        revision.value;
+        return session.interaction.overlapping.map((feature) => markRaw(convertMapLibreFeature(feature)) as MapPageFeature);
+    });
+
+    const showFeaturePopup = computed({
+        get() {
+            revision.value;
+            return session.interaction.mode === 'disambiguating' && session.interaction.overlapping.length > 1;
+        },
+        set(value) {
+            if (!value) session.interaction.closePopup();
+        },
+    });
+
+    const popupPosition = computed(() => {
+        revision.value;
+        const point = session.interaction.popupPoint;
+        const container = map.value?.getContainer();
+        return {
+            x: point?.x ?? 0,
+            y: point?.y ?? 0,
+            containerWidth: container?.clientWidth || window.innerWidth,
+            containerHeight: container?.clientHeight || window.innerHeight,
+        };
+    });
+
+    const hoveredFeatureId = computed({
+        get() {
+            revision.value;
+            return session.interaction.hoveredId;
+        },
+        set(value) {
+            session.interaction.hover(session.map, value == null ? null : String(value));
+        },
+    });
 
     function getSourceFeatures(): MapPageFeature[] {
         return featureSource.buildRenderCollection().features as MapPageFeature[];
     }
 
-    /**
-     * Update paint properties for lines, polygon-outlines, and points to highlight hovered/selected features.
-     */
-    function updateFeatureHighlighting(): void {
-        if (!map.value) return;
-        const mapInstance = map.value;
-
-        // `database_id`/`hoveredFeatureId` may be numeric at runtime; these highlight helpers only use `===` against
-        // the feature's `database_id` property so we just need the TS-facing type to match their `string|null` JSDoc signatures.
-        const selectedFeatureId = (selectedFeature.value?.properties.database_id ?? null) as string | null | undefined;
-        const hoveredId = hoveredFeatureId.value as string | null | undefined;
-
-        const lineWidthExpression = getStrokeWidthExpressionWithHighlight(2, hoveredId, selectedFeatureId, 1.5);
-        if (mapInstance.getLayer('lines')) {
-            mapInstance.setPaintProperty('lines', 'line-width', lineWidthExpression);
-        }
-        if (mapInstance.getLayer('polygon-outlines')) {
-            mapInstance.setPaintProperty('polygon-outlines', 'line-width', lineWidthExpression);
-        }
-
-        const baseRadiusExpression = createZoomBasedRadiusExpression(4, 2);
-        const radiusExpression = getCircleRadiusExpressionWithHighlight(baseRadiusExpression, hoveredId, selectedFeatureId, 1.5);
-        if (mapInstance.getLayer('points')) {
-            mapInstance.setPaintProperty('points', 'circle-radius', radiusExpression);
-            mapInstance.setPaintProperty('points', 'circle-stroke-width', 1);
-            mapInstance.setPaintProperty('points', 'circle-stroke-color', '#000000');
-            mapInstance.setPaintProperty('points', 'circle-stroke-opacity', 1);
-        }
-
-        const replacementRadiusExpression = createZoomBasedRadiusExpression(3, 1.5);
-        const replacementRadiusHighlight = getCircleRadiusExpressionWithHighlight(replacementRadiusExpression, hoveredId, selectedFeatureId, 1.5);
-        if (mapInstance.getLayer('replacement-points')) {
-            mapInstance.setPaintProperty('replacement-points', 'circle-radius', replacementRadiusHighlight);
-            mapInstance.setPaintProperty('replacement-points', 'circle-stroke-width', 1);
-            mapInstance.setPaintProperty('replacement-points', 'circle-stroke-color', '#000000');
-            mapInstance.setPaintProperty('replacement-points', 'circle-stroke-opacity', 1);
-        }
-
-        const iconSizeExpression = getIconSizeExpressionWithHighlight(1.0, hoveredId, selectedFeatureId, 1.05);
-        if (mapInstance.getLayer('point-icons')) {
-            mapInstance.setLayoutProperty('point-icons', 'icon-size', iconSizeExpression);
-        }
-    }
-
-    /** Full click handler: query rendered features near the click, disambiguate overlaps, select. */
-    function onMapClick(e: MapMouseEvent): void {
-        if (isEditingFeature.value) return;
-        const mapInstance = map.value;
-        if (!mapInstance) return;
-
-        const layersToQuery = ['points', 'point-icons', 'replacement-points', 'lines', 'polygons', 'polygon-outlines'].filter((layerId) => mapInstance.getLayer(layerId));
-        if (layersToQuery.length === 0) return;
-
-        const bbox: [PointLike, PointLike] = [
-            [e.point.x - 15, e.point.y - 15],
-            [e.point.x + 15, e.point.y + 15],
-        ];
-        const features = mapInstance.queryRenderedFeatures(bbox, { layers: layersToQuery }) as unknown as RawMapLibreFeature[];
-
-        const clickableFeatures = features.filter((f) => !f.properties?._isLabelPoint);
-
-        if (showElevationProfile.value) {
-            showElevationProfile.value = false;
-            handleHoverClear();
-        }
-
-        const sourceFeatures = getSourceFeatures();
-        const processedFeatures = clickableFeatures.map((f) => {
-            if (f.properties?._isSmallFeatureReplacement) {
-                const originalId = f.properties._originalFeatureId;
-                if (originalId) {
-                    const originalFeature = sourceFeatures.find((feature) => feature.properties.database_id === originalId && !feature.properties._isSmallFeatureReplacement);
-                    if (originalFeature) return originalFeature;
-                }
-            }
-            return f;
-        });
-
-        const uniqueFeatures: RawMapLibreFeature[] = [];
-        const seenIds = new Set<unknown>();
-        for (const feature of processedFeatures) {
-            const featureId = feature.properties?.database_id as string | number | undefined;
-            if (featureId && !seenIds.has(featureId)) {
-                seenIds.add(featureId);
-                uniqueFeatures.push(feature);
-            } else if (!featureId) {
-                uniqueFeatures.push(feature);
-            }
-        }
-
-        if (uniqueFeatures.length === 0) {
-            selectedFeature.value = null;
-            isEditingFeature.value = false;
-            showFeaturePopup.value = false;
-            handleHoverClear();
-        } else if (uniqueFeatures.length === 1) {
-            selectedFeature.value = markRaw(convertMapLibreFeature(uniqueFeatures[0])) as MapPageFeature;
-            isEditingFeature.value = false;
-            showFeaturePopup.value = false;
-        } else {
-            overlappingFeatures.value = uniqueFeatures.map((f) => markRaw(convertMapLibreFeature(f)) as MapPageFeature);
-            popupPosition.value = {
-                x: e.point.x,
-                y: e.point.y,
-                containerWidth: mapInstance.getContainer().clientWidth || window.innerWidth,
-                containerHeight: mapInstance.getContainer().clientHeight || window.innerHeight,
-            };
-            showFeaturePopup.value = true;
-        }
-    }
-
-    const MOUSE_HOVER_LAYERS = ['points', 'point-icons', 'replacement-points', 'lines', 'polygons', 'polygon-outlines'];
-
-    function onMapMouseMove(e: MapMouseEvent): void {
-        const mapInstance = map.value;
-        if (!mapInstance) return;
-
-        const layersToQuery = MOUSE_HOVER_LAYERS.filter((layerId) => mapInstance.getLayer(layerId));
-        if (layersToQuery.length === 0) return;
-
-        const bbox: [PointLike, PointLike] = [
-            [e.point.x - 5, e.point.y - 5],
-            [e.point.x + 5, e.point.y + 5],
-        ];
-        const features = mapInstance.queryRenderedFeatures(bbox, { layers: layersToQuery }) as unknown as RawMapLibreFeature[];
-        const hoverableFeatures = features.filter((f) => !f.properties?._isLabelPoint);
-
-        mapInstance.getCanvas().style.cursor = hoverableFeatures.length > 0 ? 'pointer' : '';
-
-        if (hoverableFeatures.length > 0) {
-            const hoveredId = hoverableFeatures[0].properties?.database_id as string | number | undefined;
-            if (hoveredFeatureId.value !== hoveredId) {
-                hoveredFeatureId.value = hoveredId ?? null;
-                updateFeatureHighlighting();
-            }
-        } else if (hoveredFeatureId.value !== null) {
-            hoveredFeatureId.value = null;
-            updateFeatureHighlighting();
-        }
-    }
-
-    function onMapMouseOut(): void {
-        if (map.value) {
-            map.value.getCanvas().style.cursor = '';
-        }
-        if (hoveredFeatureId.value !== null) {
-            hoveredFeatureId.value = null;
-            updateFeatureHighlighting();
-        }
-    }
-
-    /** Ensure a single feature (e.g. from search or a `?featureId=` URL) exists on the map source, processing its icon if needed. */
     async function ensureFeatureOnMap(feature: MapPageFeature): Promise<void> {
-        const mapInstance = map.value;
-        if (!mapInstance?.getSource('geojson-data')) return;
-
-        const properties = feature.properties;
-        const featureId = properties.database_id as string | number | undefined;
+        if (!map.value?.getSource('geojson-data')) return;
+        const featureId = feature.properties.database_id as string | number | undefined;
         if (!featureId) return;
         const hidden = store.getters['userSettings/hiddenFeatures'] as Array<{ id: string }> | undefined;
         if (Array.isArray(hidden) && hidden.some((item) => String(item.id) === String(featureId))) {
             return;
         }
-
-        const existingFeatures = getSourceFeatures();
-        const exists = existingFeatures.some((f) => f.properties.database_id === featureId);
-        if (exists) return;
-
-        const geoJsonFeature: MapPageFeature = { type: 'Feature', geometry: feature.geometry, properties };
-
-        if (geoJsonFeature.geometry.type === 'Point') {
-            const iconUrl = getFeatureIconUrl(geoJsonFeature.properties);
-            const zoom = mapInstance.getZoom();
-            const userSettings = getUserMapSettings();
-            const replaceIconsLowZoom = userSettings.replace_icons_low_zoom !== undefined ? !!userSettings.replace_icons_low_zoom : true;
-            const shouldShowIcon = !!iconUrl && shouldUseIcon(zoom, iconUrl, replaceIconsLowZoom);
-
-            if (shouldShowIcon) {
-                const resolvedUrl = getIconSourceUrl(iconUrl, geoJsonFeature.properties);
-                const iconId = `icon-${resolvedUrl.replace(/[^a-zA-Z0-9]/g, '_')}`;
-                geoJsonFeature.properties['_icon-id'] = iconId;
-
-                if (!mapInstance.hasImage(iconId)) {
-                    try {
-                        await loadIconImage(mapInstance, iconId, resolvedUrl);
-                    } catch (err) {
-                        console.warn(`Failed to load icon ${iconId}:`, err);
-                        delete geoJsonFeature.properties['_icon-id'];
-                    }
-                }
-            }
-        }
-
-        mutations.add(geoJsonFeature as VaultFeature);
-
-        if (labelMarkerManager.value) {
-            labelMarkerManager.value.updateMarkers(getSourceFeatures());
-        }
+        if (featureSource.has(String(featureId))) return;
+        session.ingestIncoming([feature as VaultFeature]);
     }
 
-    /** Fit the camera to a single feature's geometry, adding it to the map source first if needed. */
     async function zoomToFeature(feature: MapPageFeature | null): Promise<void> {
         const mapInstance = map.value;
         if (!mapInstance || !feature) {
@@ -285,7 +163,7 @@ export function useFeatureSelection(deps: UseFeatureSelectionDeps) {
             return;
         }
 
-        const coords = getFeatureCoordinates(geometry);
+        const coords = getCoordinatesFromGeometry(geometry);
         if (coords.length === 0) {
             console.warn('zoomToFeature: No coordinates found in geometry', geometry);
             return;
@@ -302,8 +180,6 @@ export function useFeatureSelection(deps: UseFeatureSelectionDeps) {
                 minLat = Math.min(minLat, lat);
                 maxLon = Math.max(maxLon, lon);
                 maxLat = Math.max(maxLat, lat);
-            } else if (lon != null && lat != null) {
-                console.warn('zoomToFeature: Coordinate out of valid range', { lon, lat });
             }
         });
 
@@ -312,12 +188,10 @@ export function useFeatureSelection(deps: UseFeatureSelectionDeps) {
             return;
         }
 
-        if (minLon < -180 || maxLon > 180 || minLat < -90 || maxLat > 90) {
-            minLon = Math.max(-180, Math.min(180, minLon));
-            minLat = Math.max(-90, Math.min(90, minLat));
-            maxLon = Math.max(-180, Math.min(180, maxLon));
-            maxLat = Math.max(-90, Math.min(90, maxLat));
-        }
+        minLon = Math.max(-180, Math.min(180, minLon));
+        minLat = Math.max(-90, Math.min(90, minLat));
+        maxLon = Math.max(-180, Math.min(180, maxLon));
+        maxLat = Math.max(-90, Math.min(90, maxLat));
 
         const isMobile = window.innerWidth < 768;
         const hasFeatureInfoBox = !!selectedFeature.value && !isEditingFeature.value;
@@ -345,81 +219,43 @@ export function useFeatureSelection(deps: UseFeatureSelectionDeps) {
         await navigateAndRefresh(() => {
             try {
                 const bounds = new maplibregl.LngLatBounds([minLon, minLat], [maxLon, maxLat]);
-
-                let zoomClampHandler: (() => void) | null = () => {
-                    const currentZoom = mapInstance.getZoom();
-                    if (currentZoom > MAX_ZOOM_LEVEL) {
-                        mapInstance.setZoom(MAX_ZOOM_LEVEL);
-                    }
-                };
-                mapInstance.on('zoom', zoomClampHandler);
-
                 mapInstance.fitBounds(bounds, { padding, duration: 500, maxZoom: MAX_ZOOM_LEVEL });
-
-                void mapInstance.once('moveend', () => {
-                    if (zoomClampHandler) {
-                        mapInstance.off('zoom', zoomClampHandler);
-                        zoomClampHandler = null;
-                    }
-                    const finalZoom = mapInstance.getZoom();
-                    if (finalZoom > MAX_ZOOM_LEVEL) {
-                        mapInstance.setZoom(MAX_ZOOM_LEVEL);
-                    }
-                });
             } catch (error) {
                 console.error('zoomToFeature: Error fitting bounds (fallback)', error);
-                try {
-                    // `flyTo` has neither a `bounds` nor a `maxZoom` option (unlike `fitBounds` above, which just
-                    // threw) - both were never valid FlyToOptions fields, so this fallback just flies to the
-                    // current center/zoom re-applying padding (the map's max zoom is already globally clamped via
-                    // `setMaxZoom()` above). Preserved as-is; this branch is already a last-resort fallback for a
-                    // `fitBounds` failure that should be rare in practice.
-                    mapInstance.flyTo({ padding: typeof padding === 'object' ? padding.top : padding, duration: 500 });
-                } catch (error2) {
-                    console.error('zoomToFeature: Error with flyTo fallback (fallback)', error2);
-                }
+                mapInstance.flyTo({ padding: typeof padding === 'object' ? padding.top : padding, duration: 500 });
             }
         });
     }
 
     function handleFeatureListClick(feature: MapPageFeature | null): void {
         if (!feature) return;
-        isEditingFeature.value = false;
-        showFeaturePopup.value = false;
         const normalized = markRaw(convertMapLibreFeature(feature)) as MapPageFeature;
-        selectedFeature.value = normalized;
+        session.interaction.select(session.map, normalized as RenderFeature);
         void zoomToFeature(normalized);
     }
 
     function handleFeatureSelect(feature: MapPageFeature): void {
-        selectedFeature.value = feature;
-        isEditingFeature.value = false;
-        showFeaturePopup.value = false;
+        session.interaction.select(session.map, feature as RenderFeature);
     }
 
     function handleEditFeature(): void {
-        isEditingFeature.value = true;
+        session.interaction.beginEdit();
     }
 
     function handleCancelEdit(): void {
-        isEditingFeature.value = false;
+        session.interaction.cancelEdit();
     }
 
     function handleFeatureDeleted(feature: MapPageFeature | null): void {
-        const properties = feature?.properties ?? {};
-        const featureId = properties.database_id as string | number | undefined;
-
+        const featureId = feature?.properties.database_id as string | number | undefined;
         if (featureId) {
             mutations.remove(String(featureId));
             updateFeatureCount();
-
             if (showAllLabels.value && labelMarkerManager.value) {
                 labelMarkerManager.value.removeMarker(String(featureId));
             }
         }
-
-        selectedFeature.value = null;
-        isEditingFeature.value = false;
+        session.interaction.select(session.map, null);
     }
 
     async function handleFeatureSaved(updatedFeature: MapPageFeature | null): Promise<void> {
@@ -436,92 +272,44 @@ export function useFeatureSelection(deps: UseFeatureSelectionDeps) {
         }
         if (updatedFeature?.properties.database_id != null) {
             const featureId = updatedFeature.properties.database_id as string | number;
-
             if (featureSource.has(String(featureId)) && map.value) {
-                const mapInstance = map.value;
                 const updatedFeatureCopy = JSON.parse(JSON.stringify(updatedFeature)) as MapPageFeature;
                 updatedFeatureCopy.properties.database_id = featureId;
-
-                if (updatedFeatureCopy.geometry.type === 'Point') {
-                    const iconUrl = getFeatureIconUrl(updatedFeatureCopy.properties);
-                    const zoom = mapInstance.getZoom();
-                    const userSettings = getUserMapSettings();
-                    const replaceIconsLowZoom = userSettings.replace_icons_low_zoom !== undefined ? !!userSettings.replace_icons_low_zoom : true;
-                    const shouldShowIcon = !!iconUrl && shouldUseIcon(zoom, iconUrl, replaceIconsLowZoom);
-
-                    if (shouldShowIcon) {
-                        const resolvedUrl = getIconSourceUrl(iconUrl, updatedFeatureCopy.properties);
-                        const iconId = `icon-${resolvedUrl.replace(/[^a-zA-Z0-9]/g, '_')}`;
-                        updatedFeatureCopy.properties['_icon-id'] = iconId;
-
-                        if (!mapInstance.hasImage(iconId)) {
-                            loadIconImage(mapInstance, iconId, resolvedUrl).catch((err: unknown) => {
-                                console.warn(`Failed to load icon ${iconId}:`, err);
-                                delete updatedFeatureCopy.properties['_icon-id'];
-                            });
-                        }
-                    } else {
-                        delete updatedFeatureCopy.properties['_icon-id'];
-                    }
-                } else {
-                    delete updatedFeatureCopy.properties['_icon-id'];
-                }
-
                 mutations.applyPatch(updatedFeatureCopy as VaultFeature);
-
-                if (showAllLabels.value && labelMarkerManager.value) {
-                    labelMarkerManager.value.updateMarkers(getSourceFeatures());
-                }
-
+                labelMarkerManager.value?.updateMarkers(getSourceFeatures());
                 updateFeaturesInExtent();
                 updateFeatureCount();
-
                 if (selectedFeature.value?.properties.database_id === featureId) {
-                    selectedFeature.value = markRaw(convertMapLibreFeature(updatedFeatureCopy)) as MapPageFeature;
+                    session.interaction.select(session.map, updatedFeatureCopy as RenderFeature);
                 }
             }
         }
-
-        isEditingFeature.value = false;
+        session.interaction.cancelEdit();
     }
 
     async function handleHideFeature(feature: MapPageFeature | null): Promise<void> {
         if (!canManageHiddenFeatures.value || !feature) return;
-
-        const properties = feature.properties;
-        const featureId = properties.database_id as string | number | undefined;
-        const featureName = properties.name as string | undefined;
-        const geometryType = feature.geometry.type;
+        const featureId = feature.properties.database_id as string | number | undefined;
         if (!featureId) return;
-
         const hiddenFeaturesManager = (await import('@/utils/hiddenFeaturesManager')).default;
-
-        const optimisticUpdate = () => {
+        hiddenFeaturesManager.addHidden(featureId, () => {
             void store.dispatch('userSettings/addHiddenFeature', {
                 featureId: String(featureId),
-                featureName: featureName ?? null,
-                geometryType,
+                featureName: (feature.properties.name as string | undefined) ?? null,
+                geometryType: feature.geometry.type,
             });
-
             mutations.hide(String(featureId));
             updateFeatureCount();
-
             if (selectedFeature.value?.properties.database_id === featureId) {
-                selectedFeature.value = null;
-                isEditingFeature.value = false;
+                session.interaction.select(session.map, null);
             }
-
             updateFeaturesInExtent();
-        };
-
-        hiddenFeaturesManager.addHidden(featureId, optimisticUpdate);
+        });
     }
 
     async function handleUnhideFeature(featureId: string | number, clearLoadedBounds: () => void, loadDataForCurrentView: () => Promise<void>): Promise<void> {
         if (!canManageHiddenFeatures.value) return;
-
         const hiddenFeaturesManager = (await import('@/utils/hiddenFeaturesManager')).default;
-
         try {
             hiddenFeaturesManager.removeHidden(featureId, () => {
                 void store.dispatch('userSettings/removeHiddenFeature', String(featureId));
@@ -538,7 +326,6 @@ export function useFeatureSelection(deps: UseFeatureSelectionDeps) {
 
     async function handleUnhideAllHidden(clearLoadedBounds: () => void, loadDataForCurrentView: () => Promise<void>): Promise<void> {
         if (!canManageHiddenFeatures.value) return;
-
         try {
             const { clearHiddenFeatures } = await import('@/utils/userSettingsService');
             await clearHiddenFeatures();
@@ -558,7 +345,6 @@ export function useFeatureSelection(deps: UseFeatureSelectionDeps) {
         loadDataForCurrentView: () => Promise<void>,
     ): Promise<void> {
         if (!payload?.featureId) return;
-
         if (payload.hidden) {
             await handleHideFeature({ type: 'Feature', properties: { database_id: payload.featureId }, geometry: { type: 'Point', coordinates: [0, 0] } });
         } else {
@@ -568,49 +354,20 @@ export function useFeatureSelection(deps: UseFeatureSelectionDeps) {
 
     async function handleQuickPointCreated(createdFeature: MapPageFeature | null): Promise<void> {
         if (createdFeature && map.value?.getSource('geojson-data')) {
-            const mapInstance = map.value;
             if (createdFeature.geometry.type !== 'Point') {
                 throw new Error('Quick point was not a point');
             }
-            const iconUrl = getFeatureIconUrl(createdFeature.properties);
-            const zoom = mapInstance.getZoom();
-            const userSettings = getUserMapSettings();
-            const replaceIconsLowZoom = userSettings.replace_icons_low_zoom !== undefined ? !!userSettings.replace_icons_low_zoom : true;
-            const shouldShowIcon = !!iconUrl && shouldUseIcon(zoom, iconUrl, replaceIconsLowZoom);
-
-            if (shouldShowIcon) {
-                const resolvedUrl = getIconSourceUrl(iconUrl, createdFeature.properties);
-                const iconId = `icon-${resolvedUrl.replace(/[^a-zA-Z0-9]/g, '_')}`;
-                createdFeature.properties['_icon-id'] = iconId;
-
-                if (!mapInstance.hasImage(iconId)) {
-                    try {
-                        await loadIconImage(mapInstance, iconId, resolvedUrl);
-                    } catch (err) {
-                        console.warn(`Failed to load icon ${iconId}:`, err);
-                        delete createdFeature.properties['_icon-id'];
-                    }
-                }
-            }
-
-            mutations.add(createdFeature as VaultFeature);
+            session.ingestIncoming([createdFeature as VaultFeature]);
             updateFeatureCount();
             updateFeaturesInExtent();
-
-            if (showAllLabels.value && labelMarkerManager.value) {
-                labelMarkerManager.value.updateMarkers(getSourceFeatures());
-            }
         }
     }
 
     function handleDownloadFeatureKmz(): void {
         const feature = selectedFeature.value;
         if (!feature) return;
-
-        const properties = feature.properties;
-        const featureId = (properties.feature_ref ?? properties.database_id) as string | number | undefined;
+        const featureId = (feature.properties.feature_ref ?? feature.properties.database_id) as string | number | undefined;
         if (!featureId) return;
-
         void downloadKmz({
             feature_ref: featureId,
             share: isPublicShareMode.value && shareId.value ? shareId.value : undefined,
@@ -620,13 +377,12 @@ export function useFeatureSelection(deps: UseFeatureSelectionDeps) {
     }
 
     function handleElevationProfileClose(): void {
-        showElevationProfile.value = false;
+        session.interaction.closeElevationProfile();
         handleHoverClear();
     }
 
     function handleHoverPoint(point: number[] | { coordinates?: number[]; lon?: number; lat?: number }): void {
         if (!map.value) return;
-
         let coordinates: number[];
         if (Array.isArray(point) && point.length >= 2) {
             coordinates = point;
@@ -637,26 +393,18 @@ export function useFeatureSelection(deps: UseFeatureSelectionDeps) {
         } else {
             return;
         }
-
         if (hoverMarker.value) {
             hoverMarker.value.remove();
             hoverMarker.value = null;
         }
-
-        let markerColor = '#ff0000';
-        if (selectedFeature.value) {
-            markerColor = (selectedFeature.value.properties.stroke as string) || '#ff0000';
-        }
-        const borderColor = getInverseColor(markerColor);
-
+        const markerColor = (selectedFeature.value?.properties.stroke as string) || '#ff0000';
         const el = document.createElement('div');
         el.style.width = '11px';
         el.style.height = '11px';
         el.style.borderRadius = '50%';
         el.style.backgroundColor = markerColor;
-        el.style.border = `1px solid ${borderColor}`;
+        el.style.border = `1px solid ${getInverseColor(markerColor)}`;
         el.style.boxSizing = 'border-box';
-
         const maplibregl = getLoadedMaplibreGl();
         hoverMarker.value = new maplibregl.Marker({ element: el, anchor: 'center' }).setLngLat([coordinates[0], coordinates[1]]).addTo(map.value);
     }
@@ -671,7 +419,6 @@ export function useFeatureSelection(deps: UseFeatureSelectionDeps) {
     function handleClickPoint(point: number[] | { coordinates?: number[]; lon?: number; lat?: number }): void {
         if (!map.value) return;
         const mapInstance = map.value;
-
         let coordinates: number[];
         if (Array.isArray(point) && point.length >= 2) {
             coordinates = point;
@@ -682,7 +429,6 @@ export function useFeatureSelection(deps: UseFeatureSelectionDeps) {
         } else {
             return;
         }
-
         const currentZoom = mapInstance.getZoom();
         void navigateAndRefresh(() => {
             mapInstance.flyTo({ center: [coordinates[0], coordinates[1]], zoom: currentZoom, duration: 500 });
@@ -697,10 +443,7 @@ export function useFeatureSelection(deps: UseFeatureSelectionDeps) {
         showFeaturePopup,
         popupPosition,
         hoveredFeatureId,
-        updateFeatureHighlighting,
-        onMapClick,
-        onMapMouseMove,
-        onMapMouseOut,
+        updateFeatureHighlighting: () => {},
         ensureFeatureOnMap,
         zoomToFeature,
         handleFeatureListClick,

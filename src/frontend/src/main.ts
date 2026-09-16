@@ -55,7 +55,6 @@ import { useDocumentTitle } from '@/utils/documentTitle.js';
 import { firstPaintPath, mountWaitsForExtensions } from '@/utils/runtime/BootGraph';
 import { settingsReady } from '@/utils/settings/SettingsReady';
 
-import { extensionRegistry } from '@/utils/extensionRegistry.js';
 import { createRouteWrapper } from '@/extensions/routeWrapper';
 import { createPlatformStateBridge } from '@/extensions/platformState';
 import { loadExtensions } from '@/extensions/extensionLoader';
@@ -201,7 +200,7 @@ const gvCoreMap = {
     createGeoJsonPreviewMap,
     createPointPickerMap,
     useUserLocationMarker: createUserLocationMarker,
-};
+} as Window['gv_core']['map'];
 
 const gvCoreUi = {
     toast,

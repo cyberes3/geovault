@@ -2,7 +2,7 @@
  * MapLibre map initialization utilities
  */
 
-import type { StyleSpecification, Map as MapLibreMap, RequestTransformFunction, RequestParameters, MapMouseEvent } from 'maplibre-gl'
+import type { StyleSpecification, Map as MapLibreMap, RequestTransformFunction, RequestParameters, MapOptions } from 'maplibre-gl'
 import type { TileSource } from '@/api/services/tilesApi'
 import { loadMaplibreGl } from './lazyMaplibreGl.js'
 
@@ -40,16 +40,23 @@ function isOsmRelatedTileUrl(url: string, resourceType: string | undefined): boo
  */
 type RequestParametersWithReferrerPolicy = RequestParameters & { referrerPolicy?: ReferrerPolicy }
 
+function applyOsmReferrer(url: string, resourceType: string | undefined, result: RequestParameters | undefined): RequestParametersWithReferrerPolicy {
+  const out: RequestParametersWithReferrerPolicy = result && typeof result === 'object' ? { ...result, url: result.url } : { url }
+  if (isOsmRelatedTileUrl(out.url, resourceType)) {
+    out.referrerPolicy = 'strict-origin-when-cross-origin'
+  }
+  return out
+}
+
 export function createTransformRequest(customTransformRequest?: RequestTransformFunction | null): RequestTransformFunction {
   return (url, resourceType) => {
     const result = customTransformRequest
       ? customTransformRequest(url, resourceType)
       : { url }
-    const out: RequestParametersWithReferrerPolicy = result && typeof result === 'object' ? { ...result, url: result.url } : { url }
-    if (isOsmRelatedTileUrl(out.url, resourceType)) {
-      out.referrerPolicy = 'strict-origin-when-cross-origin'
+    if (result && typeof (result as Promise<RequestParameters>).then === 'function') {
+      return (result as Promise<RequestParameters>).then((resolved) => applyOsmReferrer(url, resourceType, resolved))
     }
-    return out
+    return applyOsmReferrer(url, resourceType, result as RequestParameters)
   }
 }
 
@@ -121,15 +128,11 @@ export interface InitializeMapConfig {
   transformRequest?: RequestTransformFunction | null
   /** Initial style URL or style spec object (default: blank style, see `resolveMapStyle()`) */
   style?: string | StyleSpecification
+  /** Override the server `tilesources.show_attribution` flag. */
+  attributionControl?: boolean
 }
 
-/** Initialize a MapLibre map instance. Loads maplibre-gl itself (lazily, cached after the first call). */
-export async function initializeMap(container: HTMLElement, config: InitializeMapConfig): Promise<MapLibreMap> {
-  // Validate container before attempting to initialize
-  if (!(container instanceof HTMLElement)) {
-    throw new Error('Invalid container: must be an HTMLElement')
-  }
-
+export function buildMapConstructorOptions(container: HTMLElement, config: InitializeMapConfig): MapOptions {
   const {
     center,
     zoom,
@@ -143,82 +146,77 @@ export async function initializeMap(container: HTMLElement, config: InitializeMa
       glyphs: glyphsUrl,
       sources: {},
       layers: []
-    }
+    },
+    attributionControl = false,
   } = config
 
-  const maplibregl = await loadMaplibreGl()
-
-  const map = new maplibregl.Map({
-    container: container,
-    style: style,
-    center: center, // [lon, lat]
-    zoom: zoom,
-    pitch: pitch,
-    bearing: bearing,
+  return {
+    container,
+    style,
+    center,
+    zoom,
+    pitch,
+    bearing,
     maxZoom: MAX_ZOOM_LEVEL,
     maxPitch: 85,
-    attributionControl: false,
-    // Enable anti-aliasing based on user setting (lives under canvasContextAttributes, not a top-level option)
+    attributionControl,
     canvasContextAttributes: { antialias },
-    // Always use a transformRequest that sends valid Referer for OSM-related tiles; chain custom if provided
     transformRequest: createTransformRequest(transformRequest)
+  }
+}
+
+/** Resolve when the style can accept addSource / addLayer (MapLibre 6 throws before this). */
+export function waitForStyleLoaded(map: MapLibreMap, timeoutMs = 15000): Promise<void> {
+  if (map.isStyleLoaded()) return Promise.resolve()
+  return new Promise((resolve, reject) => {
+    let settled = false
+    const finish = () => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      clearInterval(poll)
+      map.off('load', finish)
+      map.off('styledata', onStyleData)
+      resolve()
+    }
+    const onStyleData = () => {
+      if (map.isStyleLoaded()) finish()
+    }
+    const timer = setTimeout(() => {
+      if (settled) return
+      settled = true
+      clearInterval(poll)
+      map.off('load', finish)
+      map.off('styledata', onStyleData)
+      reject(new Error('Timed out waiting for map load'))
+    }, timeoutMs)
+    const poll = setInterval(() => {
+      if (map.isStyleLoaded()) finish()
+    }, 50)
+    map.once('load', finish)
+    map.on('styledata', onStyleData)
+    if (map.isStyleLoaded()) finish()
   })
-
-  return map
 }
 
-/**
- * Setup GeoJSON source on map. Uses `once()` (the 'load' event only ever fires once per map
- * instance) so the listener is self-removing and needs no explicit teardown.
- */
-export function setupGeoJsonSource(map: MapLibreMap, onLoad?: () => void): void {
-  void map.once('load', () => {
-    map.addSource('geojson-data', {
-      type: 'geojson',
-      data: {
-        type: 'FeatureCollection',
-        features: []
-      }
-    })
+/** Initialize a MapLibre map instance. Loads maplibre-gl itself (lazily, cached after the first call). */
+export async function initializeMap(container: HTMLElement, config: InitializeMapConfig): Promise<MapLibreMap> {
+  if (!(container instanceof HTMLElement)) {
+    throw new Error('Invalid container: must be an HTMLElement')
+  }
 
-    if (onLoad) {
-      onLoad()
-    }
-  })
+  const maplibregl = await loadMaplibreGl()
+  try {
+    return new maplibregl.Map(buildMapConstructorOptions(container, config))
+  } catch (error) {
+    remapMapInitError(error, maplibregl.GPUInitializationError);
+  }
 }
 
-export interface MapEventListenerHandlers {
-  onMoveEnd?: () => void
-  onZoomEnd?: () => void
-  onClick?: (e: MapMouseEvent) => void
-}
-
-/** Setup map event listeners. Returns a teardown function that removes exactly the listeners this call registered. */
-export function setupMapEventListeners(map: MapLibreMap, handlers: MapEventListenerHandlers): () => void {
-  const { onMoveEnd, onZoomEnd, onClick } = handlers
-
-  if (onMoveEnd) {
-    map.on('moveend', onMoveEnd)
+export function remapMapInitError(error: unknown, gpuErrorClass?: new (...args: never[]) => Error): never {
+  const name = error instanceof Error ? error.name : ''
+  if ((gpuErrorClass && error instanceof gpuErrorClass) || name === 'GPUInitializationError') {
+    throw new Error('This browser cannot create a WebGL2 map context.')
   }
-
-  if (onZoomEnd) {
-    map.on('zoomend', onZoomEnd)
-  }
-
-  if (onClick) {
-    map.on('click', onClick)
-  }
-
-  return () => {
-    if (onMoveEnd) {
-      map.off('moveend', onMoveEnd)
-      map.off('zoomend', onMoveEnd)
-    }
-    if (onZoomEnd) {
-      map.off('zoomend', onZoomEnd)
-    }
-    if (onClick) {
-      map.off('click', onClick)
-    }
-  }
+  throw error
 }

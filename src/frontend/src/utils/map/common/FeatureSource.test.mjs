@@ -1,7 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { FeatureSource } from './FeatureSource.ts';
-import { HiddenFeatureSet } from '../session/HiddenFeatureSet.ts';
+
+globalThis.window = { location: { origin: 'http://localhost' } };
+
+const { FeatureSource } = await import('./FeatureSource.ts');
+const { HiddenFeatureSet } = await import('../session/HiddenFeatureSet.ts');
 
 function point(id, lon = 1, lat = 2) {
     return {
@@ -31,6 +34,26 @@ test('FeatureSource.remove cascades label and replacement synthetics', () => {
     const collection = source.buildRenderCollection();
     assert.equal(collection.features.length, 0);
     assert.equal(source.size(), 0);
+});
+
+test('FeatureSource.ingest then one setData and canonical string ids', () => {
+    const writes = [];
+    const source = new FeatureSource();
+    source.attachSink({
+        setData(collection) {
+            writes.push(collection);
+        },
+    });
+    source.ingest([point(9, 1, 2)], {
+        zoom: 12,
+        replaceIconsLowZoom: true,
+        showLabels: false,
+        viewSize: { width: 800, height: 600 },
+    });
+    source.commit();
+    assert.equal(writes.length, 1);
+    assert.equal(writes[0].features[0].id, '9');
+    assert.equal(writes[0].features[0].properties.database_id, '9');
 });
 
 test('HiddenFeatureSet is applied at upsert and in the render collection', () => {

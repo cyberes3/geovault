@@ -4,6 +4,7 @@ import { getApiErrorMessage } from '@/utils/apiError';
 export interface ServerConfig {
     systemTagPrefixes: string[];
     tagPriorities: Record<string, number>;
+    showAttribution?: boolean;
     maptiler?: { proxy_tiles?: boolean; apiKey?: string | null };
     [key: string]: unknown;
 }

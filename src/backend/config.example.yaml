@@ -116,6 +116,9 @@ tilesources:
   # Must be a registered raster xyz layer from /api/tiles/sources.
   social_preview_raster_source: osm
 
+  # Show the MapLibre attribution control on website maps. Disabled by default.
+  show_attribution: false
+
 
 maptiler:
   # MapTiler API key for accessing MapTiler maps and 3D terrain tiles

@@ -17,7 +17,7 @@ import type { TileSource } from '@geovault/extension-sdk';
 
 type LonLat = [number, number];
 
-const { isValidMapLngLatPair, setupCopyMapCoordinatesOnContextMenu } = window.gv_core;
+const { isValidMapLngLatPair, setupCopyMapCoordinatesOnContextMenu, tileSourceCatalog } = window.gv_core;
 
 /**
  * MapLibre GL JS loads lazily (see lazyMaplibreGl.js in core), so `window.gv_core.maplibre` may
@@ -517,7 +517,7 @@ export function useLiveTrackMap({
           minZoom: MIN_ZOOM,
           maxZoom: MAX_ZOOM,
           maxPitch: 0,
-          attributionControl: false
+          attributionControl: tileSourceCatalog.showAttribution
         });
         map.addControl(new maplibregl.NavigationControl({ showCompass: false, showZoom: true }), 'top-right');
         setupMapFollowListenersForView();
@@ -584,7 +584,7 @@ export function useLiveTrackMap({
         minZoom: MIN_ZOOM,
         maxZoom: MAX_ZOOM,
         maxPitch: 0,
-        attributionControl: false
+        attributionControl: tileSourceCatalog.showAttribution
       });
       map.addControl(new maplibregl.NavigationControl({ showCompass: false, showZoom: true }), 'top-right');
       setupMapFollowListenersForView();
@@ -641,7 +641,7 @@ export function useLiveTrackMap({
       minZoom: MIN_ZOOM,
       maxZoom: MAX_ZOOM,
       maxPitch: 0,
-      attributionControl: false
+      attributionControl: tileSourceCatalog.showAttribution
     });
 
     map.addControl(new maplibregl.NavigationControl({ showCompass: false, showZoom: true }), 'top-right');

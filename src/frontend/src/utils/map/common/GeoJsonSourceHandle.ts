@@ -1,6 +1,6 @@
 import type { GeoJSONSource, Map as MapLibreMap } from 'maplibre-gl';
 import type { GeoJsonFeatureCollection } from '@/types/geospatial';
-import { ensureLayersExist } from '@/utils/map/maplibre/layerManagement.js';
+import { GEOJSON_SOURCE_ID } from '@/utils/map/mapLayers';
 
 /**
  * MapLibre `geojson-data` sink. `setData` is coalesced to one write per animation frame.
@@ -8,14 +8,13 @@ import { ensureLayersExist } from '@/utils/map/maplibre/layerManagement.js';
 export class GeoJsonSourceHandle {
     private pending: GeoJsonFeatureCollection | null = null;
     private frame = 0;
-
-    constructor(
-        private readonly getMap: () => MapLibreMap | null,
-        private readonly getShowLabels: () => boolean = () => true,
-    ) {}
+    private readonly getMap: () => MapLibreMap | null;
+    constructor(getMap: () => MapLibreMap | null, _getShowLabels: () => boolean = () => true) {
+        this.getMap = getMap;
+    }
 
     get source(): GeoJSONSource | undefined {
-        return this.getMap()?.getSource('geojson-data') as GeoJSONSource | undefined;
+        return this.getMap()?.getSource(GEOJSON_SOURCE_ID) as GeoJSONSource | undefined;
     }
 
     setData(collection: GeoJsonFeatureCollection): void {
@@ -36,10 +35,9 @@ export class GeoJsonSourceHandle {
         this.pending = null;
         if (!collection) return;
         const map = this.getMap();
-        const source = map?.getSource('geojson-data') as GeoJSONSource | undefined;
+        const source = map?.getSource(GEOJSON_SOURCE_ID) as GeoJSONSource | undefined;
         if (!source || !map) return;
         source.setData(collection);
-        ensureLayersExist(map, this.getShowLabels());
     }
 
     dispose(): void {

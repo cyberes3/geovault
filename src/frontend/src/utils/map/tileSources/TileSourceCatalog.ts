@@ -28,10 +28,15 @@ export class TileSourceCatalog {
   private apiUrl: string
   private fetchFn: typeof fetch
   private _loadPromise: Promise<TileSource[]> | null
+  showAttribution = false
 
   constructor(options: TileSourceCatalogOptions = {}) {
     this.apiUrl = options.apiUrl ?? TILE_SOURCES_API_URL
-    this.fetchFn = options.fetchFn ?? window.fetch.bind(window)
+    this.fetchFn = options.fetchFn ?? ((typeof window !== 'undefined' && typeof window.fetch === 'function')
+      ? window.fetch.bind(window)
+      : async () => {
+          throw new Error('fetch is not available')
+        })
     this._loadPromise = null
   }
 
@@ -73,6 +78,7 @@ export class TileSourceCatalog {
   /** Clears cache (tests). */
   reset(): void {
     this._loadPromise = null
+    this.showAttribution = false
   }
 
   private async _fetchVisibleSources(): Promise<TileSource[]> {
@@ -83,7 +89,9 @@ export class TileSourceCatalog {
       }
 
       const data: unknown = await response.json()
-      const sources = (data as { sources?: unknown }).sources
+      const payload = data as { sources?: unknown; show_attribution?: unknown }
+      this.showAttribution = payload.show_attribution === true
+      const sources = payload.sources
       if (!Array.isArray(sources)) {
         throw new Error('Tile sources response did not include a sources array')
       }

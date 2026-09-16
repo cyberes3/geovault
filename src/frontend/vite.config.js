@@ -4,6 +4,7 @@ import fs from 'node:fs'
 
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
+import { manualChunkName } from './vite.manual-chunks.mjs'
 
 // Plugin to trigger full reload when an extension's frontend dist changes (dev only)
 const extensionReloadPlugin = () => {
@@ -73,124 +74,13 @@ export default defineConfig({
         assetsDir: 'static',
         rollupOptions: {
             output: {
-                manualChunks: (id) => {
-                    // Vite's virtual dynamic-import() helper is needed by every chunk that contains a
-                    // `import()` (ours: lazyOl.js/lazyMaplibreGl.js/route-level code-splitting; third
-                    // party: geotiff's internal lazy codec loading, etc). Left unassigned, Rollup
-                    // placed its single canonical copy in whichever eager chunk it reached first
-                    // (core-utils) - which then had to be imported by `vendor` (geotiff needs it) even
-                    // though `vendor` is itself a dependency of `vue-vendor`/`core-utils`, producing a
-                    // core-utils -> vue-vendor -> vendor -> core-utils circular chunk dependency.
-                    // Vendor has no dependents of its own reaching back into core-utils/vue-vendor, so
-                    // giving the helper a home there instead breaks the cycle.
-                    if (id.includes('vite/preload-helper')) {
-                        return 'vendor'
-                    }
-                    // Pervasive core utilities (used eagerly by the store/App.vue AND by dozens of
-                    // unrelated route chunks) must never be left for Rollup to auto-place. Without an
-                    // explicit home, Rollup happened to bundle them into whichever heavy, mostly-lazy
-                    // chunk first pulled them in transitively (e.g. configService.ts, needed by both
-                    // maptilerIntegration.js and App.vue) - which then forced EVERY chunk needing
-                    // httpClient/toast/etc. to statically import that heavy chunk too, defeating lazy
-                    // loading almost entirely. Keep them in their own small, always-eager chunk instead.
-                    if (id.includes('/src/api/httpClient') ||
-                        id.includes('/src/utils/cookies') ||
-                        id.includes('/src/utils/toast.js') ||
-                        id.includes('/src/utils/apiError') ||
-                        id.includes('/src/utils/configService') ||
-                        // The Vuex store and its direct dependencies (auth, websocket helpers, user
-                        // API) are eager (imported by main.js at boot) but have no manualChunks rule
-                        // of their own, so Rollup's automatic grouping was merging them into whichever
-                        // other eager-but-unrelated bucket shared their reachability set (previously
-                        // map-utils, for no reason related to maps at all). Give them an explicit,
-                        // dedicated home instead of leaving it to chance.
-                        id.includes('/src/assets/js/store/') ||
-                        id.includes('/src/assets/js/auth.ts') ||
-                        id.includes('/src/assets/js/websocket/') ||
-                        id.includes('/src/api/services/userApi')) {
-                        return 'core-utils'
-                    }
-                    // Split MapLibre GL JS into its own chunk
-                    if (id.includes('maplibre-gl')) {
-                        return 'maplibre-gl'
-                    }
-                    // Our own utilities that statically import maplibre-gl (map init, feature
-                    // rendering, label markers) must live in the SAME chunk as the library itself.
-                    // Otherwise they'd drag maplibre-gl into whatever shared chunk they're grouped
-                    // into below (map-utils), which many maplibre-gl-free pages also depend on for
-                    // things like coordinate parsing - forcing every page to eagerly load the ~1MB
-                    // map-rendering library. `locationMarker.js`/`lazyMaplibreGl.js` load MapLibre
-                    // lazily via a dynamic import instead, so they stay out of this bucket.
-                    if (id.includes('/utils/map/maplibre/') &&
-                        !id.includes('/utils/map/maplibre/locationMarker.js') &&
-                        !id.includes('/utils/map/maplibre/lazyMaplibreGl.js')) {
-                        return 'maplibre-gl'
-                    }
-                    // Split Chart.js into its own chunk
-                    if (id.includes('node_modules/chart.js')) {
-                        return 'chart.js'
-                    }
-                    // Split Turf.js into its own chunk
-                    if (id.includes('node_modules/@turf')) {
-                        return 'turf'
-                    }
-                    // Split Vue and Vue ecosystem into vendor chunk
-                    if (id.includes('node_modules/vue') ||
-                        id.includes('node_modules/vue-router') ||
-                        id.includes('node_modules/vuex')) {
-                        return 'vue-vendor'
-                    }
-                    // Split large libraries that may not be needed on all pages
-                    if (id.includes('node_modules/moment')) {
-                        return 'moment'
-                    }
-                    if (id.includes('node_modules/highlight.js')) {
-                        return 'highlight'
-                    }
-                    if (id.includes('node_modules/marked')) {
-                        return 'marked'
-                    }
-                    if (id.includes('node_modules/vue-virtual-scroller')) {
-                        return 'vue-virtual-scroller'
-                    }
-                    if (id.includes('node_modules/vue-color')) {
-                        return 'vue-color'
-                    }
-                    if (id.includes('node_modules/simple-code-editor')) {
-                        return 'code-editor'
-                    }
-                    // Split icon library into its own chunk. This includes both icons core
-                    // statically imports directly in its own .vue components AND every outline
-                    // icon reachable through the runtime `import.meta.glob` map in
-                    // lazyHeroiconResolver.ts (used by `resolveHeroiconByName`, see
-                    // resolveExtensionIcon.ts) - bundling them together instead of letting Rollup
-                    // give each glob-matched icon its own tiny chunk keeps the build output sane
-                    // (hundreds of one-off files otherwise) at the cost of a single ~47KB-gzip
-                    // fetch on the rare occasions something actually resolves an icon by name.
-                    // Neither case is on the eager boot path either way - see lazyHeroiconResolver.ts.
-                    if (id.includes('node_modules/@heroicons')) {
-                        return 'icons'
-                    }
-                    // Split HTTP client
-                    if (id.includes('node_modules/axios')) {
-                        return 'axios'
-                    }
-                    // Split map utilities into their own chunk
-                    if (id.includes('/utils/map/')) {
-                        return 'map-utils'
-                    }
-                    // Split shared components
-                    if (id.includes('src/components/parts/Loader.vue')) {
-                        return 'shared-components'
-                    }
-                    // Split other node_modules into vendor chunk (smaller utilities)
-                    if (id.includes('node_modules')) {
-                        return 'vendor'
-                    }
-                }
+                manualChunks: manualChunkName
             }
         },
         chunkSizeWarningLimit: 1050, // Increase limit to 1MB for map libraries
+    },
+    worker: {
+        format: 'es',
     },
     server: {
         host: '0.0.0.0',

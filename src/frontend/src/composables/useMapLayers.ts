@@ -5,8 +5,8 @@ import { ref, shallowRef, type Ref, type ShallowRef } from 'vue';
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import type { TileSource } from '@/api/services/tilesApi';
 import type { LabelMarkerManager } from '@/utils/map/maplibre/labelMarkers.js';
-import type { MapTilerConfig } from '@/utils/map/maplibre/maptilerIntegration.js';
-import { restoreMapView, getMapState } from '@/utils/map/maplibre/layerSwitching.js';
+import type { MapTilerConfig } from '@/utils/map/maplibre/terrain.js';
+import type { MapSession } from '@/utils/map/session/MapSession';
 import { MAX_ZOOM_LEVEL } from '@/utils/map/maplibre/mapInitialization.js';
 import type { FeatureSource, HiddenIdSet } from '@/utils/map/common/FeatureSource';
 import type { MapRuntime } from '@/utils/map/common/MapRuntime';
@@ -27,6 +27,7 @@ export interface UseMapLayersDeps {
     runtime: MapRuntime;
     featureSource: FeatureSource;
     hiddenFeatures: HiddenIdSet;
+    session: MapSession;
 }
 
 export function useMapLayers(deps: UseMapLayersDeps) {
@@ -45,6 +46,7 @@ export function useMapLayers(deps: UseMapLayersDeps) {
         runtime,
         featureSource,
         hiddenFeatures,
+        session,
     } = deps;
 
     const tileSources: Ref<TileSource[]> = ref([]);
@@ -169,8 +171,8 @@ export function useMapLayers(deps: UseMapLayersDeps) {
     async function switchMapLayer(layerValue: string, isInitialSetup = false): Promise<void> {
         if (!map.value) return;
 
-        const mapState = getMapState(map.value);
-        if (!mapState) return;
+        const snapshot = session.camera.save(map.value);
+        if (!snapshot) return;
 
         const hadFeaturesToRestore = featureSource.size() > 0;
         if (!tiles.sources.some((source) => source.id === layerValue)) {
@@ -180,7 +182,7 @@ export function useMapLayers(deps: UseMapLayersDeps) {
 
         try {
             await applyTileSource(layerValue);
-            restoreMapView(map.value, mapState.center, mapState.zoom, mapState.pitch, mapState.bearing);
+            session.camera.apply(map.value, snapshot);
             await runtime.waitForIdle();
             map.value.setMaxZoom(MAX_ZOOM_LEVEL);
             updateLayerMaxZoom(MAX_ZOOM_LEVEL + 1);

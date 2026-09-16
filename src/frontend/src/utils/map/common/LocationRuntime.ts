@@ -1,6 +1,6 @@
 import type { Map as MapLibreMap, Marker } from 'maplibre-gl';
 import { getUserLocation as fetchUserLocation, type UserLocation } from '@/api/services/locationApi';
-import { createUserLocationMarker, updateUserLocationMarker, removeUserLocationMarker } from '@/utils/map/maplibre';
+import { createUserLocationMarker, updateUserLocationMarker, removeUserLocationMarker } from '@/utils/map/maplibre/locationMarker';
 import { geolocationManager, type GeolocationErrorLike } from '@/utils/map/geolocationManager';
 import { getLocationDisplayName as formatLocationDisplayName } from '@/utils/map/mapConfigUtils';
 import { WORLD_VIEW_CENTER_LONLAT, WORLD_VIEW_ZOOM } from '@/utils/map/worldViewDefault';

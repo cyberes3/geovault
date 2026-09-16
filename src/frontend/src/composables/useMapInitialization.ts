@@ -1,12 +1,11 @@
 /**
- * Vue shell around MapRuntime: container ref, label markers, saved camera, and wait helpers.
- * MapLibre construction and event wiring live on MapRuntime.
+ * Vue shell around MapRuntime: container ref, label markers, and wait helpers.
  */
 import { markRaw, ref, shallowRef, type Ref, type ShallowRef } from 'vue';
-import type { LngLat, Map as MapLibreMap, StyleSpecification } from 'maplibre-gl';
-import { LabelMarkerManager } from '@/utils/map/maplibre';
+import type { Map as MapLibreMap, MapEventType, StyleSpecification } from 'maplibre-gl';
 import { MAX_ZOOM_LEVEL } from '@/utils/map/maplibre/mapInitialization.js';
-import type { MapRuntime } from '@/utils/map/common/MapRuntime';
+import type { LabelMarkerManager } from '@/utils/map/maplibre/labelMarkers.js';
+import type { MapSession } from '@/utils/map/session/MapSession';
 
 export interface MapConfigInit {
     center: [number, number];
@@ -17,7 +16,7 @@ export interface MapConfigInit {
 }
 
 export interface UseMapInitializationDeps {
-    runtime: MapRuntime;
+    session: MapSession;
     getEnableAntialias: () => boolean;
 }
 
@@ -29,26 +28,8 @@ export function useMapInitialization(deps: UseMapInitializationDeps) {
     const isMapInitializing = ref(false);
     const mapWasDestroyed = ref(false);
 
-    const savedMapCenter: Ref<LngLat | null> = ref(null);
-    const savedMapZoom: Ref<number | null> = ref(null);
-    const savedMapPitch: Ref<number | null> = ref(null);
-    const savedMapBearing: Ref<number | null> = ref(null);
-
     function syncMapRef(): void {
-        map.value = deps.runtime.map ? markRaw(deps.runtime.map) : null;
-    }
-
-    function attachLabelManager(): void {
-        if (!map.value) return;
-        labelMarkerManager.value = new LabelMarkerManager(map.value);
-        labelMarkerManager.value.setVisibility(showAllLabels.value);
-    }
-
-    function detachLabelManager(): void {
-        if (labelMarkerManager.value) {
-            labelMarkerManager.value.clearAllMarkers();
-            labelMarkerManager.value = null;
-        }
+        map.value = deps.session.runtime.map ? markRaw(deps.session.runtime.map) : null;
     }
 
     async function createMapInstance(mapConfig: MapConfigInit): Promise<void> {
@@ -56,8 +37,8 @@ export function useMapInitialization(deps: UseMapInitializationDeps) {
             throw new Error('Map container is not available');
         }
 
-        detachLabelManager();
-        await deps.runtime.create(mapContainer.value, {
+        deps.session.labels?.clear();
+        await deps.session.runtime.create(mapContainer.value, {
             center: mapConfig.center,
             zoom: mapConfig.zoom,
             pitch: mapConfig.pitch ?? 0,
@@ -65,24 +46,21 @@ export function useMapInitialization(deps: UseMapInitializationDeps) {
             antialias: deps.getEnableAntialias(),
             style: mapConfig.style,
         });
+        deps.session.attachLabels();
+        labelMarkerManager.value = deps.session.labels;
         syncMapRef();
-        attachLabelManager();
     }
 
     function destroyMap(): void {
-        detachLabelManager();
-        deps.runtime.destroy();
+        deps.session.labels?.clear();
+        deps.session.labels = null;
+        labelMarkerManager.value = null;
+        deps.session.runtime.destroy();
         syncMapRef();
     }
 
     function performMapDestruction(): void {
-        const live = map.value ?? deps.runtime.map;
-        if (live) {
-            savedMapCenter.value = live.getCenter();
-            savedMapZoom.value = live.getZoom();
-            savedMapPitch.value = live.getPitch();
-            savedMapBearing.value = live.getBearing();
-        }
+        deps.session.camera.save(deps.session.runtime.map);
         destroyMap();
         mapWasDestroyed.value = true;
     }
@@ -120,12 +98,12 @@ export function useMapInitialization(deps: UseMapInitializationDeps) {
     }
 
     function waitForMap(): Promise<void> {
-        return deps.runtime.waitUntilSourceReady();
+        return deps.session.runtime.waitUntilSourceReady();
     }
 
     function waitForMapEvent(eventName: string, timeout = 30000): Promise<void> {
         if (eventName === 'idle') {
-            return deps.runtime.waitForIdle(timeout);
+            return deps.session.runtime.waitForIdle(timeout);
         }
         if (!map.value) {
             return Promise.reject(new Error('Map is not created'));
@@ -140,16 +118,17 @@ export function useMapInitialization(deps: UseMapInitializationDeps) {
                 clearTimeout(timeoutId);
                 resolve();
             };
+            const event = eventName as keyof MapEventType;
             const timeoutId = setTimeout(() => {
-                mapInstance.off(eventName, onEvent);
+                mapInstance.off(event, onEvent);
                 reject(new Error(`Timed out waiting for ${eventName} event`));
             }, timeout);
-            void mapInstance.once(eventName, onEvent);
+            void mapInstance.once(event, onEvent);
         });
     }
 
     function updateLayerMaxZoom(minMaxZoom: number = MAX_ZOOM_LEVEL + 1): void {
-        deps.runtime.updateLayerMaxZoom(minMaxZoom);
+        deps.session.runtime.updateLayerMaxZoom(minMaxZoom);
     }
 
     return {
@@ -159,10 +138,6 @@ export function useMapInitialization(deps: UseMapInitializationDeps) {
         showAllLabels,
         isMapInitializing,
         mapWasDestroyed,
-        savedMapCenter,
-        savedMapZoom,
-        savedMapPitch,
-        savedMapBearing,
         createMapInstance,
         destroyMap,
         performMapDestruction,

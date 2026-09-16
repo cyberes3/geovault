@@ -31,9 +31,6 @@ export interface UserSettings {
     [key: string]: unknown;
 }
 
-/** Describes what `loadDataForCurrentView` should load: the default viewport, a collection, or one of the public share modes. */
-export type LoadContextType = 'default' | 'collection' | 'share_tag' | 'share_collection' | 'share_feature';
-
 export interface PublicShareInfo {
     share_id: string;
     share_type: 'tag' | 'collection' | 'feature';
@@ -43,16 +40,6 @@ export interface PublicShareInfo {
     feature_name: string | null;
     include_tags: boolean;
     allow_downloads: boolean;
-}
-
-export interface LoadContext {
-    type: LoadContextType;
-    isPublicShare: boolean;
-    shareId?: string | null;
-    shareInfo?: PublicShareInfo | null;
-    collectionId?: string | null;
-    tags?: string[] | null;
-    matchMode?: 'AND' | 'OR';
 }
 
 /** The tag/collection/feature context currently shown by the map, used by `MapControlsSidebar`'s header. */

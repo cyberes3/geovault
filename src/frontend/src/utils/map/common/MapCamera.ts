@@ -2,7 +2,7 @@ import type { LngLatBoundsLike, Map as MapLibreMap } from 'maplibre-gl';
 import { getLoadedMaplibreGl } from '@/utils/map/maplibre/lazyMaplibreGl.js';
 import { MAX_ZOOM_LEVEL } from '@/utils/map/maplibre/mapInitialization.js';
 import { isValidMapLngLatPair } from '@/utils/map/mapGeography.js';
-import { getFeatureCoordinates } from '@/utils/map/maplibre/mapUtils.js';
+import { getCoordinatesFromGeometry } from '@/utils/map/geometry';
 import { WORLD_VIEW_CENTER_LONLAT, WORLD_VIEW_ZOOM } from '@/utils/map/worldViewDefault';
 import type { CameraSnapshot } from './types';
 
@@ -77,7 +77,7 @@ export class MapCamera {
         const points: Array<[number, number]> = [];
         for (const feature of features) {
             if (!feature.geometry?.coordinates) continue;
-            for (const coord of getFeatureCoordinates(feature.geometry as never)) {
+            for (const coord of getCoordinatesFromGeometry(feature.geometry as never)) {
                 if (Array.isArray(coord) && coord.length >= 2) {
                     points.push([Number(coord[0]), Number(coord[1])]);
                 }

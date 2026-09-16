@@ -1,11 +1,15 @@
+import type { Geometry } from 'geojson';
 import type { VaultFeature } from '@/contracts/feature';
 import type { GeoJsonFeatureCollection } from '@/types/geospatial';
 import { filterFeaturesByBounds } from '@/utils/map/featureExtent';
+import { getCoordinatesFromGeometry } from '@/utils/map/geometry';
 import { filterPointsOnBorders } from '@/utils/map/maplibre/featureFiltering';
+import { calculateLineCenter, calculatePolygonCentroid } from '@/utils/map/maplibre/labelPlacement';
+import { getFeatureIconUrl, getIconSourceUrl, iconRuntimeId, shouldUseIcon } from '@/utils/map/maplibre/featureLayerSpec';
 import type { MapFeature } from '@/utils/map/maplibre/mapFeatureTypes';
 import { canonicalFeatureId, cloneFeature, isSyntheticFeature, originalFeatureId, stripRuntimeProperties } from './featureIdentity';
 import type { GeoJsonSourceHandle } from './GeoJsonSourceHandle';
-import type { FeatureRuntimeOverlay, RenderFeature } from './types';
+import type { FeatureRuntimeOverlay, IngestContext, RenderFeature } from './types';
 
 export interface HiddenIdSet {
     has(id: string): boolean;
@@ -18,8 +22,98 @@ export interface FeatureBoundsLike {
     getNorth(): number;
 }
 
+export type { IngestContext };
+
+const MIN_PIXEL_SIZE = 2;
+
+function mercatorY(lat: number): number {
+    const rad = (lat * Math.PI) / 180;
+    return Math.log(Math.tan(Math.PI / 4 + rad / 2));
+}
+
+function worldPixels(zoom: number, viewSize: { width: number; height: number }): number {
+    const tileWorld = 256 * Math.pow(2, zoom);
+    return Math.max(tileWorld, viewSize.width, viewSize.height);
+}
+
+function polygonScreenSize(geometry: VaultFeature['geometry'], ctx: IngestContext): { width: number; height: number } {
+    const coords = getCoordinatesFromGeometry(geometry as Geometry);
+    if (coords.length === 0) return { width: 0, height: 0 };
+    let minLon = Infinity;
+    let minLat = Infinity;
+    let maxLon = -Infinity;
+    let maxLat = -Infinity;
+    for (const [lon, lat] of coords) {
+        minLon = Math.min(minLon, lon);
+        minLat = Math.min(minLat, lat);
+        maxLon = Math.max(maxLon, lon);
+        maxLat = Math.max(maxLat, lat);
+    }
+    const world = worldPixels(ctx.zoom, ctx.viewSize);
+    return {
+        width: ((maxLon - minLon) / 360) * world,
+        height: (Math.abs(mercatorY(maxLat) - mercatorY(minLat)) / (2 * Math.PI)) * world,
+    };
+}
+
+function lineScreenSize(geometry: VaultFeature['geometry'], ctx: IngestContext): number {
+    const coords = getCoordinatesFromGeometry(geometry as Geometry);
+    if (coords.length < 2) return 0;
+    const world = worldPixels(ctx.zoom, ctx.viewSize);
+    let pixels = 0;
+    for (let i = 1; i < coords.length; i += 1) {
+        const [lon0, lat0] = coords[i - 1];
+        const [lon1, lat1] = coords[i];
+        const dx = ((lon1 - lon0) / 360) * world;
+        const dy = ((mercatorY(lat1) - mercatorY(lat0)) / (2 * Math.PI)) * world;
+        pixels += Math.hypot(dx, dy);
+    }
+    return pixels;
+}
+
+function thirdCoord(coord: unknown): unknown {
+    return Array.isArray(coord) && coord.length >= 3 && coord[2] != null ? coord[2] : undefined;
+}
+
+function preserveElevation(feature: VaultFeature): void {
+    const geometry = feature.geometry;
+    const properties = feature.properties as Record<string, unknown>;
+    const coords = geometry.coordinates as unknown;
+
+    if (geometry.type === 'Point') {
+        const elevation = thirdCoord(coords);
+        if (elevation !== undefined) properties._elevation = elevation;
+        return;
+    }
+    if (geometry.type === 'MultiPoint' && Array.isArray(coords) && coords.length > 0) {
+        const elevation = thirdCoord(coords[0]);
+        if (elevation !== undefined) properties._elevation = elevation;
+        return;
+    }
+    if (geometry.type === 'LineString' && Array.isArray(coords)) {
+        const elevations = coords.map(thirdCoord).filter((value) => value !== undefined);
+        if (elevations.length > 0) properties._elevations = elevations;
+    } else if (geometry.type === 'MultiLineString' && Array.isArray(coords)) {
+        const elevations: unknown[] = [];
+        for (const line of coords) {
+            if (!Array.isArray(line)) continue;
+            for (const coord of line) {
+                const elevation = thirdCoord(coord);
+                if (elevation !== undefined) elevations.push(elevation);
+            }
+        }
+        if (elevations.length > 0) properties._elevations = elevations;
+    }
+
+    const times = (properties.coordinateProperties as { times?: unknown } | undefined)?.times;
+    if (times) {
+        properties._coordinateProperties = { times };
+    }
+}
+
 /**
  * Canonical in-memory feature store. MapLibre is a render sink, not the source of truth.
+ * The only render path is ingest() then commit().
  */
 export class FeatureSource {
     private readonly features = new Map<string, VaultFeature>();
@@ -73,7 +167,9 @@ export class FeatureSource {
                 this.remove(id);
                 continue;
             }
-            this.features.set(id, cloneFeature(feature));
+            const cloned = cloneFeature(feature);
+            preserveElevation(cloned);
+            this.features.set(id, cloned);
             accepted.push(id);
         }
         if (accepted.length > 0) {
@@ -82,7 +178,20 @@ export class FeatureSource {
         return accepted;
     }
 
-    /** Removes a feature and every synthetic that points at it. */
+    ingest(incoming: VaultFeature[], ctx: IngestContext, hidden?: HiddenIdSet | null): string[] {
+        const accepted = this.upsert(incoming, hidden);
+        this.applyBorderFilterStage();
+        this.applyLabelSynthetics(ctx);
+        this.applyIconRuntimeIds(ctx);
+        this.applySmallFeatureReplacements(ctx);
+        return accepted;
+    }
+
+    refreshZoomDependent(ctx: IngestContext): void {
+        this.applyIconRuntimeIds(ctx);
+        this.applySmallFeatureReplacements(ctx);
+    }
+
     remove(id: string): boolean {
         const key = String(id);
         const existed = this.features.delete(key);
@@ -131,12 +240,7 @@ export class FeatureSource {
     }
 
     clearLabelSynthetics(): void {
-        for (const key of [...this.synthetics.keys()]) {
-            if (key.endsWith(':label')) {
-                this.synthetics.delete(key);
-            }
-        }
-        this.generation += 1;
+        this.removeSyntheticsBySuffix(':label');
     }
 
     clearSynthetics(prefix?: string): void {
@@ -145,25 +249,12 @@ export class FeatureSource {
             this.generation += 1;
             return;
         }
-        for (const key of this.synthetics.keys()) {
+        for (const key of [...this.synthetics.keys()]) {
             if (key.startsWith(prefix)) {
                 this.synthetics.delete(key);
             }
         }
         this.generation += 1;
-    }
-
-    ensureLabelPoints(ids: string[], factory: (feature: VaultFeature) => RenderFeature | null): void {
-        for (const id of ids) {
-            const key = `${id}:label`;
-            if (this.synthetics.has(key)) continue;
-            const feature = this.features.get(id);
-            if (!feature) continue;
-            const label = factory(feature);
-            if (label) {
-                this.synthetics.set(key, label);
-            }
-        }
     }
 
     exportCanonical(): VaultFeature[] {
@@ -206,9 +297,14 @@ export class FeatureSource {
 
     private toRenderFeature(id: string, feature: VaultFeature): RenderFeature {
         const overlay = this.runtime.get(id);
-        const properties: RenderFeature['properties'] = { ...feature.properties, database_id: feature.properties.database_id ?? feature.properties.feature_ref ?? id };
+        const properties: RenderFeature['properties'] = {
+            ...feature.properties,
+            database_id: id,
+        };
         if (overlay?.iconId) properties['_icon-id'] = overlay.iconId;
+        else delete properties['_icon-id'];
         if (overlay?.tooSmall) properties._isTooSmall = true;
+        else delete properties._isTooSmall;
         if (overlay?.elevation !== undefined) properties._elevation = overlay.elevation;
         if (overlay?.elevations) properties._elevations = overlay.elevations;
         if (overlay?.coordinateTimes) {
@@ -222,6 +318,112 @@ export class FeatureSource {
             properties,
             geojson_hash: feature.geojson_hash,
         };
+    }
+
+    private applyBorderFilterStage(): void {
+        const rendered: RenderFeature[] = [];
+        for (const [id, feature] of this.features) {
+            rendered.push(this.toRenderFeature(id, feature));
+        }
+        this.applyIncrementalBorderFilter(rendered);
+    }
+
+    private applyLabelSynthetics(ctx: IngestContext): void {
+        if (!ctx.showLabels) {
+            this.clearLabelSynthetics();
+            return;
+        }
+        for (const [id, feature] of this.features) {
+            if (this.borderSuppressedIds.has(id)) continue;
+            const key = `${id}:label`;
+            if (this.synthetics.has(key)) continue;
+            const name = feature.properties?.name;
+            if (!name || String(name).trim() === '') continue;
+            const geometryType = feature.geometry.type;
+            let coordinates: number[] | null = null;
+            if (geometryType === 'Polygon' || geometryType === 'MultiPolygon') {
+                coordinates = calculatePolygonCentroid(feature.geometry as never);
+            } else if (geometryType === 'LineString' || geometryType === 'MultiLineString') {
+                coordinates = calculateLineCenter(feature.geometry as never);
+            }
+            if (!coordinates) continue;
+            this.synthetics.set(key, {
+                type: 'Feature',
+                id: `label-point-${id}`,
+                geometry: { type: 'Point', coordinates },
+                properties: {
+                    ...feature.properties,
+                    database_id: `${id}:label`,
+                    _isLabelPoint: true,
+                    _originalFeatureId: id,
+                },
+            });
+        }
+        this.generation += 1;
+    }
+
+    private applyIconRuntimeIds(ctx: IngestContext): void {
+        for (const [id, feature] of this.features) {
+            if (feature.geometry.type !== 'Point') {
+                this.setRuntime(id, { iconId: undefined });
+                continue;
+            }
+            const properties = feature.properties as Record<string, unknown>;
+            const iconUrl = getFeatureIconUrl(properties);
+            if (shouldUseIcon(ctx.zoom, iconUrl, ctx.replaceIconsLowZoom)) {
+                const resolvedUrl = getIconSourceUrl(iconUrl as string, properties);
+                this.setRuntime(id, { iconId: iconRuntimeId(resolvedUrl) });
+            } else {
+                const markerColor = feature.properties?.['marker-color'];
+                this.setRuntime(id, {
+                    iconId: undefined,
+                    detectedIconColor: this.runtime.get(id)?.detectedIconColor
+                        ?? (typeof markerColor === 'string' ? markerColor : undefined),
+                });
+            }
+        }
+    }
+
+    private applySmallFeatureReplacements(ctx: IngestContext): void {
+        this.removeSyntheticsBySuffix(':small');
+        for (const [id, feature] of this.features) {
+            const geometryType = feature.geometry.type;
+            let tooSmall = false;
+            let center: number[] | null = null;
+            if (geometryType === 'Polygon' || geometryType === 'MultiPolygon') {
+                const size = polygonScreenSize(feature.geometry, ctx);
+                tooSmall = size.width < MIN_PIXEL_SIZE || size.height < MIN_PIXEL_SIZE;
+                if (tooSmall) center = calculatePolygonCentroid(feature.geometry as never);
+            } else if (geometryType === 'LineString' || geometryType === 'MultiLineString') {
+                tooSmall = lineScreenSize(feature.geometry, ctx) < MIN_PIXEL_SIZE;
+                if (tooSmall) center = calculateLineCenter(feature.geometry as never);
+            }
+            this.setRuntime(id, { tooSmall });
+            if (!tooSmall || !center) continue;
+            const color = (feature.properties?.stroke as string | undefined) || '#ff0000';
+            this.synthetics.set(`${id}:small`, {
+                type: 'Feature',
+                id: `${id}:small`,
+                geometry: { type: 'Point', coordinates: center },
+                properties: {
+                    database_id: `${id}_small_replacement`,
+                    name: feature.properties?.name,
+                    'marker-color': color,
+                    _isSmallFeatureReplacement: true,
+                    _originalFeatureId: id,
+                    _originalGeometryType: geometryType,
+                },
+            });
+        }
+    }
+
+    private removeSyntheticsBySuffix(suffix: string): void {
+        for (const key of [...this.synthetics.keys()]) {
+            if (key.endsWith(suffix)) {
+                this.synthetics.delete(key);
+            }
+        }
+        this.generation += 1;
     }
 
     private applyIncrementalBorderFilter(features: RenderFeature[]): void {

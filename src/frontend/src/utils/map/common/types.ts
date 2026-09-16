@@ -13,6 +13,13 @@ export type MapStyleInput = string | StyleSpecification;
 
 export type LocationTrackingMode = 'off' | 'show-only' | 'follow';
 
+export type IngestContext = {
+    zoom: number;
+    replaceIconsLowZoom: boolean;
+    showLabels: boolean;
+    viewSize: { width: number; height: number };
+};
+
 export type FeatureRuntimeOverlay = {
     iconId?: string;
     tooSmall?: boolean;

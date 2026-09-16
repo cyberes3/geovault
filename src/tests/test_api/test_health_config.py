@@ -79,6 +79,8 @@ class TestHealthConfigAPI(TestCase):
         self.assertIsInstance(data['systemTagPrefixes'], list)
         self.assertIn('tagPriorities', data)
         self.assertIsInstance(data['tagPriorities'], dict)
+        self.assertIn('showAttribution', data)
+        self.assertFalse(data['showAttribution'])
 
     def test_health_check_auth_required(self):
         """Test that health check requires authentication."""
@@ -138,6 +140,13 @@ class TestHealthConfigAPI(TestCase):
         data = json.loads(response.content)
         self.assertIn('systemTagPrefixes', data)
         self.assertIn('tagPriorities', data)
+
+    @override_settings(TILESOURCES_SHOW_ATTRIBUTION=True)
+    def test_get_config_show_attribution_enabled(self):
+        response = self.client.get('/api/config/')
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertTrue(data['showAttribution'])
 
     @override_settings(MAPTILER_API_KEY='test-api-key-12345', MAPTILER_PROXY_TILES=True)
     def test_maptiler_config_excludes_api_key_when_proxying(self):

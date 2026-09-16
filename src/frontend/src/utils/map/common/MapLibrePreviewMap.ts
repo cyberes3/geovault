@@ -1,10 +1,10 @@
 import type { GeoJSONSource, Map as MapLibreMap, MapMouseEvent } from 'maplibre-gl';
-import { initializeMap, resolveMapStyle, createTransformRequest, MAX_ZOOM_LEVEL } from '@/utils/map/maplibre/mapInitialization.js';
+import { initializeMap, resolveMapStyle, createTransformRequest, waitForStyleLoaded, MAX_ZOOM_LEVEL } from '@/utils/map/maplibre/mapInitialization.js';
 import { tileSourceCatalog } from '@/utils/map/tileSources/sharedCatalog.js';
 import { getDefaultBasemapFromStore } from '@/utils/map/mapConfigUtils';
 import { WORLD_VIEW_CENTER_LONLAT, WORLD_VIEW_ZOOM } from '@/utils/map/worldViewDefault';
 import type { GeoJsonFeature, GeoJsonFeatureCollection } from '@/types/geospatial';
-import { getFeatureCoordinates } from '@/utils/map/maplibre/mapUtils.js';
+import { getCoordinatesFromGeometry } from '@/utils/map/geometry';
 import { isValidMapLngLatPair } from '@/utils/map/mapGeography.js';
 import { getLoadedMaplibreGl } from '@/utils/map/maplibre/lazyMaplibreGl.js';
 
@@ -34,7 +34,9 @@ export class MapLibrePreviewMap {
             style: resolveMapStyle(tileSource),
             antialias: false,
             transformRequest: createTransformRequest(),
+            attributionControl: tileSourceCatalog.showAttribution,
         });
+        await waitForStyleLoaded(this.map);
         this.map.addSource(PREVIEW_SOURCE, {
             type: 'geojson',
             data: { type: 'FeatureCollection', features: [] },
@@ -67,7 +69,7 @@ export class MapLibrePreviewMap {
         if (!this.map || features.length === 0) return;
         const points: Array<[number, number]> = [];
         for (const feature of features) {
-            for (const coord of getFeatureCoordinates(feature.geometry as never)) {
+            for (const coord of getCoordinatesFromGeometry(feature.geometry as never)) {
                 if (Array.isArray(coord) && coord.length >= 2 && isValidMapLngLatPair(Number(coord[0]), Number(coord[1]))) {
                     points.push([Number(coord[0]), Number(coord[1])]);
                 }

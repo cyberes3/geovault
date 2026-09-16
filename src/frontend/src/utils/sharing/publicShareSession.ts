@@ -87,7 +87,9 @@ export class PublicShareSession {
             this.info = null;
             this.status = 'invalid';
             const status = ApiError.from(error).status;
-            this.error = [401, 403, 404].includes(status) ? 'Invalid share link' : 'Failed to load share information';
+            this.error = status != null && [401, 403, 404].includes(status)
+                ? 'Invalid share link'
+                : 'Failed to load share information';
             return false;
         }
     }

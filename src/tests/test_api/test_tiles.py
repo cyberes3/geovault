@@ -44,6 +44,15 @@ class TestTilesAPI(TestCase):
         data = json.loads(response.content)
         self.assertIn('sources', data)
         self.assertIn('map_config_errors', data)
+        self.assertIn('show_attribution', data)
+        self.assertFalse(data['show_attribution'])
+
+    @override_settings(TILESOURCES_SHOW_ATTRIBUTION=True)
+    def test_get_tile_sources_show_attribution_enabled(self):
+        response = self.client.get('/api/tiles/sources/')
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertTrue(data['show_attribution'])
 
     @patch('api.views.tiles.get_tile_sources_for_client')
     def test_get_tile_sources_reports_missing_maplibre_configuration(self, mock_sources):

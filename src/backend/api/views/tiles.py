@@ -213,6 +213,7 @@ def get_tile_sources(request):
     payload = {
         'sources': sources,
         'map_config_errors': _client_map_config_errors(sources),
+        'show_attribution': bool(get_setting('TILESOURCES_SHOW_ATTRIBUTION', False)),
     }
     response = JsonResponse(payload)
     _apply_cache_headers(response, 'no-store, no-cache, must-revalidate, max-age=0')

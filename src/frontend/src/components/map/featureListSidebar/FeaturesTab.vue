@@ -97,9 +97,9 @@ import { computed, ref } from 'vue';
 import { RecycleScroller } from 'vue-virtual-scroller';
 import { XMarkIcon, EyeSlashIcon } from '@heroicons/vue/24/outline';
 import Loader from '@/components/parts/Loader.vue';
-import { APIHOST } from '@/config.js';
 import { getGeometryTypeColor, DEFAULT_GEOMETRY_COLOR } from '@/utils/geometryColors.js';
-import { getIconUrl, resolveIconUrl, isSystemIcon, handleIconError } from '@/utils/map/iconUtils.ts';
+import { handleIconError } from '@/utils/map/iconUtils.ts';
+import { getFeatureIconUrl as iconFromProperties, getIconSourceUrl } from '@/utils/map/maplibre/featureLayerSpec';
 import { searchFeatures } from '@/api/services/featuresApi';
 import { toastApiError } from '@/utils/apiError';
 import { toast } from '@/utils/toast';
@@ -157,23 +157,9 @@ function getFeatureGeometryType(feature: GeoJsonFeature): string {
 }
 
 function getFeatureIconUrl(feature: GeoJsonFeature): string | null {
-  const properties = feature.properties;
-  const iconUrl = getIconUrl(properties);
-  if (!iconUrl) {
-    return null;
-  }
-
-  const markerColor = properties['marker-color'] as string | undefined;
-  const builtInIcon = isSystemIcon(iconUrl);
-
-  if (builtInIcon && markerColor) {
-    const iconPathForRecolor = iconUrl.replace('/api/icons/system/', '');
-    const encodedColor = encodeURIComponent(markerColor);
-    const encodedIcon = encodeURIComponent(iconPathForRecolor);
-    return `${APIHOST}/api/icons/recolor/?icon=${encodedIcon}&color=${encodedColor}`;
-  }
-
-  return resolveIconUrl(iconUrl);
+  const iconUrl = iconFromProperties(feature.properties);
+  if (!iconUrl) return null;
+  return getIconSourceUrl(iconUrl, feature.properties);
 }
 
 // Perf fix: precompute each row's display name/icon/color once per features-array change

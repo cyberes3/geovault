@@ -4,18 +4,33 @@ import { FeatureSource } from '@/utils/map/common/FeatureSource';
 import { HiddenFeatureSet } from './HiddenFeatureSet';
 import { ElevationStore } from './ElevationStore';
 
+import type { IngestContext } from '@/utils/map/common/types';
+
 export class FeatureMutation {
+    private readonly source: FeatureSource;
+    private readonly hidden: HiddenFeatureSet;
+    private readonly elevations: ElevationStore;
+    private readonly canWrite: () => boolean;
+    private readonly getIngestContext: () => IngestContext;
+
     constructor(
-        private readonly source: FeatureSource,
-        private readonly hidden: HiddenFeatureSet,
-        private readonly elevations: ElevationStore,
-        private readonly canWrite: () => boolean,
-    ) {}
+        source: FeatureSource,
+        hidden: HiddenFeatureSet,
+        elevations: ElevationStore,
+        canWrite: () => boolean,
+        getIngestContext: () => IngestContext,
+    ) {
+        this.source = source;
+        this.hidden = hidden;
+        this.elevations = elevations;
+        this.canWrite = canWrite;
+        this.getIngestContext = getIngestContext;
+    }
 
     applyPatch(feature: VaultFeature): void {
         if (!this.canWrite()) return;
         this.elevations.capture(feature);
-        this.source.upsert([feature], this.hidden);
+        this.source.ingest([feature], this.getIngestContext(), this.hidden);
         this.source.commit(this.hidden);
     }
 

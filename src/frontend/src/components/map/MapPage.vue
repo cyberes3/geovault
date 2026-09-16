@@ -306,21 +306,11 @@ async function ensureUserMapSettingsLoaded(): Promise<void> {
     await settingsReady.awaitReady(() => store.dispatch('userSettings/fetchUserSettings'));
 }
 
-/*
- * Composable wiring. Several composables need functions/state owned by composables created
- * later below (e.g. map event callbacks need feature-data/selection handlers; feature data
- * needs collection/tag filter state to build its load context). These are only INVOKED well
- * after setup finishes (on actual map events, API responses, etc.), so the forward-declared
- * bindings assigned further down are safe: the closures below just capture the variable
- * reference, not its value at closure-creation time.
- */
-// eslint-disable-next-line prefer-const -- forward reference: assigned once, below, after the composables that capture it by closure
-let featureSelection!: ReturnType<typeof useFeatureSelection>;
-// eslint-disable-next-line prefer-const -- forward reference: assigned once, below, after the composables that capture it by closure
+// eslint-disable-next-line prefer-const -- assigned after session-backed adapters that this captures by closure
 let featureData!: ReturnType<typeof useFeatureData>;
-// eslint-disable-next-line prefer-const -- forward reference: assigned once, below, after the composables that capture it by closure
+// eslint-disable-next-line prefer-const -- assigned after session-backed adapters that this captures by closure
 let collectionTagFilters!: ReturnType<typeof useCollectionTagFilters>;
-// eslint-disable-next-line prefer-const -- forward reference: assigned once, below, after the composables that capture it by closure
+// eslint-disable-next-line prefer-const -- assigned after session-backed adapters that this captures by closure
 let mapGeolocation!: ReturnType<typeof useMapGeolocation>;
 
 function routeLocation(): MapRouteLocation {
@@ -328,28 +318,19 @@ function routeLocation(): MapRouteLocation {
 }
 
 const mapSession = new MapSession({
-    getContainer: () => (mapContainer.value instanceof HTMLElement ? mapContainer.value : null),
+    getContainer: () => (mapInit.mapContainer.value instanceof HTMLElement ? mapInit.mapContainer.value : null),
     getAntialias: () => !!getUserMapSettings().enable_antialias,
     getDefaultBasemap: () => getUserMapSettings().default_basemap,
     getHiddenIds: () => hiddenFeatureIds.value,
     canWrite: () => canManageHiddenFeatures.value,
-    showLabels: () => showAllLabels.value,
-    onMoveOrZoomStart: () => { featureData.cancelPendingBboxQuery(); },
-    onMoveEnd: () => {
-        featureData.debouncedLoadData();
-        featureData.debouncedUpdateFeaturesInExtent();
-    },
-    onZoomEnd: () => {
-        featureData.debouncedLoadData();
-        featureData.debouncedUpdateFeaturesInExtent();
-        void featureData.reprocessFeaturesForZoom();
-        featureData.debouncedUpdateSmallFeatureFlags();
-    },
-    onZoomFrame: () => { featureData.handleZoomUpdate(); },
-    onClick: (event) => { featureSelection.onMapClick(event as never); },
-    onMouseMove: (event) => { featureSelection.onMapMouseMove(event as never); },
-    onMouseOut: () => { featureSelection.onMapMouseOut(); },
-    onWebGlLost: () => { loadError.value = 'The map graphics context was lost. Refresh the page.'; },
+    showLabels: () => mapInit.showAllLabels.value,
+    replaceIconsLowZoom: () => getUserMapSettings().replace_icons_low_zoom !== false,
+    onWebGlLost: () => { featureData.loadError.value = 'The map graphics context was lost. Refresh the page.'; },
+});
+
+const mapInit = useMapInitialization({
+    session: mapSession,
+    getEnableAntialias: () => !!getUserMapSettings().enable_antialias,
 });
 
 const mapShare = useMapShare({
@@ -358,33 +339,6 @@ const mapShare = useMapShare({
 
 /** Gate for hide/unhide actions: main map route, not a public share, and the user is authenticated. */
 const canManageHiddenFeatures = computed(() => isMainMapRoute.value && !mapShare.isPublicShareMode.value && !!getters.value['auth/userInfo']);
-
-const mapInit = useMapInitialization({
-    runtime: mapSession.runtime,
-    getEnableAntialias: () => !!getUserMapSettings().enable_antialias,
-});
-
-mapGeolocation = useMapGeolocation({
-    map: mapInit.map,
-    isMapshareRoute: mapShare.isMapshareRoute,
-    location: mapSession.location,
-    navigateAndRefresh: (fn, clear) => featureData.navigateAndRefresh(fn, clear),
-});
-
-featureSelection = useFeatureSelection({
-    map: mapInit.map,
-    labelMarkerManager: mapInit.labelMarkerManager,
-    showAllLabels: mapInit.showAllLabels,
-    navigateAndRefresh: (fn, clear) => featureData.navigateAndRefresh(fn, clear),
-    updateFeatureCount: () => { featureData.updateFeatureCount(); },
-    updateFeaturesInExtent: () => { featureData.updateFeaturesInExtent(); },
-    getUserMapSettings,
-    isPublicShareMode: mapShare.isPublicShareMode,
-    shareId: mapShare.shareId,
-    canManageHiddenFeatures,
-    mutations: mapSession.mutations,
-    featureSource: mapSession.features,
-});
 
 function getSessionLoadContext() {
     mapSession.filters.applyRoute(routeLocation());
@@ -405,7 +359,7 @@ featureData = useFeatureData({
     getSessionLoadContext,
     ensurePublicShareInfo: mapShare.ensurePublicShareInfo,
     handlePublicShareError: mapShare.handlePublicShareError,
-    onAfterFeaturesChanged: () => { featureSelection.updateFeatureHighlighting(); },
+    onAfterFeaturesChanged: () => {},
     onFeatureShareLoaded: async (feature) => {
         featureSelection.selectedFeature.value = feature;
     },
@@ -416,6 +370,23 @@ featureData = useFeatureData({
     loadPipeline: mapSession.pipeline,
     hiddenFeatures: mapSession.hidden,
     elevations: mapSession.elevations,
+    session: mapSession,
+});
+
+const featureSelection = useFeatureSelection({
+    session: mapSession,
+    map: mapInit.map,
+    labelMarkerManager: mapInit.labelMarkerManager,
+    showAllLabels: mapInit.showAllLabels,
+    navigateAndRefresh: (fn, clear) => featureData.navigateAndRefresh(fn, clear),
+    updateFeatureCount: () => { featureData.updateFeatureCount(); },
+    updateFeaturesInExtent: () => { featureData.updateFeaturesInExtent(); },
+    getUserMapSettings,
+    isPublicShareMode: mapShare.isPublicShareMode,
+    shareId: mapShare.shareId,
+    canManageHiddenFeatures,
+    mutations: mapSession.mutations,
+    featureSource: mapSession.features,
 });
 
 collectionTagFilters = useCollectionTagFilters({
@@ -441,7 +412,7 @@ const mapLayers = useMapLayers({
     getDefaultBasemap: () => getUserMapSettings().default_basemap,
     hasLoadedBounds: featureData.hasLoadedBounds,
     loadDataForCurrentView: featureData.loadDataForCurrentView,
-    onAfterFeaturesChanged: () => { featureSelection.updateFeatureHighlighting(); },
+    onAfterFeaturesChanged: () => {},
     setLoadError: (message) => {
         featureData.loadError.value = message;
     },
@@ -449,11 +420,25 @@ const mapLayers = useMapLayers({
     runtime: mapSession.runtime,
     featureSource: mapSession.features,
     hiddenFeatures: mapSession.hidden,
+    session: mapSession,
 });
+
+mapGeolocation = useMapGeolocation({
+    map: mapInit.map,
+    isMapshareRoute: mapShare.isMapshareRoute,
+    location: mapSession.location,
+    navigateAndRefresh: (fn, clear) => featureData.navigateAndRefresh(fn, clear),
+});
+
+mapSession.onViewportBusy = () => { featureData.cancelPendingBboxQuery(); };
+mapSession.onViewportIdle = () => {
+    featureData.debouncedLoadData();
+    featureData.debouncedUpdateFeaturesInExtent();
+};
 
 // --- Flat bindings for template + script-internal use (script setup auto-unwraps top-level refs). ---
 
-const { mapContainer, map, showAllLabels, isMapInitializing, savedMapCenter, savedMapZoom, savedMapPitch, savedMapBearing, createMapInstance, performMapDestruction, ensureMapResize, waitForElement, updateLayerMaxZoom } =
+const { mapContainer, map, showAllLabels, isMapInitializing, createMapInstance, performMapDestruction, ensureMapResize, waitForElement, updateLayerMaxZoom } =
     mapInit;
 
 const {
@@ -606,10 +591,8 @@ function handleReverseGeocodingResultClick(result: unknown): void {
 
 /** Sidebar row hover: reuse the map's existing hover-highlight channel so a hovered row highlights its feature on the map. */
 function handleFeatureListHover(feature: GeoJsonFeature | null): void {
-    const id = (feature?.properties.database_id ?? null) as string | number | null;
-    if (featureSelection.hoveredFeatureId.value === id) return;
-    featureSelection.hoveredFeatureId.value = id;
-    featureSelection.updateFeatureHighlighting();
+    const id = feature?.properties.database_id == null ? null : String(feature.properties.database_id);
+    mapSession.interaction.hover(mapSession.map, id);
 }
 
 // --- Boot / keep-alive lifecycle orchestration ---
@@ -680,20 +663,12 @@ function cleanupOnNavigateAway(): void {
     mapGeolocation.cleanup();
     featureData.cancelPendingRequests();
     handleHoverClear();
-    if (map.value) {
-        mapInit.savedMapCenter.value = map.value.getCenter();
-        mapInit.savedMapZoom.value = map.value.getZoom();
-        mapInit.savedMapPitch.value = map.value.getPitch();
-        mapInit.savedMapBearing.value = map.value.getBearing();
-    }
 }
 
 function resetUiForRoute(): void {
-    selectedFeature.value = null;
+    mapSession.interaction.clear(mapSession.map);
     isEditingFeature.value = false;
     showElevationProfile.value = false;
-    showFeaturePopup.value = false;
-    overlappingFeatures.value = [];
     showQuickPointDialog.value = false;
     activeMobileSidebar.value = null;
 }
@@ -725,17 +700,10 @@ async function recreateMapIfMissing(): Promise<void> {
     await nextTick();
     await waitForElement(mapContainer);
     const skipUrlDrivenCamera = mapSession.filters.isUrlDrivenCamera;
-    let mapConfig;
-    if (savedMapCenter.value && savedMapZoom.value !== null) {
-        mapConfig = {
-            center: [savedMapCenter.value.lng, savedMapCenter.value.lat] as [number, number],
-            zoom: savedMapZoom.value,
-            pitch: savedMapPitch.value ?? 0,
-            bearing: savedMapBearing.value ?? 0,
-        };
-    } else {
-        mapConfig = { ...getInitialCameraConfig(skipUrlDrivenCamera), pitch: 0, bearing: 0 };
-    }
+    const snapshot = mapSession.camera.snapshot;
+    const mapConfig = snapshot
+        ? { center: snapshot.center, zoom: snapshot.zoom, pitch: snapshot.pitch, bearing: snapshot.bearing }
+        : { ...getInitialCameraConfig(skipUrlDrivenCamera), pitch: 0, bearing: 0 };
     const initialTileSource = tileSources.value.find((s) => s.id === selectedLayer.value);
     await createMapInstance({ ...mapConfig, style: resolveMapStyle(initialTileSource) });
     applyPostLoadMaxZoom();

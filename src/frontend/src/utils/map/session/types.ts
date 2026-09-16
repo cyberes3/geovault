@@ -5,12 +5,6 @@ export type MapSessionMode = 'main' | 'tag' | 'collection' | 'publicShare' | 'fe
 
 export type ShareLoadKind = 'tag' | 'collection' | 'feature';
 
-export const SHARE_TYPE_TO_KIND: Record<ShareLoadKind, ShareLoadKind> = {
-    tag: 'tag',
-    collection: 'collection',
-    feature: 'feature',
-};
-
 export type LoadContext =
     | {
         kind: 'main';

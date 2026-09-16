@@ -24,6 +24,7 @@ import type { WebSocketHeartbeat, WebSocketHeartbeatOptions } from '@/assets/js/
 import type { GeolocationManager } from '@/utils/map/geolocationManager.js';
 import type { LocationMarkerCoords } from '@/utils/map/maplibre/locationMarker.js';
 import type { SetupCopyMapCoordinatesDeps } from '@/utils/map/copyMapCoordinatesOnContextMenu.js';
+import type { MapLibreModule } from '@/utils/map/maplibre/lazyMaplibreGl.js';
 
 export type {
     ExtensionMetadata,
@@ -64,7 +65,7 @@ declare global {
             map: {
                 loadEngine: (engine: 'maplibre' | 'none') => Promise<unknown>;
                 loadMaplibreGl: () => Promise<unknown>;
-                maplibre: unknown;
+                maplibre: MapLibreModule | null;
                 tileSourceCatalog: TileSourceCatalog;
                 RasterTileUrls: typeof RasterTileUrls;
                 OSM_TILE_SOURCE_ID: string;
@@ -123,7 +124,7 @@ declare global {
             /** Resolves an outline heroicon by name, lazily (never on the eager boot path). Rejects for an unrecognized name - see `resolveExtensionIcon.ts`'s `createHeroiconResolver` and `extensions/lazyHeroiconResolver.ts`. */
             resolveHeroiconByName: (name: string) => Promise<Component>;
             /** Null until `loadMaplibreGl()` resolves - MapLibre GL JS is loaded lazily, not eagerly at boot. */
-            maplibre: unknown;
+            maplibre: MapLibreModule | null;
             /** Lazily loads MapLibre GL JS (and its CSS), caching the result. Prefer this over reading `maplibre` directly when you can't guarantee it has already loaded. */
             loadMaplibreGl: () => Promise<unknown>;
             createRouteWrapper: (component: Component, options: { api: ExtensionApi; platformState?: PlatformStateBridge; router?: unknown; [key: string]: unknown }) => Component;
@@ -152,7 +153,7 @@ declare global {
         };
         GeoVault: GeoVaultGlobal;
         /** Mirrors `window.gv_core.maplibre` once `loadMaplibreGl()` resolves - see `lazyMaplibreGl.js`. */
-        maplibregl: unknown;
+        maplibregl: MapLibreModule | null;
         /** Vue ecosystem + shared UI parts, also exposed at top level so UMD extension builds that externalize these deps keep working. Prefer `window.gv_core.*` in core source. */
         Vue: unknown;
         VueRouter: unknown;

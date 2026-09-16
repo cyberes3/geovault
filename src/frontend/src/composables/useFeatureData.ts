@@ -8,11 +8,10 @@
 import { markRaw, ref, type ComputedRef, type Ref, type ShallowRef } from 'vue';
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import { getLoadedMaplibreGl } from '@/utils/map/maplibre/lazyMaplibreGl.js';
-import { addFeaturesToMap as addFeaturesToMapUtil, updateSmallFeatureFlags } from '@/utils/map/maplibre';
 import { getCoordinatesFromGeometry, filterFeaturesByBounds, cleanupDistantFeatures as cleanupDistantFeaturesUtil } from '@/utils/map/featureExtent.js';
 import { convertMapLibreFeature, type ConvertibleMapLibreFeature } from '@/utils/map/maplibre/featureConversion.js';
 import { canonicalFeatureId, isSyntheticFeature } from '@/utils/map/common/featureIdentity';
-import { getFeatureIconUrl, getIconSourceUrl, loadIconImage } from '@/utils/map/maplibre/featureStyling.js';
+import type { MapSession } from '@/utils/map/session/MapSession';
 import { getExtentHint } from '@/api/services/featuresApi';
 import { ApiError, isAbortError } from '@/utils/apiError';
 import type { LabelMarkerManager } from '@/utils/map/maplibre/labelMarkers.js';
@@ -24,7 +23,6 @@ import type { HiddenFeatureSet } from '@/utils/map/session/HiddenFeatureSet';
 import type { ElevationStore } from '@/utils/map/session/ElevationStore';
 import type { LoadContext as SessionLoadContext } from '@/utils/map/session/types';
 import type { VaultFeature } from '@/contracts/feature';
-import type { MapFeature } from '@/utils/map/maplibre/mapFeatureTypes';
 
 export interface UseFeatureDataDeps {
     map: ShallowRef<MapLibreMap | null>;
@@ -48,6 +46,7 @@ export interface UseFeatureDataDeps {
     loadPipeline: LoadPipeline;
     hiddenFeatures: HiddenFeatureSet;
     elevations: ElevationStore;
+    session: MapSession;
 }
 
 export function useFeatureData(deps: UseFeatureDataDeps) {
@@ -57,7 +56,6 @@ export function useFeatureData(deps: UseFeatureDataDeps) {
         showAllLabels,
         isMapInitializing,
         waitForMapEvent,
-        getUserMapSettings,
         getSessionLoadContext,
         ensurePublicShareInfo,
         handlePublicShareError,
@@ -70,6 +68,7 @@ export function useFeatureData(deps: UseFeatureDataDeps) {
         loadPipeline,
         hiddenFeatures,
         elevations,
+        session,
     } = deps;
 
     const isDataLoading = ref(false);
@@ -79,15 +78,10 @@ export function useFeatureData(deps: UseFeatureDataDeps) {
     const featureCount = ref(0);
     const loadedBounds = new Set<string>();
 
-    let lastProcessedZoom: number | null = null;
-    let lastLabelUpdateZoom = 0;
-    let lastIconVisibilityZoom: number | null = null;
-
     let currentAbortController: AbortController | null = null;
     let loadTimeout: ReturnType<typeof setTimeout> | null = null;
     let featureListUpdateTimeout: ReturnType<typeof setTimeout> | null = null;
     let featureCleanupTimeout: ReturnType<typeof setTimeout> | null = null;
-    let smallFeatureFlagsUpdateTimeout: ReturnType<typeof setTimeout> | null = null;
     let featureCountUpdatePending = false;
 
     /** One-shot: main map, no URL-driven camera, geolocation unavailable - fit to first default bbox features. */
@@ -113,9 +107,7 @@ export function useFeatureData(deps: UseFeatureDataDeps) {
         return { data: featureSource.buildRenderCollection(hiddenFeatures) };
     }
 
-    function invalidateSourceCache(): void {
-        lastProcessedZoom = null;
-    }
+    function invalidateSourceCache(): void {}
 
     function debouncedLoadData(): void {
         if (isMapInitializing.value) return;
@@ -215,204 +207,26 @@ export function useFeatureData(deps: UseFeatureDataDeps) {
     }
 
     function debouncedUpdateSmallFeatureFlags(): void {
-        if (smallFeatureFlagsUpdateTimeout) clearTimeout(smallFeatureFlagsUpdateTimeout);
-        if (map.value === null) return;
-
-        smallFeatureFlagsUpdateTimeout = setTimeout(() => {
-            const mapInstance = map.value;
-            if (!mapInstance?.getSource('geojson-data')) return;
-
-            const zoom = mapInstance.getZoom();
-            const run = () => {
-                updateSmallFeatureFlags(mapInstance, zoom, featureSource, hiddenFeatures);
-                invalidateSourceCache();
-            };
-
-            if (typeof window.requestIdleCallback === 'function') {
-                window.requestIdleCallback(run, { timeout: 2000 });
-            } else {
-                run();
-            }
-        }, 1000);
-    }
-
-    function updateIconVisibilityDuringZoom(currentZoom: number): void {
-        const ICON_THRESHOLD = 8;
-        const userSettings = getUserMapSettings();
-        const replaceIconsLowZoom = userSettings.replace_icons_low_zoom !== undefined ? !!userSettings.replace_icons_low_zoom : true;
-
-        if (!replaceIconsLowZoom) {
-            lastIconVisibilityZoom = currentZoom;
-            return;
-        }
-
-        const shouldHideIcons = currentZoom <= ICON_THRESHOLD;
-        const wasAboveThreshold = lastIconVisibilityZoom === null || lastIconVisibilityZoom > ICON_THRESHOLD;
-
-        if (map.value?.getLayer('point-icons')) {
-            const currentVisibility = map.value.getLayoutProperty('point-icons', 'visibility') as string | undefined;
-            const targetVisibility = shouldHideIcons ? 'none' : 'visible';
-            if (currentVisibility !== targetVisibility) {
-                map.value.setLayoutProperty('point-icons', 'visibility', targetVisibility);
-            }
-        }
-
-        if (shouldHideIcons && wasAboveThreshold) {
-            const serialized = getCachedSourceData();
-            if (serialized?.data?.features) {
-                const features = serialized.data.features as MapPageFeature[];
-                let needsUpdate = false;
-
-                for (const feature of features) {
-                    if (feature.properties._isLabelPoint || feature.properties._isSmallFeatureReplacement) continue;
-                    if (feature.geometry.type === 'Point' && feature.properties['_icon-id']) {
-                        delete feature.properties['_icon-id'];
-                        needsUpdate = true;
-                    }
-                }
-
-                if (needsUpdate && map.value) {
-                    for (const feature of features) {
-                        const id = canonicalFeatureId(feature);
-                        if (!id) continue;
-                        featureSource.setRuntime(id, { iconId: typeof feature.properties['_icon-id'] === 'string' ? feature.properties['_icon-id'] : undefined });
-                    }
-                    featureSource.commit(hiddenFeatures);
-                    invalidateSourceCache();
-                }
-            }
-        }
-
-        lastIconVisibilityZoom = currentZoom;
+        session.refreshZoomDependent();
     }
 
     async function reprocessFeaturesForZoom(): Promise<void> {
-        if (!map.value?.getSource('geojson-data')) return;
-
-        const zoom = map.value.getZoom();
-
-        if (lastProcessedZoom !== null && Math.abs(zoom - lastProcessedZoom) < 0.5) {
-            return;
-        }
-
-        const serialized = getCachedSourceData();
-        if (!serialized) return;
-
-        const currentData = serialized.data ?? { type: 'FeatureCollection' as const, features: [] };
-        const features = currentData.features as MapPageFeature[];
-        if (features.length === 0) return;
-
-        lastProcessedZoom = zoom;
-        const userSettings = getUserMapSettings();
-        const replaceIconsLowZoom = userSettings.replace_icons_low_zoom !== undefined ? !!userSettings.replace_icons_low_zoom : true;
-
-        let needsUpdate = false;
-
-        for (const feature of features) {
-            if (feature.properties._isLabelPoint || feature.properties._isSmallFeatureReplacement) continue;
-            if (feature.geometry.type !== 'Point') continue;
-
-            const iconUrl = getFeatureIconUrl(feature.properties);
-            const hasIcon = !!iconUrl && iconUrl.trim() !== '';
-            const shouldShowIcon = hasIcon && (!replaceIconsLowZoom || zoom > 8);
-
-            if (shouldShowIcon) {
-                if (!feature.properties['_icon-id']) {
-                    const resolvedUrl = getIconSourceUrl(iconUrl, feature.properties);
-                    const iconId = `icon-${resolvedUrl.replace(/[^a-zA-Z0-9]/g, '_')}`;
-                    feature.properties['_icon-id'] = iconId;
-                    needsUpdate = true;
-
-                    if (!map.value.hasImage(iconId)) {
-                        loadIconImage(map.value, iconId, resolvedUrl).catch((err: unknown) => {
-                            console.warn(`Failed to load icon ${iconId}:`, err);
-                        });
-                    }
-                }
-            } else if (feature.properties['_icon-id']) {
-                delete feature.properties['_icon-id'];
-                needsUpdate = true;
-            }
-        }
-
-        if (needsUpdate) {
-            for (const feature of features) {
-                const id = canonicalFeatureId(feature);
-                if (!id) continue;
-                featureSource.setRuntime(id, { iconId: typeof feature.properties['_icon-id'] === 'string' ? feature.properties['_icon-id'] : undefined });
-            }
-            featureSource.commit(hiddenFeatures);
-            invalidateSourceCache();
-        }
-
-        if (map.value.getLayer('point-icons')) {
-            const shouldShowIcons = !replaceIconsLowZoom || zoom > 8;
-            const currentVisibility = map.value.getLayoutProperty('point-icons', 'visibility') as string | undefined;
-            const targetVisibility = shouldShowIcons ? 'visible' : 'none';
-            if (currentVisibility !== targetVisibility) {
-                map.value.setLayoutProperty('point-icons', 'visibility', targetVisibility);
-            }
-        }
+        session.refreshZoomDependent();
     }
 
-    /** RAF-batched zoom handler: lightweight label/icon-visibility upkeep only (heavy work is debounced on zoomend). */
     function handleZoomUpdate(): void {
-        if (!map.value) return;
-
-        const currentZoom = map.value.getZoom();
-
-        if (showAllLabels.value && labelMarkerManager.value) {
-            const currentZoomInt = Math.floor(currentZoom);
-            const lastZoomInt = Math.floor(lastLabelUpdateZoom);
-
-            if (currentZoomInt !== lastZoomInt) {
-                const serialized = getCachedSourceData();
-                if (serialized?.data?.features) {
-                    labelMarkerManager.value.updateMarkers(serialized.data.features, true);
-                    lastLabelUpdateZoom = currentZoom;
-                }
-            }
-        }
-
-        updateIconVisibilityDuringZoom(currentZoom);
+        session.labels?.sync(true);
     }
 
-    /**
-     * Merge features into the map source (via `addFeaturesToMap`'s change-detection perf path),
-     * refresh the persistent cache + label markers, and re-apply highlight paint properties.
-     *
-     * Perf: `addFeaturesToMapUtil` already returns the in-memory merged `FeatureCollection` it
-     * just built (or skipped rebuilding, if nothing changed) - reuse that directly instead of an
-     * extra FeatureSource rebuild to re-derive the same data.
-     */
     async function addFeaturesToMap(geojsonData: GeoJsonFeatureCollection): Promise<void> {
         if (!map.value?.getSource('geojson-data')) return;
-
-        const zoom = map.value.getZoom();
-        const userSettings = getUserMapSettings();
-        const replaceIconsLowZoom = userSettings.replace_icons_low_zoom !== undefined ? !!userSettings.replace_icons_low_zoom : true;
         const incoming = (geojsonData.features ?? []) as VaultFeature[];
         for (const feature of incoming) {
             elevations.capture(feature);
         }
-        featureSource.upsert(incoming, hiddenFeatures);
-        const existing = featureSource.buildRenderCollection(hiddenFeatures).features as MapFeature[];
-
-        const mergedCollection = await addFeaturesToMapUtil(map.value, geojsonData, showAllLabels.value, zoom, replaceIconsLowZoom, {
-            existingFeatures: existing,
-            hiddenIds: new Set(hiddenFeatures.values()),
-            featureSource,
-            hidden: hiddenFeatures,
-        });
-
+        session.ingestIncoming(incoming);
         invalidateSourceCache();
         onAfterFeaturesChanged();
-
-        if (mergedCollection?.features) {
-            if (showAllLabels.value && labelMarkerManager.value) {
-                labelMarkerManager.value.updateMarkers(mergedCollection.features);
-            }
-        }
     }
 
     async function applyMainMapExtentHintFromServer(navigateAndRefresh: (fn: () => void) => Promise<void>): Promise<void> {

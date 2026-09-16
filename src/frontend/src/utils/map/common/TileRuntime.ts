@@ -1,6 +1,7 @@
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import type { TileSource } from '@/api/services/tilesApi';
-import { MapTilerConfig, setupTerrain, removeTerrain, addHillshade, removeHillshade } from '@/utils/map/maplibre/maptilerIntegration.js';
+import { MapTilerConfig, setupTerrain, removeTerrain, addHillshade, removeHillshade } from '@/utils/map/maplibre/terrain.js';
+import { sourceWantsAtmosphere } from '@/utils/map/mapLayers';
 import { resolveMapStyle, MAX_ZOOM_LEVEL } from '@/utils/map/maplibre/mapInitialization.js';
 import { tileSourceCatalog } from '@/utils/map/tileSources/sharedCatalog.js';
 import { MapRuntime } from './MapRuntime';
@@ -49,9 +50,7 @@ export class TileRuntime {
     async applyTerrainAndHillshade(map: MapLibreMap | null): Promise<void> {
         if (!map || !this.maptiler.isAvailable()) return;
         if (this.terrainEnabled) {
-            const name = this.selectedSource()?.name ?? '';
-            const atmosphere = name.toLowerCase().includes('imagery') || name.toLowerCase().includes('satellite');
-            await setupTerrain(map, this.maptiler, atmosphere);
+            await setupTerrain(map, this.maptiler, sourceWantsAtmosphere(this.selectedSource()));
         } else {
             removeTerrain(map);
         }
